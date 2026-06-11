@@ -1,0 +1,687 @@
+---
+name: restream-schedule-live
+description: "Schedule Restream events from BroadBanner show data. Use this skill when the user says 'schedule the restream events', 'schedule restream', 'set up restream', or wants to schedule draft events in Restream Studio for upcoming podcast episodes. Reads show data and writes scheduled-event state via the BroadBanner Gateway (`gateway.broadbanner.com/v1/shows` and `/v1/restream-events`, both D1-backed); automates the Restream event scheduling UI via browser, pairs the correct Substack channel, and PATCHes the scheduled state so downstream consumers see the update."
+---
+
+# Restream Schedule Live
+
+Schedule upcoming podcast live streams as Restream events using show data served by the BroadBanner Gateway (`GET /v1/shows`, D1-backed; same shape as the legacy `wix-latest.json` file). This skill automates the Restream Studio event scheduling flow — finding the draft event by show title, updating the title and date/time, pairing the correct Substack streaming channel, and clicking Schedule. After scheduling, it writes the event state back to D1 via `PATCH /v1/restream-events/:show_id`.
+
+This skill authenticates **gateway-only** with a capability token Bearer. There is no HMAC fallback. If the Gateway is unreachable, stop and report — do not attempt to sign requests against `data.broadbanner.com`.
+
+## Prerequisites
+
+- The user must be logged in to Restream Studio at `app.restream.io` in Chrome before running.
+- The BroadBanner Gateway must be reachable at `https://gateway.broadbanner.com` and the workspace must hold an **admin-tier** capability token at `<PROJECT_ROOT>/.creds/gateway.token` carrying `caps: ["shows:read", "restream:read", "restream:write"]` (auto-issued for `D1.contributors.is_admin === 1` by `banner-blast init` / `banner-admin init` from `@broadbanner/core` 1.16.0+). See `references/gateway-auth.md` for the auth pattern.
+- D1 must contain shows whose `hasLiveScheduled` is either `"substack_scheduled"` (Substack creds present, Restream channel not yet paired) OR `"restream_paired"` (channel_id present in `restream_events`, but no event_status='scheduled' write yet), AND with a non-null `restreamKey`. Both states are reachable from the substack-schedule-live skill plus Restream-Worker's channel-sync; this skill takes them the rest of the way to `restream_scheduled` by creating the Restream event and PATCHing `restream_events.event_status='scheduled'`. The derive pass then promotes the show to `restream_scheduled` on the next reconcile tick. Shows already at `restream_scheduled` are excluded — they're done.
+- The matching Substack channel must already exist in Restream — provisioned by the **Restream-Worker** channel-sync pass (`broadbanner-restream` Worker, every _/30 cron tick under the `'poll'` kind, plus on-demand via the HMAC-authed `POST /sync-channels` route). Channel names follow the format `"{showTitle} - {showDate}"` and the Worker writes `channel_id` back to D1's `restream_events` row, so this skill can rely on it being present. The legacy local `banner-blast restream-poller --wix-latest` and `banner-admin schedule-live` channel-sync paths are retired — see `Restream-Worker/README.md` for the current flow. If a channel is missing for a show whose Substack live is already scheduled, the Worker will create it on the next _/30 tick; trigger the sync immediately by hitting `/sync-channels` if you need it before then.
+
+## Tool reliability guide
+
+Browser extensions can intermittently block certain Chrome MCP tools. The following tools are **always reliable** and should be preferred:
+
+| Tool               | Reliability    | Use for                                                              |
+| ------------------ | -------------- | -------------------------------------------------------------------- |
+| `read_page`        | Always works   | Verifying state, reading element refs, checking event/channel status |
+| `find`             | Always works   | Locating elements by description                                     |
+| `form_input`       | Always works   | Setting text inputs, date inputs, time inputs                        |
+| `navigate`         | Always works   | Page navigation                                                      |
+| `tabs_context_mcp` | Always works   | Getting tab IDs                                                      |
+| `tabs_create_mcp`  | Always works   | Opening new tabs                                                     |
+| `tabs_close_mcp`   | Always works   | Closing tabs                                                         |
+| `screenshot`       | Can be blocked | Visual verification (use `read_page` as fallback)                    |
+| `left_click`       | Can be blocked | Clicking buttons (ask user to click as fallback)                     |
+| `javascript_tool`  | Can be blocked | DOM manipulation (use `form_input` instead)                          |
+
+**Strategy:** Use `find` + `form_input` for all data entry. Use `read_page` for verification instead of `screenshot`. Only use `screenshot`/`left_click` when the reliable tools cannot accomplish the task. If blocked, ask the user to perform the click.
+
+## Timezone handling (CRITICAL — read before Step 4)
+
+The snapshot provides three scheduling-related fields per show:
+
+| Field                    | Meaning                                                                            | Example                                  |
+| ------------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------- |
+| `scheduledStart`         | UTC ISO timestamp. Source of truth.                                                | `2026-04-14T17:00:00.000Z`               |
+| `scheduledStartLocal`    | Wall-clock time in the **show's** `localTimeZone` (NOT the user's).                | `2026-04-14T13:00:00` (America/New_York) |
+| `showDate` / `showStart` | Always rendered in `America/New_York` (Eastern) for legacy snapshot compatibility. | `2026-04-14` / `13:00:00.000`            |
+| `localTimeZone`          | The show's stored timezone (often `America/New_York`).                             | `America/New_York`                       |
+
+Restream Studio's Schedule modal Date/Time pickers operate on **the browser's timezone** (the label next to the Time field reflects the browser's machine, not the show). After the D1 migration, shows are commonly stored as `America/New_York` while the operator's machine is `America/Chicago` — using `scheduledStartLocal`, `showDate`, or `showStart` directly schedules the event at the wrong wall-clock time.
+
+> **The conversion target is the BROWSER's timezone — not the bash environment's.** In a scheduled/Cowork run, this skill's shell executes in a sandbox whose `TZ` is often **UTC**, while Restream Studio runs in Chrome on the operator's machine. So `new Date(utc).getHours()` in bash (which reads the *shell's* ambient zone) is wrong by the full UTC offset (5–6h), not just the 1-hour ET↔CT case. **Never rely on the shell's ambient timezone.** Resolve the browser's IANA zone explicitly (`BROWSER_TZ`) and convert against it.
+
+**Resolve `BROWSER_TZ`** (resolution order):
+
+1. **Modal TZ label (authoritative here).** Once the Schedule modal is open (Step 4), the label beside the Time field IS the browser's zone (e.g. `America/Chicago`). `read_page` it and use it as `BROWSER_TZ`.
+2. **Browser eval.** If the label isn't legible: `javascript_tool` → `Intl.DateTimeFormat().resolvedOptions().timeZone`.
+3. **Config / ask.** If both are blocked: read `operatorTimeZone` from `broadbanner.config.json`, else ask the user for their IANA zone.
+
+Do **not** fall back to the shell's own timezone. (For a Step 0 preview before the modal is open, use config/ask provisionally and re-confirm against the modal label at Step 4.)
+
+**Then convert `scheduledStart` (UTC) → `BROWSER_TZ` wall-clock**, passing the zone explicitly so the result is independent of the shell's ambient `TZ`:
+
+```bash
+SCHEDULED_START_UTC="2026-04-14T17:00:00.000Z"
+BROWSER_TZ="America/Chicago"   # resolved above
+
+DATETIME_LOCAL=$(SS="$SCHEDULED_START_UTC" BTZ="$BROWSER_TZ" node -e '
+  const d = new Date(process.env.SS), tz = process.env.BTZ;
+  if (!tz || isNaN(d.getTime())) { console.error("bad SCHEDULED_START_UTC/BROWSER_TZ"); process.exit(2); }
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(d).map(x => [x.type, x.value]));
+  const hh = p.hour === "24" ? "00" : p.hour;
+  console.log(`${p.year}-${p.month}-${p.day}T${hh}:${p.minute}`);
+')
+[ -z "$DATETIME_LOCAL" ] && { echo "TZ conversion failed — do not fill the modal" >&2; exit 1; }
+LOCAL_DATE="${DATETIME_LOCAL%T*}"    # "2026-04-14"  → Date picker
+LOCAL_TIME_24="${DATETIME_LOCAL#*T}" # "12:00"       → Time picker (24h)
+
+# 12-hour AM/PM string (e.g. "12:00 PM"), also in BROWSER_TZ:
+LOCAL_TIME_12H=$(SS="$SCHEDULED_START_UTC" BTZ="$BROWSER_TZ" node -e '
+  console.log(new Date(process.env.SS).toLocaleTimeString("en-US",
+    { timeZone: process.env.BTZ, hour: "numeric", minute: "2-digit", hour12: true }));
+')
+
+# BROWSER_TZ IANA + abbreviation — used to verify the modal's TZ label
+MACHINE_TZ_IANA="$BROWSER_TZ"
+MACHINE_TZ_ABBR=$(BTZ="$BROWSER_TZ" node -e "
+  console.log(new Intl.DateTimeFormat('en-US', { timeZone: process.env.BTZ, timeZoneName: 'short' })
+    .formatToParts(new Date()).find(p => p.type === 'timeZoneName').value);
+")
+```
+
+Use `LOCAL_DATE` for the Date picker (Step 4b) and `LOCAL_TIME_24` / `LOCAL_TIME_12H` for the Time picker (Step 4c). **Never feed `showDate`, `showStart`, or `scheduledStartLocal` directly** (non-machine timezones), and **never an ambient-`getHours()` value** (the sandbox shell is often UTC).
+
+When the show list is presented to the user (Step 0) and in the final report (Step 9), display the machine-local time so the user can verify what will actually be entered. Surface the show-stored timezone equivalent only when it differs from the machine TZ.
+
+## State tracker
+
+Scheduling state lives in D1's `restream_events` table, fronted by the BroadBanner Gateway at `https://gateway.broadbanner.com/v1/restream-events`. The local `Social-Distribution/restream-event-state-*.json` files are **frozen** as of the Phase 3 cutover (2026-05-13) — do not read or write them. All current state flows through the Gateway.
+
+**Row identity is `(show_id, restream_workspace)`** — a single show can have a row per workspace because each Restream workspace carries its own OAuth credential set (SOTSP's `sick-of-this-show` and `time-for-life` are the canonical example). When the user's Restream account has no workspace selector at all (e.g. LR / LevRemembers), the workspace is `null` and there's exactly one row per show.
+
+The account → workspace → pod-id catalog is fetched live from the Gateway via `GET /v1/restream-workspaces` (cap-token scope: `restream:read`). The response is account-oriented — `accounts[i]` is a Restream account (1:1 with networks), each with its `workspaces[]` and per-workspace `podIds[]`. Look up a pod by walking `accounts[].workspaces[].podIds[]` and using the matching workspace's `workspaceName`. When `isDefault` is true, omit the `--workspace` parameter; Restream's API treats single-workspace accounts as not requiring it. For multi-workspace accounts, each workspace must be queried independently (one `GET /v1/restream-events?workspace=<name>` per workspace).
+
+> The legacy `references/restream-workspaces.json` is retained in-repo only as historical reference. As of 2026-06-03 (D1 migs 0027 + 0028) the catalog lives in `restream_accounts` + `restream_workspaces` + `pods.restream_workspace_id` — adding a new account, workspace, or pod assignment is a SQL change, no skill edit + redeploy. The 0027 deploy initially conflated workspaces and accounts; 0028 added the account layer and reorganized pods (`babm-afbc`, `babm-palan`, `tfp-fr`, `twv-ew` moved to the `babm` account's `Default` workspace).
+
+**Read path** — `GET /v1/restream-events?workspace=<name>` returns the workspace's rows; an optional `&event_status=<value>` narrows by status. This is a read of the D1 cache, **not** an authoritative source for "is this event already scheduled" — Step 0 explicitly does not use this endpoint as a pre-flight filter (see the warning in Step 0). Treat any read here as informational. The response shape:
+
+```json
+{
+  "ok": true,
+  "cached_at": "2026-05-13T14:02:00.000Z",
+  "restream_events": [
+    {
+      "show_id": "show-abc-123",
+      "brand_id": "sotsp",
+      "pod_id": "sotsp-cio",
+      "restream_workspace": "sick-of-this-show",
+      "show_title": "Chronically Illing Out | E27 - Writing, Creating, and Caring For Yourself",
+      "show_date": "2026-04-13",
+      "channel_id": 12345,
+      "channel_name": "Chronically Illing Out | E27 ... - 2026-04-13",
+      "channel_created_at": "2026-04-10T14:30:00.000Z",
+      "event_id": "abc-def-123",
+      "event_status": "scheduled",
+      "scheduled_at": "2026-04-11T20:00:00.000Z",
+      "last_synced_at": "2026-05-13T13:58:00.000Z"
+    }
+  ]
+}
+```
+
+**Write path** — `PATCH /v1/restream-events/<show_id>?workspace=<workspace>` upserts a row. If no row exists for the (show_id, workspace) pair, the server INSERTs; otherwise UPDATE only the fields in the body. Workspace is identity (URL query param), not a payload field — sending `restream_workspace` in the body is rejected with `invalid_field`. After successfully scheduling on Restream, PATCH with `event_status: "scheduled"`, `event_id`, and `scheduled_at`.
+
+**Allowed write fields for this skill** (`X-Actor: skill:restream-schedule-live` is constrained server-side — and forwarded unchanged by the Gateway — to these three):
+
+| Field          | Type             | Notes                                                 |
+| -------------- | ---------------- | ----------------------------------------------------- |
+| `event_id`     | `string \| null` | Restream event UUID captured from the scheduled event |
+| `event_status` | enum             | `"scheduled"` after a successful schedule             |
+| `scheduled_at` | `string \| null` | ISO 8601 timestamp the event was scheduled            |
+
+The poller (`cli:restream-poller`) owns channel metadata (`show_title`, `show_date`, `channel_*`, `last_synced_at`) — this skill must not write those fields. The route's actor allowlist returns 403 if it tries.
+
+## Step-by-step workflow
+
+### Step 0: Ensure BroadBanner mount and load show data
+
+Verify the host `~/BroadBanner` directory is mounted at `/sessions/*/mnt/BroadBanner`. If not, call `mcp__cowork__request_cowork_directory` with `path: "~/BroadBanner"`. The mount is needed to read `broadbanner.config.json` (for the `chromeProfiles` block in Step 0.5) and the workspace's `.creds/gateway.token` file. The workspace → pod-id catalog is fetched live from `GET /v1/restream-workspaces` (no local file dependency). State writes happen via the Data Worker, not the local filesystem.
+
+Resolve `<projectId>` (the basename of the BroadBanner workspace folder the user is operating in — e.g. `BannerAndBackboneMedia`, `SickOfThisShitPublications`). The most reliable resolution is the parent directory basename of `Social-Distribution/`. Define `<PROJECT_ROOT>` as that workspace folder (the directory containing `Social-Distribution/` and `broadbanner.config.json`).
+
+Load the cap-token this skill needs for both the snapshot read and the `/restream-events` PATCH:
+
+```bash
+GATEWAY_TOKEN=$(tr -d '[:space:]' < "${PROJECT_ROOT}/.creds/gateway.token")
+if [ -z "$GATEWAY_TOKEN" ]; then
+  echo "No cap-token at ${PROJECT_ROOT}/.creds/gateway.token — re-run banner-blast init or banner-admin init" >&2
+  exit 1
+fi
+AUTH_HDR="Authorization: Bearer ${GATEWAY_TOKEN}"
+```
+
+If the token is missing, stop and tell the user to re-run `banner-blast init <project-id> --update` (or mint manually via `banner-admin tokens issue`). The token must carry `restream:read` and `restream:write` caps — auto-issued for admin operators (`D1.contributors.is_admin === 1`) by Core 1.16.0+. Older tokens will `403 forbidden — missing capability: restream:write` on Step 6.
+
+Fetch the snapshot from the Gateway. The Gateway proxies to the Data Worker's snapshot route on the inside and forwards the query string end-to-end, so `?fresh=1` (skips the Data-Worker KV cache) plus a `?_cb=<epoch>` random buster (defeats any CF edge cache) both work. See `references/gateway-auth.md` for the auth pattern (which is also reused for Step 6).
+
+```bash
+# Cache-bypass: ?fresh=1 (D1 rebuild) + ?_cb=<epoch> (unique URL to CF edge).
+# Background: stale-snapshot incident 2026-05-21 — scheduled-task runs read
+# multi-day-stale data because the cache buster wasn't being used.
+#
+# Wrapped in a function because the freshness gate below RETRIES it: the
+# cache-bypass is not always honored on the first try (incident 2026-06-08:
+# fresh=1 returned an ~8h-stale snapshot, then a plain re-fetch seconds later
+# returned current data). Without a retry-until-fresh gate this skill would
+# silently schedule off a stale read and miss eligible shows. Each call uses a
+# NEW _cb so every attempt is a distinct URL to the edge.
+# The body is written with a SHELL redirect (`>`), NEVER curl's `-o`. In Cowork
+# / scheduled sandboxes, curl's own file opens under /tmp fail with "write error
+# 23" while shell redirection to the same path succeeds. With `-o`, a failed
+# write silently leaves the body file holding a PREVIOUS run's snapshot, which
+# the gate then misreads as live-but-stale data (the false "reconcile lag" abort
+# of 2026-06-11). Unique temp files (mktemp) + an exit-code + JSON check make a
+# failed fetch a hard, retryable error instead of a silent stale read.
+SNAP_BODY="$(mktemp 2>/dev/null || echo "/tmp/bb-snap.$$.json")"
+SNAP_HDR="$(mktemp 2>/dev/null || echo "/tmp/bb-hdr.$$.txt")"
+
+fetch_snapshot() {
+  local cb="fresh=1&_cb=$(date +%s)-$RANDOM"
+  : > "$SNAP_BODY"
+  curl -sS "https://gateway.broadbanner.com/v1/shows?${cb}" \
+    -H "${AUTH_HDR}" -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
+    -H "Accept: application/json" \
+    -D "$SNAP_HDR" > "$SNAP_BODY" 2>/dev/null
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    # -D may have failed in a write-restricted sandbox; retry without it so the
+    # body (via shell redirect) still lands. Body never depends on the headers.
+    : > "$SNAP_HDR" 2>/dev/null || true
+    curl -sS "https://gateway.broadbanner.com/v1/shows?${cb}" \
+      -H "${AUTH_HDR}" -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
+      -H "Accept: application/json" > "$SNAP_BODY" 2>/dev/null
+    rc=$?
+  fi
+  if [ "$rc" -ne 0 ]; then
+    echo "fetch_snapshot: curl transport error (exit $rc)" >&2
+    return 1
+  fi
+  # Body MUST be a snapshot envelope; an auth-error JSON / truncated / empty file
+  # fails this and is a retryable FETCH failure, never parsed for generatedAt.
+  if ! jq -e '.generatedAt and (.shows | type == "array")' "$SNAP_BODY" >/dev/null 2>&1; then
+    echo "fetch_snapshot: response is not a valid snapshot envelope" >&2
+    return 1
+  fi
+  return 0
+}
+```
+
+**Verify the snapshot is actually fresh — retry, then abort.** Sanity-check `generatedAt` (top-level field on the snapshot envelope). Because the origin stamps `generatedAt` at build time (`new Date()` in `build.ts`), a successful `fresh=1` rebuild is **always** ~0s old — so an old age means one of: (a) a **failed fetch this run** left a stale `$SNAP_BODY` leftover (now caught by `fetch_snapshot`'s exit-code + JSON check); (b) `x-cache: hit` (the KV cache served a stale blob — `fresh=1` didn't reach origin); or (c) `cf-cache-status: HIT` (CF edge cache). It is **never** "D1 reconcile lag" — a live rebuild reads current D1 and re-stamps `generatedAt`. A single stale/failed read must not abort; the gate re-fetches with backoff and only aborts after exhausting retries. This matches the `substack-schedule-live` gate.
+
+```bash
+MAX_ATTEMPTS="${FRESHNESS_MAX_ATTEMPTS:-5}"   # total snapshot fetches before giving up
+FRESH_OK=0
+attempt=1
+while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
+  # Fetch FIRST, inside the loop. fetch_snapshot returns non-zero on transport
+  # error or non-snapshot body — retryable, and NEVER confused with stale data.
+  if ! fetch_snapshot; then
+    echo "freshness-gate attempt ${attempt}/${MAX_ATTEMPTS}: fetch failed (transport or non-snapshot body); will retry" >&2
+  else
+    GENERATED_AT=$(jq -r '.generatedAt' "$SNAP_BODY" 2>/dev/null)
+    CACHE_DIAG=$(grep -iE '^(cf-cache-status|x-cache|cf-ray|age):' "$SNAP_HDR" 2>/dev/null \
+      | tr -d '\r' | paste -sd' ' -)
+    [ -z "$CACHE_DIAG" ] && CACHE_DIAG="(no cache headers captured)"
+
+    # Env var MUST come before `node`; exits non-zero on parse failure so the
+    # case-check below treats unparseable output as a (retryable) failure.
+    AGE_SECONDS=$(GA="$GENERATED_AT" node -e '
+      const raw = process.env.GA || "";
+      const ts = new Date(raw).getTime();
+      if (!Number.isFinite(ts)) {
+        console.error("freshness-gate: could not parse generatedAt=" + JSON.stringify(raw));
+        process.exit(2);
+      }
+      console.log(Math.floor((Date.now() - ts) / 1000));
+    ')
+
+    case "$AGE_SECONDS" in
+      ''|*[!0-9-]*)
+        echo "freshness-gate attempt ${attempt}/${MAX_ATTEMPTS}: unparseable generatedAt=$GENERATED_AT, age=$AGE_SECONDS | $CACHE_DIAG" >&2
+        ;;
+      *)
+        if [ "$AGE_SECONDS" -le 600 ]; then
+          FRESH_OK=1
+          break   # snapshot is fresh — proceed
+        fi
+        echo "freshness-gate attempt ${attempt}/${MAX_ATTEMPTS}: snapshot ${AGE_SECONDS}s old (generatedAt=$GENERATED_AT) | $CACHE_DIAG" >&2
+        ;;
+    esac
+  fi
+
+  # Failed/stale/unparseable — back off (2s,4s,8s,…, capped 30s) and loop; the
+  # next iteration re-fetches with a fresh _cb.
+  if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+    sleep_s=$(( 2 ** attempt )); [ "$sleep_s" -gt 30 ] && sleep_s=30
+    sleep "$sleep_s"
+  fi
+  attempt=$(( attempt + 1 ))
+done
+
+if [ "$FRESH_OK" -ne 1 ]; then
+  echo "ABORT: could not obtain a fresh snapshot after ${MAX_ATTEMPTS} attempts — last generatedAt=$GENERATED_AT, age=$AGE_SECONDS — $CACHE_DIAG" >&2
+  echo "  → x-cache:hit = fresh=1 not reaching origin (Gateway/KV); cf-cache-status:HIT = CF edge cache. Old age with no cache headers (or x-cache:bypassed) is NOT reconcile lag — generatedAt is build-time, so an old value means a stale LOCAL file or failed fetch this run. Verify live origin: curl \"https://gateway.broadbanner.com/v1/shows?fresh=1&_cb=\$(date +%s)\" -H \"\${AUTH_HDR}\" | jq .generatedAt. cf-ray pinpoints the request in Cloudflare logs." >&2
+  exit 1
+fi
+```
+
+Parse `$SNAP_BODY` and filter the `shows` array for entries where:
+
+- `hasLiveScheduled` is `"substack_scheduled"` OR `"restream_paired"` AND
+- `restreamKey` is non-null
+
+The snapshot response shape is identical to the legacy local `wix-latest.json` file — same field names, same nested host/guest shape. Skill logic downstream of this read step is unchanged.
+
+> ⚠ **Do NOT pre-filter the eligible list using D1's `event_status` field.** The Restream `GET /v2/user/events` endpoint has been observed returning event statuses that disagree with the actual Restream Studio UI — events that read as **Draft** in the browser have come back from the API as `upcoming` (which the poller maps to `event_status: "scheduled"` in D1) or `finished`. Because the poller is the writer behind D1's `event_status`, that field inherits the API's misreporting. Previous versions of this skill performed a `GET /restream-events?event_status=scheduled` pre-flight and unioned the returned `show_id`s into an exclude set; that pre-flight was hard-blocking every workspace's eligible list and the browser pass never ran. The "already Scheduled or Live, skip" decision now lives **only** in Step 2, where `read_page` reads the visible status badge on the actual event row. That is the sole authority.
+
+The eligible list is therefore exactly the set of shows where:
+
+- `hasLiveScheduled` is `"substack_scheduled"` OR `"restream_paired"` AND
+- `restreamKey` is non-null
+
+…with **no further D1-based exclusion**. Do not call `/restream-events?event_status=scheduled` as a gate. If you want a courtesy log of what D1 currently believes about each show (purely informational — not a filter), issue the workspace-scoped GETs against `?workspace=<name>` (no `event_status` query param) and print the rows alongside the eligible list. The decision to schedule or skip still lives in Step 2.
+
+#### Scheduling-horizon filter (default 7 days, overrideable)
+
+After the `hasLiveScheduled`/`restreamKey` filter, apply a **scheduling-horizon filter** to avoid cluttering Restream Studio with events scheduled far in advance. By default this skill only schedules shows whose `scheduledStart` (UTC ISO) is within the next **7 days from now**:
+
+```bash
+# Default horizon — overridable via SCHEDULE_HORIZON_DAYS env var or user instruction
+HORIZON_DAYS="${SCHEDULE_HORIZON_DAYS:-7}"
+
+# Compute the cutoff in ISO-8601 UTC. Anything with scheduledStart > NOW + horizon is excluded.
+HORIZON_CUTOFF=$(node -e "
+  const days = Number(process.env.HORIZON_DAYS) || 7;
+  const cutoff = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  console.log(cutoff.toISOString());
+" HORIZON_DAYS="$HORIZON_DAYS")
+```
+
+Apply the filter:
+
+```javascript
+const cutoffMs = Date.parse(HORIZON_CUTOFF);
+const eligible = scheduledShows.filter(
+  (s) => Date.parse(s.scheduledStart) <= cutoffMs,
+);
+```
+
+Shows whose `scheduledStart` is past the cutoff are **deferred** — they stay at their current `hasLiveScheduled` value in D1 (`substack_scheduled` or `restream_paired`) and the Restream draft event remains Draft. A future run inside the window will pick them up. Do NOT PATCH `restream_events` for deferred shows.
+
+**Overriding the window for backfills.** Override the default when the user explicitly asks. Common phrases:
+
+- "schedule all", "ignore the window", "backfill", "no horizon", "all of them"
+- An explicit number: "next 14 days", "30-day window", "60 days out"
+- `--days N` / `--all` flags if invoked programmatically
+
+When overriding, set `HORIZON_DAYS` to the requested value, or `999999` (effectively "all") when the user says "all". Always confirm the active window in the Step 0 prompt so the operator sees the resolved horizon before any browser action.
+
+Surface deferred shows in the confirmation prompt:
+
+```
+Filtered by 7-day horizon — deferred {M} show(s) scheduled >7d out:
+  - {showTitle} ({scheduledStart in machine TZ}) — will be picked up on a later run
+```
+
+If no eligible shows remain after the `hasLiveScheduled`/`restreamKey` filter (or after the horizon filter), report "No shows ready for Restream scheduling" and stop.
+
+Also load `broadbanner.config.json` from the brand workspace root (alongside `Social-Distribution/`). Capture the `chromeProfiles` block (if present) — you'll need it in Step 1.5 to pick the correct browser profile per show. If the block is absent, profile-routing is disabled and the skill will use the currently-selected browser for every show.
+
+Present the list of eligible shows to the user for confirmation. **Display the machine-local time** (computed per the recipe in "Timezone handling" above) — that's what will actually be entered into the Restream modal. Surface the show-stored TZ wall-clock only when it differs from the machine TZ:
+
+```
+Found {N} show(s) ready for Restream scheduling (machine TZ: {MACHINE_TZ_ABBR}):
+
+1. {showTitle} — {LOCAL_DATE} at {LOCAL_TIME_12H} {MACHINE_TZ_ABBR}
+   {if localTimeZone differs from machine TZ:
+     Show-stored: {scheduledStartLocal} ({localTimeZone})
+   }
+   Default title: {defaultShowTitle}
+   Restream key: {restreamKey (first 8 chars)}…
+
+Proceed with scheduling all?
+```
+
+### Step 0.5: Select the correct Chrome profile
+
+For each show, before any browser action, resolve and switch to the right Claude-in-Chrome profile based on the show's `seriesId` and `brand`. See `references/chrome-profile-routing.md` for the full algorithm.
+
+Quick version:
+
+1. Look up `chromeProfiles.bySeriesId[show.seriesId]` from the config loaded in Step 0. If set, that's the target profile.
+2. Else look up `chromeProfiles.byBrand[show.brand]`. If set, that's the target profile.
+3. Else: skip the switch (no routing rule).
+
+If a target profile resolved:
+
+```
+list_connected_browsers → find entry where name === <target profile>
+select_browser({ deviceId: <matching deviceId> })
+```
+
+Skip `select_browser` if the current browser is already that profile (avoid the round-trip). If no connected browser matches the resolved name, **stop and tell the user** — running on the wrong account is destructive. Suggest pairing the missing profile via `switch_browser`.
+
+When iterating multiple shows in this run, **re-resolve and re-switch before each show**. A run can include shows from different pods (e.g., `sotsp-tfl` and `sotsp-cio`) that target different profiles. Group shows by resolved profile if processing order is flexible.
+
+### Step 1: Open browser and navigate to Restream
+
+Create a **new tab** via `tabs_create_mcp`. Navigate to `https://app.restream.io/home`.
+
+Wait 3 seconds for the page to load. Verify the event list is visible via `read_page`:
+
+```
+read_page: filter=interactive
+```
+
+Look for the events list containing stream titles and "Draft" status badges. If a login prompt appears, stop and tell the user to log in manually.
+
+### Step 1.5: Navigate to the correct workspace
+
+Restream Studio organizes streams into workspaces. The correct workspace must be selected **before** searching for the event — events only appear in their owning workspace.
+
+The workspace is shown in the left sidebar. Use the **seriesId** of the current show to determine which workspace to enter:
+
+| seriesId                    | Target workspace                             |
+| --------------------------- | -------------------------------------------- |
+| `sotsp-tfl`                 | **Time For Life** (left sidebar)             |
+| any other `sotsp-*`         | **Sick of this Show** (left sidebar)         |
+| `babm-*` / `fp-*` / `twv-*` | Main account level — no sub-workspace needed |
+
+#### How to navigate
+
+Use `read_page` to read the left sidebar. The account/workspace controls appear at the top of the left panel.
+
+- The **main account** is displayed at the top (e.g., "Sick of this Shit P..." with the account avatar and dropdown arrow).
+- **Sub-workspaces** appear below the main account as clickable items (e.g., "Time For Life", "Sick of this Show").
+
+To switch workspaces, `left_click` the target workspace name in the left sidebar. Wait 2 seconds for the event list to reload.
+
+To return to main account level (for BABM/FP/TWV shows), click the main account name at the top of the sidebar.
+
+**Verify the switch** by using `read_page` after clicking — the events shown in the list should now belong to the target workspace. If the workspace names are not visible in the sidebar, use `screenshot` to locate them visually.
+
+This step must run for each show individually — if scheduling multiple shows that belong to different workspaces, re-run this step before each one.
+
+### Step 2: Find the target event (and decide whether to schedule it)
+
+For each show to schedule, find the event row in the Restream list whose title **contains** the show's `defaultShowTitle`. The Restream event titles follow the pattern `"{Default Show Title} | E{N} - {Topic}"` — the `defaultShowTitle` (e.g., "Diogenes Club", "Notes of the Week") will be a prefix.
+
+> **⚠ The draft is a REUSABLE weekly container — match on `defaultShowTitle` ONLY; ignore the episode suffix.** Each series has **one persistent Restream draft** that is reused every week. Between runs it still shows the **previous** episode's title — e.g. today's "Voice From Ukraine" draft may still read `Voice From Ukraine | Russian Aggression Rages On…` from last week's already-aired episode. **That stale-titled draft is exactly the one you want.** You will overwrite its title with today's `showTitle` in Step 4a — reusing-and-renaming the recurring draft IS the intended flow, not clobbering.
+>
+> Therefore: match strictly on `defaultShowTitle` containment. The `| E{N} - {Topic}` suffix is **irrelevant** to matching. Do **NOT** skip a matched draft, call it "a different show," or treat it as "already aired / finished" because its suffix names a past episode. "Already aired" is an inference from a stale title, **not** a status. The **only** status that decides anything is the live **badge** read below — and a **Draft** badge means *schedule it*, no matter what topic the title currently shows.
+
+Use `read_page` to scan the event list. If the event list is paginated or the target event isn't visible, scroll down to find it.
+
+**This is the sole authority on whether to schedule a given show.** No pre-flight code filter (D1 `event_status`, prior skill state, etc.) is permitted to gate the per-show browser pass. The status badge visible on the event row in the Restream Studio UI — captured via `read_page` — is the only signal that decides what happens next.
+
+Read the status badge on the matching event row via `read_page: filter=interactive` and branch on the visible text:
+
+| Visible badge                                                        | Action                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Draft**                                                            | Proceed to Step 3.                                                                                                                                                                                                                                                                                  |
+| **Scheduled**                                                        | Skip this show. Note it in the final report as "already Scheduled — no action." Optionally PATCH D1 in Step 6 to align `event_status: "scheduled"` with the UI (best-effort sync; do not block on failure). Do NOT click into the Schedule modal — that would clobber the existing pairing or date. |
+| **Live** / **In progress**                                           | Skip this show. Note it in the final report as "already Live — no action." Never attempt to reschedule an in-progress event.                                                                                                                                                                        |
+| **Finished** (rare — appears on stale rows the user hasn't archived) | Skip this show with a `finished` note in the report. Do NOT reschedule a finished event row — the user would create a fresh draft event instead.                                                                                                                                                    |
+| Missing badge / unrecognized text                                    | Surface to the user before acting. Take a screenshot or `read_page` excerpt and ask whether to proceed. Do not guess.                                                                                                                                                                               |
+
+> **API/D1 may disagree with the UI.** Restream's `GET /v2/user/events` endpoint has been observed returning `upcoming` (poller maps to D1 `event_status: "scheduled"`) or `finished` for events that the Studio UI still shows as **Draft**. The reverse can also happen during sync lag. Trust what `read_page` returns from the live UI over anything D1 says. Do not consult D1's `event_status` to make this decision.
+
+**If multiple events match** the same `defaultShowTitle` (e.g., two "Intelligent Masculinity" episodes), prefer the one whose existing title is closest to the show's `showTitle`, or the one with the most recent "Last edited" date. Apply the badge check above to whichever event you select. This tie-break applies **only when two or more drafts** contain the `defaultShowTitle`. If exactly **one** draft matches, use it — **never reject the sole matching draft** because its current (stale) title resembles a *different* episode; that single draft is the recurring container and you rename it in Step 4a.
+
+### Step 3: Open the Schedule modal
+
+Click the **three-dot menu** (⋮) on the right side of the target event row. A dropdown will appear with options including:
+
+- Update titles
+- **Schedule** ← select this
+- Duplicate
+- Invite guests
+- Pair channels
+- Embed stream
+- Delete
+
+Use `find` to locate the "Schedule" option in the dropdown and click it. If `left_click` is blocked, ask the user to click it.
+
+Wait 2 seconds for the "Schedule event" modal to appear.
+
+### Step 4: Fill in the Schedule event modal
+
+The modal contains:
+
+- **Title** — text input (pre-filled with the current event title)
+- **Description** — text area
+- **Date** — date picker showing format like "Apr 11, 2026"
+- **Time** — time picker showing format like "05:30 PM" with timezone label (America/Chicago)
+- **"Create an event page on social platforms"** — checkbox (leave as-is)
+- **Thumbnail** — image upload (leave as-is)
+- **Next** button
+
+#### 4a: Update the title
+
+The Title field is **pre-filled with the draft's current (often previous-episode) title** — overwrite it. This rename is the whole point of reusing the recurring draft: replace whatever stale topic it carries with today's episode. Use `find` to locate the title input, then `form_input` to set it to the show's full `showTitle`:
+
+```
+find: "Title input"
+form_input: ref=<title_ref>, value="<show.showTitle>"
+```
+
+#### 4b: Set the date
+
+The date field is a date picker. Use the **machine-local** `LOCAL_DATE` (`YYYY-MM-DD`) computed in "Timezone handling" — NOT the snapshot's `showDate`, which is rendered in Eastern Time and will be off by one day for late-evening shows when the operator is west of ET:
+
+```
+find: "Date input"
+form_input: ref=<date_ref>, value="<LOCAL_DATE>"
+```
+
+If the date picker doesn't accept ISO format, convert `LOCAL_DATE` to `MM/DD/YYYY`. Do NOT fall back to `show.showDate` or `scheduledStartLocal.split('T')[0]` — both are in non-machine timezones.
+
+#### 4c: Set the time
+
+The time field shows format like "05:30 PM" with the machine timezone label displayed alongside (e.g., `America/Chicago`). Use the **machine-local** time computed in "Timezone handling":
+
+- Try `LOCAL_TIME_24` (`HH:MM`) first — most `<input type="time">` controls accept 24-hour ISO.
+- If the picker requires 12-hour with AM/PM, fall back to `LOCAL_TIME_12H` (e.g., `12:00 PM`).
+
+```
+find: "Time input"
+form_input: ref=<time_ref>, value="<LOCAL_TIME_24 or LOCAL_TIME_12H>"
+```
+
+Do NOT use `showStart`, `scheduledStartLocal`, or any other field that comes pre-rendered in the show's stored timezone — Restream's picker is bound to the browser's TZ, so feeding in an Eastern-Time string from a Central-Time machine drifts the schedule by the offset (typically 1 hour).
+
+**IMPORTANT — timezone sanity check:** Read the timezone label rendered next to the Time field via `read_page`. It should match `MACHINE_TZ_IANA` (e.g., `America/Chicago`) — that's the browser's view, not the show's `localTimeZone`. If the modal's label disagrees with `MACHINE_TZ_IANA`, the machine's system clock or browser TZ is mis-set; stop and alert the user. If the modal's label matches the machine but happens to equal the show's `localTimeZone` too (operator and show in the same TZ), no conversion was needed — fine.
+
+#### 4d: Click Next
+
+Use `find` to locate the "Next" button and click it:
+
+```
+find: "Next button"
+left_click: ref=<next_ref>
+```
+
+If `left_click` is blocked, ask the user to click it. Wait 2 seconds for the "Add channels" modal to appear.
+
+### Step 5: Pair the correct channel
+
+The "Add channels" modal shows:
+
+- **"Your Channels" / "Paired Channels"** tab selector
+- **Channel list** — each with a name, "Edit" button, and an ON/OFF toggle slider
+- **"N of M active"** count
+- **"+ Add Channels"** button
+- **Date** and **Time** fields (mirror of the previous modal)
+- **"Schedule"** button
+
+#### 5a: Find the matching channel
+
+The channel created by the `banner-blast restream-poller` channel sync (or the `banner-admin schedule-live` CLI) follows the naming format:
+
+```
+{showTitle} - {showDate}
+```
+
+For example: `"Chronically Illing Out | E27 - Writing, Creating, and Caring For Yourself - 2026-04-13"`
+
+Restream may truncate long channel names in the UI. Use `read_page` to scan the channel list and find the channel whose name **starts with** or **contains** the show's `showTitle`.
+
+```
+read_page: filter=interactive
+→ Scan for channel matching the show title
+```
+
+If no matching channel is found, alert the user — the channel may not have been created yet. Suggest running `banner-blast restream-poller` to provision it (it now reads show data directly from the Data Worker snapshot — no `--wix-latest` flag), or creating it manually in Restream Studio.
+
+#### 5b: Toggle the channel ON
+
+Check the current state of the channel's toggle. In the Restream UI:
+
+- **ON** = blue toggle, channel icon is colored (orange/red)
+- **OFF** = gray toggle, channel icon is grayed out
+
+If the channel is already ON, skip to 5c.
+
+If the channel is OFF, click the toggle to turn it ON:
+
+```
+find: "<channel name> toggle" or locate the toggle adjacent to the channel name
+left_click: ref=<toggle_ref>
+```
+
+After clicking, verify the toggle changed to ON via `read_page`. The "N of M active" count should increment.
+
+If `left_click` is blocked, ask the user to toggle the channel ON.
+
+#### 5c: Verify the active count
+
+Use `read_page` to confirm the expected channel is now active. The channel should show with a colored icon and blue toggle.
+
+#### 5d: Click Schedule
+
+Use `find` to locate the "Schedule" button at the bottom of the modal and click it:
+
+```
+find: "Schedule button"
+left_click: ref=<schedule_ref>
+```
+
+If `left_click` is blocked, ask the user to click it. Wait 2–3 seconds for confirmation.
+
+Verify the event is now showing as "Scheduled" instead of "Draft" in the event list (if navigated back to the home page), or that a success confirmation appeared.
+
+### Step 6: PATCH the Gateway with the scheduled-event state
+
+Determine the workspace for this show:
+
+1. Look up the show's `seriesId` in the catalog from `GET /v1/restream-workspaces`. Walk `accounts[].workspaces[].podIds[]` and find the workspace whose `podIds` contains the `seriesId`. That workspace's `workspaceName` is the value to pass — unless `isDefault` is true, in which case omit the `--workspace` arg entirely. The parent `account.id` tells you which OAuth credential set to use.
+2. If no workspace matches the `seriesId`, the workspace is `null` (the no-workspace case for accounts without a workspace selector).
+
+Then PATCH `gateway.broadbanner.com/v1/restream-events/<show_id>?workspace=<workspace>` with the three fields this skill is allowed to write (`event_id`, `event_status`, `scheduled_at`). The Gateway forwards the path, query string, body, and `X-Actor` / `X-Publication` headers to the Data Worker and stamps its own outbound HMAC — the skill sends only the cap-token Bearer.
+
+```bash
+SHOW_ID="<show.id>"
+WORKSPACE="sick-of-this-show"          # or "" for the NULL-workspace row
+PUBLICATION_ID="<publication-id>"      # e.g. "sotsp", "babm", "lr"
+EVENT_ID="<restream event UUID>"
+NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# URL query: omit ?workspace= entirely for the NULL-workspace case
+URL_QS=""
+if [ -n "$WORKSPACE" ]; then
+  URL_QS="?workspace=${WORKSPACE}"
+fi
+
+BODY=$(jq -n --arg eid "$EVENT_ID" --arg sat "$NOW_ISO" \
+  '{event_status: "scheduled", event_id: $eid, scheduled_at: $sat}')
+
+curl -sS -X PATCH "https://gateway.broadbanner.com/v1/restream-events/${SHOW_ID}${URL_QS}" \
+  -H "${AUTH_HDR}" \
+  -H "X-Publication: ${PUBLICATION_ID}" \
+  -H "X-Actor: skill:restream-schedule-live" \
+  -H "Content-Type: application/json" \
+  -d "$BODY"
+```
+
+**`X-Actor` is required.** The Data-Worker enforces a per-actor field allowlist; the Gateway forwards the inbound `X-Actor` header untouched. If this header is omitted, the Gateway auto-stamps the cap-token's `sub` (the user's email), which is NOT in the actor allowlist and the PATCH will 403 with `field_not_allowed_for_actor`. Always send `X-Actor: skill:restream-schedule-live` explicitly.
+
+**Upsert semantics:** if no row exists yet for the (show_id, workspace) pair, the server creates it (the poller may not have seen this channel yet). Otherwise it updates the three fields in the body and leaves channel metadata alone. The response body distinguishes the cases:
+
+```json
+{ "ok": true, "created": true,  "changed": true, "updated": { "show_id": "...", "restream_workspace": "...", ... } }   // INSERT
+{ "ok": true, "created": false, "changed": true, "updated": { ... } }                                                  // UPDATE
+```
+
+**404 on PATCH** means the show itself doesn't exist in D1's `shows` table — most likely the Wix→D1 reconcile hasn't picked it up yet, or it was deleted. Surface this clearly; do NOT retry blindly. The user can resolve by either running `banner-admin reconcile` or by manually adding the show.
+
+**Do NOT fall back to direct `data.broadbanner.com` HMAC.** That bypass path has been removed from this skill on purpose — a 4xx/5xx at the Gateway is the failure to report, not a signal to route around it.
+
+### Step 7: Process remaining shows
+
+If there are additional shows to schedule:
+
+1. Navigate back to `https://app.restream.io/home` (or verify the event list is visible).
+2. Process the next show starting from Step 2.
+3. Process shows one at a time. After each show, confirm the state tracker was updated before moving to the next.
+
+### Step 8: Close the browser tab
+
+After all shows are processed, close the Restream tab via `tabs_close_mcp`:
+
+```
+tabs_close_mcp: tabId=<current_tab_id>
+```
+
+### Step 9: Final report
+
+After all shows are processed, present a summary:
+
+```
+Restream events scheduled — times shown in {MACHINE_TZ_ABBR}:
+
+1. {showTitle} — {LOCAL_DATE} at {LOCAL_TIME_12H} {MACHINE_TZ_ABBR}
+   {if localTimeZone differs from machine TZ:
+     Show-stored: {scheduledStartLocal} ({localTimeZone})
+   }
+   Channel paired: {channel name}
+   Status: Scheduled ✓
+
+D1 PATCHed for workspace=<workspace> (or __none__).
+```
+
+If any shows failed, list them separately with the failure reason.
+
+## Error handling
+
+- **Not logged in:** Stop and tell the user to log in to Restream at `app.restream.io` in Chrome.
+- **Event not found:** "Not found" means **no draft row contains the `defaultShowTitle`** — full stop. A draft whose title shows a *previous* episode's topic (e.g. a "Voice From Ukraine" draft still reading last week's headline) is **found** and is the recurring container to reuse — do NOT report it as "not found" or "a different/aired show." Only when there is genuinely no draft containing the series name does the user need to create one in Restream Studio (+ New Stream). This skill schedules existing draft events; it does not create new ones.
+- **Event already scheduled / Live / Finished:** Step 2's `read_page` badge check is the only place this decision is made. Skip the show, note it in the final report, and optionally best-effort PATCH the Data Worker to align (`event_status: "scheduled"` or `"finished"`). Never consult D1's `event_status` as a pre-flight filter — the API behind it has been observed misreporting Draft events as `upcoming`/`finished`.
+- **Channel not found:** The Substack channel for this show hasn't been created yet. Suggest running `banner-blast restream-poller` to provision it (the poller reads show data from the Data Worker snapshot — the legacy `--wix-latest` flag is no longer needed), or `banner-admin schedule-live` to create it manually.
+- **Channel toggle doesn't respond:** Try clicking the toggle label/row instead of the switch element itself. If `left_click` is blocked, ask the user to toggle it.
+- **Schedule button fails:** The Schedule button may be disabled if required fields are missing (date, time, at least one channel). Verify all fields are set before clicking.
+- **Multiple draft events match:** When the same `defaultShowTitle` matches more than one draft event (e.g., two "Intelligent Masculinity" episodes from different weeks), prefer the one whose title is most similar to the show's `showTitle`, or the one with the most recent "Last edited" date. If ambiguous, present both to the user and ask them to choose.
+- **Extension blocks tools:** Use `read_page` for verification and `form_input` for data entry. If `left_click` is blocked, ask the user to click the element.
+- **D1 PATCH conflict:** The Data Worker handles upsert semantics atomically — there is no read-then-write race on this skill's writes (in contrast to the legacy JSON-file path). The route's partial-update behavior preserves any fields the skill doesn't send. No special handling needed.
+
+## Key technical notes
+
+- **This skill schedules EXISTING draft events** — it does not create new Restream events. Events are created in Restream Studio when a new stream is set up via "+ New Stream". This skill finds those draft events and schedules them with the correct date/time/channel.
+- **Match events by `defaultShowTitle`** — the `defaultShowTitle` field (e.g., "Diogenes Club", "Intelligent Masculinity") is the stable series name. Restream events use titles like "Diogenes Club | E10 - You Cease, We Fire" which contain the default title as a prefix.
+- **Channel names follow the format `"{showTitle} - {showDate}"`** — these are created by the `banner-blast restream-poller` channel sync or the `banner-admin schedule-live` CLI command. The UI may truncate long names, so match by prefix/containment rather than exact match.
+- **Restream's Schedule modal operates in the BROWSER's local timezone, not the show's stored timezone.** The TZ label next to the Time field reflects the operator's machine (typically `America/Chicago`). The show's `localTimeZone` is independent (often `America/New_York`) — they are NOT expected to match. Always convert `scheduledStart` (UTC) → machine-local wall-clock via the "Timezone handling" recipe and feed those values to the Date/Time pickers. Never use `showDate`, `showStart`, or `scheduledStartLocal` directly — those are pre-rendered in the show's stored TZ (or Eastern Time for legacy snapshot compatibility) and will drift the schedule by the offset between the show TZ and the machine TZ.
+- **Process shows one at a time** — each scheduling pass interacts with the Restream modal, which has state. Complete one show fully before moving to the next.
+- **Only schedule Draft events — and the decision lives in the browser, not in D1.** Step 2's `read_page` of the event row's status badge is the sole authority. Do not gate scheduling on D1's `event_status` field: the poller writes that field from Restream's `GET /v2/user/events` response, which has been observed reporting `upcoming`/`finished` for events the Studio UI still shows as Draft. Letting D1 gate the pass caused the skill to miss scheduling for every workspace.
+- **State lives in D1, queried via the Gateway** — the legacy `Social-Distribution/restream-event-state-*.json` files are frozen as of the Phase 3 cutover (2026-05-13). All reads and writes from this skill flow through `https://gateway.broadbanner.com/v1/restream-events`. The poller (`banner-blast restream-poller`) currently still uses the direct Data-Worker HMAC path and shares the table; workspace is part of row identity so each workspace's scheduling state is isolated. See `references/gateway-auth.md` for the auth pattern and `RESTREAM-EVENT-STATE-TO-D1-MIGRATION-PLAN.md` (in the BroadBanner workspace root) for the architectural reasoning.

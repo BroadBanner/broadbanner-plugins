@@ -12,21 +12,15 @@ and the org passphrase all live in Workers / Wix Secrets, never in a SKILL.md).
 /plugin install broadbanner-social-distribution@broadbanner
 ```
 
-To update later:
-
-```
-/plugin marketplace update broadbanner
-```
-
-(Org admins can enable auto-update for this marketplace via managed settings.)
+To update later: `/plugin marketplace update broadbanner` (org admins can enable
+auto-update via managed settings).
 
 ## Plugins
 
-| Plugin | What it does |
-| --- | --- |
-| `broadbanner-social-distribution` | Post text/image/video notes to Substack/Bluesky/Threads, release queued Substack posts, schedule live streams, track distribution. |
-| `broadbanner-scheduling` | Register declarative scheduled-task specs (cron / one-time) into the Cowork scheduler. |
-| `broadbanner-episode-pipeline` | End-to-end episode processing: section select, transcript download + correction, review generation, Pages publishing. |
+- `broadbanner-episode-pipeline` — End-to-end episode processing for Banner and Backbone Media. Orchestrates section selection, transcript download, transcript correction, episode review generation, and Pages publishing from a single Substack post URL.
+- `broadbanner-restream` — Restream workflow automation for Banner and Backbone Media. Schedule live stream events in Restream Studio and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI.
+- `broadbanner-scheduling` — Scheduled-task management for BroadBanner Cowork projects. Registers declarative scheduled-task specs (cron or one-time) into the Cowork scheduler from a project's .broadbanner/scheduled-tasks/ directory, filed under the project the skill is run from. Reusable across brands and expandable to any custom scheduled skill.
+- `broadbanner-social-distribution` — Social media distribution toolkit for Banner and Backbone Media. Post text or image notes to Substack/Bluesky/Threads, schedule Substack and Restream live streams, track cross-platform distribution status, and manage social publishing workflows.
 
 ---
 

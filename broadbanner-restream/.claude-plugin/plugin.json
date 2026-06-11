@@ -1,0 +1,18 @@
+{
+  "name": "broadbanner-restream",
+  "version": "0.14.6",
+  "description": "Restream workflow automation for Banner and Backbone Media. Schedule live stream events in Restream Studio and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI.",
+  "author": {
+    "name": "Banner and Backbone Media"
+  },
+  "repository": "https://github.com/BannerAndBackbone/BroadBanner",
+  "keywords": [
+    "restream",
+    "clips",
+    "live-stream",
+    "tiktok",
+    "youtube",
+    "scheduling",
+    "banner-and-backbone"
+  ]
+}
