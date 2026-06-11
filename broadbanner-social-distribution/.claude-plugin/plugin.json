@@ -1,0 +1,19 @@
+{
+  "name": "broadbanner-social-distribution",
+  "version": "0.31.0",
+  "description": "Social media distribution toolkit for Banner and Backbone Media. Post text or image notes to Substack/Bluesky/Threads, schedule Substack and Restream live streams, track cross-platform distribution status, and manage social publishing workflows.",
+  "author": {
+    "name": "Banner and Backbone Media"
+  },
+  "repository": "https://github.com/BannerAndBackbone/BroadBanner",
+  "keywords": [
+    "substack",
+    "social-media",
+    "distribution",
+    "publishing",
+    "live-stream",
+    "restream",
+    "scheduling",
+    "banner-and-backbone"
+  ]
+}
