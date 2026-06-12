@@ -2,6 +2,11 @@
 
 Scheduled-task management for BroadBanner Cowork projects.
 
+> **New operator? Start with [`OPERATOR-RUNBOOK.md`](OPERATOR-RUNBOOK.md)** — the
+> step-by-step, machine-independent procedure for installing and managing these
+> tasks, including a worked example of routing clip release to both a brand
+> account and a personal Substack.
+
 ## Why this exists
 
 `banner-admin install-schedules` only **writes** `SKILL.md` files into
