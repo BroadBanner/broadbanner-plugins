@@ -34,11 +34,21 @@ Do not fall back to `.creds/` or the CLI — that path is retired.
 
 ---
 
+## Step 0: Determine the brand (brand-scoped posting)
+
+If the task or user named a **brand** (e.g. `babm`, `sotsp` — the scheduled clip task
+passes one), use it as the `brand` argument in Steps 1–2 so this run handles **only that
+brand's clips** and posts them to **that brand's** Substack account. A creator who runs
+multiple brands (each with its own Substack) relies on this — without it, clips from all
+brands would post to one account. If no brand is given, omit the argument (legacy
+single-account behavior: all pending clips, the creator's default handle).
+
 ## Step 1: List pending clips
 
-Call the **`list_pending_clips`** tool. It returns
-`{ clips: [ { id, mediaUrl, caption, hashtags, podId, created_at } ] }` for the
-signed-in creator. Each clip is a `restream-clip` tracker whose Substack slot is pending.
+Call the **`list_pending_clips`** tool (pass `brand` from Step 0 if set). It returns
+`{ clips: [ { id, mediaUrl, caption, hashtags, podId, created_at } ] }` — the signed-in
+creator's `restream-clip` trackers whose Substack slot is pending, **filtered to the
+brand** when one is supplied.
 
 - **If `clips` is empty → exit immediately** with a one-line "nothing pending" report.
   Do **not** open a browser. This is the common, cheap path.
@@ -55,11 +65,15 @@ URL the composer fetches in-page — use it verbatim; do not rewrite or sign it.
 
 ## Step 2: Resolve the Substack account + select the browser
 
-Call **`get_creator_context`** → `{ substackHandle, brand, brands, pods, ... }`. You need
-`substackHandle` (e.g. `nickparo`) — the Substack account these clips post to.
+Call **`get_creator_context`** (pass the same `brand` from Step 0 if set) →
+`{ substackHandle, brand, brands, pods, ... }`. You need `substackHandle` — the Substack
+account these clips post to. **With a brand, `substackHandle` is that brand's account**
+(e.g. `bannerandbackbone` for `babm`); without one it's the creator's default handle.
 
-Substack posting is browser automation (Option A — a local logged-in browser). There is
-**no brand→profile config**; the account is identified by `substackHandle`:
+Substack posting is browser automation (Option A — a local logged-in browser). The account
+is identified **by handle**, and the right Chrome profile is the one **already logged into
+`@{substackHandle}`** (no brand→profile-name config — profiles are selected by handle, so a
+multi-brand operator just keeps each brand's Substack logged into its own Chrome profile):
 
 1. `list_connected_browsers`. If none are connected → **stop and report** (no browser to drive).
 2. Select a connected browser; `navigate` to `https://substack.com/@{substackHandle}` and
