@@ -8,10 +8,9 @@ Social media distribution toolkit for **Banner and Backbone Media**. Automates p
 | -------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | `substack-note`            | Gateway-only             | Post a text Note to Substack via browser automation, or queue an image note for Bluesky/Threads. Worker KV is SoT.             |
 | `substack-schedule-live`   | Gateway-only             | Schedule upcoming live streams in the Substack publisher dashboard; PATCH stream credentials back to D1 via the Gateway.       |
-| `substack-video-note`      | Local-only (no backend)  | Post a Substack Note with a video clip via browser automation (fetches the clip from R2 in-page); update the local tracker JSON in-place. Invoked by `drain-clip-queue` for due clips. |
-| `refill-clip-queue`        | Gateway-only (browser)   | **Producer.** Pulls the caller's pending Substack restream-clips from the Gateway (`GET /v1/posts`, via an in-browser fetch — Cowork bash has no network), then `pull-clip-queue.mjs` applies the limiter/dedup/baseline and writes local pending pointers with a staggered `release_at`. Runs on its own ~hourly task. |
-| `drain-clip-queue`         | Local-only (no network)  | **Consumer.** Recurring (~30m) dispatcher: scans `Social-Distribution/` for the oldest due `restream-clip` and invokes `substack-video-note` to post exactly one. Fast-exit when nothing is due. |
+| `substack-video-note`      | Local-only / technique ref | Post a Substack Note with a video clip via browser automation (fetches the clip from R2 in-page). Interactively reads/updates a tracker JSON; also the **browser-technique reference** reused by `release-substack-clips`. |
 | `release-substack-text`    | MCP connector (+ browser) | **Consumer (text).** Scheduled poller for web-composed text posts: calls the **BroadBanner MCP connector** (`list_pending_substack` / `get_creator_context` / `mark_substack_posted`) — **no local creds or config** — and posts each as a Substack Note via browser automation (reuses substack-note). Substack-only; Bluesky/Threads go via the Worker queue. Single self-contained task. |
+| `release-substack-clips`   | MCP connector (+ browser) | **Consumer (clips).** Scheduled poller for video clips — the MCP successor to the old `refill-clip-queue` + `drain-clip-queue` pair. Calls the connector (`list_pending_clips` / `get_creator_context` / `mark_substack_posted`) — **no local creds, config, or local queue** — and posts each clip as a Substack video Note (reuses substack-video-note's in-page R2 fetch + inject). Substack-only; caps 2/run. |
 
 > Restream scheduling (`restream-schedule-live`) lives in the sibling plugin **`broadbanner-restream`**, not here. It's Gateway-only as of the 2026-05-21 cutover.
 
@@ -52,7 +51,7 @@ The substack-note skill sends this JSON to `POST https://gateway.broadbanner.com
 }
 ```
 
-`substack-video-note` updates an existing JSON file under `Social-Distribution/` in-place. Those local pointers are written by `refill-clip-queue`, which pulls the user's pending Substack clips from the Worker KV via the Gateway (`GET /v1/posts`) — KV stays the SoT; the local pointer is just the post-side work item. The clip video itself is never copied locally (it's fetched from R2 in-page at post time).
+Interactively, `substack-video-note` updates an existing JSON file under `Social-Distribution/` in-place. The scheduled clip flow, however, is **`release-substack-clips`**: it pulls the creator's pending clips from Worker KV through the **MCP connector** (`list_pending_clips` → the Gateway's `/v1/creators/pending-clips`) and marks each released via `mark_substack_posted` — no local queue file. KV stays the SoT; the clip video is never copied locally (it's fetched from R2 in-page at post time). This MCP path replaced the old `refill-clip-queue` (producer) + `drain-clip-queue` (consumer) local-queue pair, which existed only because Cowork bash has no network.
 
 ## For the production team
 

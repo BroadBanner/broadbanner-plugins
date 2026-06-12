@@ -63,8 +63,15 @@ This skill expects either:
    `source` is `restream-clip`, OR
 2. An explicit `--text` and `--clip` (r2_key or media URL) pair (interactive use).
 
-When invoked from the `drain-clip-queue` dispatcher, the tracker path is
-supplied. Fields read from the tracker:
+> **Note — two callers.** Interactively, this skill reads a tracker JSON (or an
+> explicit `--text`/`--clip` pair) and updates the tracker in place. It is also
+> the **browser-technique reference for `release-substack-clips`** (the scheduled
+> clip flow): that skill reuses Steps 2–7 verbatim but sources identity/data from
+> the BroadBanner MCP connector (`list_pending_clips` → `{ id, mediaUrl, caption }`)
+> and marks release via the `mark_substack_posted` tool instead of editing a
+> tracker file. The tracker-file steps (0, 1, 8) apply to the interactive path only.
+
+When invoked interactively with a tracker path, fields read from the tracker:
 
 - `clip.r2_key` — the canonical R2 object key (shape:
   `<pod-id>/videos/<clip-id>.mp4`). The media URL is built as
@@ -76,9 +83,9 @@ supplied. Fields read from the tracker:
 - `clip.hashtags` — appended to the note text, space-separated, prefixed
   with `#` if not already.
 - `clip.pod_id` — used for Chrome profile routing (Step 1.5).
-- `platforms.substack.status` — must be `"pending"` (or `"queued"`, when
-  invoked by `drain-clip-queue`, which sets a soft lock before delegating).
-  Anything else (`posted`/`skipped`/`failed`) → refuse and report.
+- `platforms.substack.status` — must be `"pending"` (or `"queued"` if a caller
+  set a soft lock before delegating). Anything else (`posted`/`skipped`/`failed`)
+  → refuse and report.
 
 ## Step-by-step workflow
 
@@ -110,8 +117,9 @@ Also load `broadbanner.config.json` from the project root and capture:
   not already present in the caption, separated by spaces.
 
 Show the user the resolved text and `MEDIA_URL` and ask for confirmation
-ONLY when invoked interactively. From the `drain-clip-queue` dispatcher,
-skip confirmation — the dispatcher is the gating layer.
+ONLY when invoked interactively. When driven by `release-substack-clips`
+(the unattended scheduled flow), skip confirmation — that skill is the
+gating layer.
 
 ### Step 1.5: Select the correct Chrome profile
 
