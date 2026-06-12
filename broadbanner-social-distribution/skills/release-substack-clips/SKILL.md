@@ -34,14 +34,30 @@ Do not fall back to `.creds/` or the CLI — that path is retired.
 
 ---
 
-## Step 0: Determine the brand (brand-scoped posting)
+## Step 0: Brand — use one ONLY if it was explicitly passed
 
-If the task or user named a **brand** (e.g. `babm`, `sotsp` — the scheduled clip task
-passes one), use it as the `brand` argument in Steps 1–2 so this run handles **only that
-brand's clips** and posts them to **that brand's** Substack account. A creator who runs
-multiple brands (each with its own Substack) relies on this — without it, clips from all
-brands would post to one account. If no brand is given, omit the argument (legacy
-single-account behavior: all pending clips, the creator's default handle).
+Use a `brand` argument **only if the task or user explicitly handed you one** (e.g. the
+scheduled-task body literally says `brand: babm`). Then pass it to the tools in Steps 1–2
+so this run handles only that brand's clips under that brand's handle.
+
+**If no brand was explicitly passed, run fully brandless — this is the default and the
+normal case. Do this; do not deviate:**
+
+- **NEVER infer or guess a brand from the clips' `podId`s.** Seeing that every pending
+  clip happens to be `babm-afbc` is **not** a reason to set `brand: babm`. Adding a brand
+  the task didn't give you is the single most common mistake here — do not do it.
+- Pass **no** `brand` to `list_pending_clips` **or** `get_creator_context`. You post under
+  the running identity's **default** `substackHandle` (what `get_creator_context` returns
+  with no brand) — e.g. a host identity posts to its own handle like `@nickparo`.
+
+**Why:** posting is per-identity. Each identity owns its own clip queue and its own
+Substack handle. A **host** identity posts **all** the clips it owns — across every show
+it hosts, regardless of which brand each show belongs to — to **its own** handle. A
+**brand** login separately posts every clip in that brand to the brand handle. Both fire
+independently, so the same clip legitimately goes out from the host's queue to the host
+handle **and** from the brand's queue to the brand handle — that is intended, not a
+double-post. **Never reassign a clip to a different handle than the running identity's
+just because of its pod.**
 
 ## Step 1: List pending clips
 
