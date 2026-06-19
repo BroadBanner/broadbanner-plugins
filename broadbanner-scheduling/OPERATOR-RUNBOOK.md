@@ -35,10 +35,18 @@ exactly the failure mode this plugin exists to prevent.
    custom connector → `https://mcp.broadbanner.com/mcp` → sign in via WorkOS with
    **that workspace's creator email**. The connector provides identity, the clip
    list, and the Substack handle; there are no local credentials.
-3. **The project is a BroadBanner project** — its root has
-   `broadbanner.config.json` (created by `banner-admin init`). Template variables
-   in specs (`{{PROJECT_BASENAME}}`, `{{BRAND_SLUG}}`, `{{POD_PREFIX}}`, …) resolve
-   from this file.
+3. **A Cowork project to host the tasks** — scheduled tasks are filed under the
+   Cowork project of the session that installs them, so you need one (the name is
+   just a label). `broadbanner.config.json` at its root is **optional**:
+   - **CLI-initialized** (`banner-admin init` wrote the config): template vars
+     (`{{PROJECT_BASENAME}}`, `{{BRAND_SLUG}}`, `{{POD_PREFIX}}`, …) resolve from
+     it automatically.
+   - **Connector-only / no-CLI** (no config): the `install-scheduled-tasks` skill
+     pulls the brand slug + Substack handle from the MCP connector
+     (`get_creator_context`) and passes them to the collector — no config file
+     needed for the `release-substack-text` / `release-substack-clips` pair. (The
+     `schedule-substack-live` / `schedule-restream-live` pair still needs a full
+     config + gateway token, so those remain CLI-initialized only.)
 
 The browser Cowork drives must be logged into the Substack account the task posts
 to (the `substackHandle` the connector resolves for that workspace/brand).

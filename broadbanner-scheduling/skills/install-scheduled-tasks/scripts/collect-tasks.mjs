@@ -17,6 +17,7 @@
  *
  * Usage:
  *   node collect-tasks.mjs [--project <path>] [--scaffold] [--list]
+ *                          [--brand-slug <s>] [--substack-username <s>] ...
  *
  * Options:
  *   --project <path>  Project root (default: walk up from CWD to the nearest
@@ -24,6 +25,18 @@
  *   --scaffold        Copy any shipped templates that the project is missing
  *                     into <root>/.broadbanner/scheduled-tasks/, then continue.
  *   --list            Human-readable table instead of JSON.
+ *
+ *   Connector/no-CLI mode — broadbanner.config.json is OPTIONAL. When it is
+ *   absent (a creator who never ran `banner-admin init`), the brand-scoped
+ *   template vars come from these flags instead, which the install-scheduled-tasks
+ *   skill fills from the MCP connector's get_creator_context:
+ *     --basename <s>           PROJECT_BASENAME / task-id label (default: dir name)
+ *     --brand-slug <s>         BRAND_SLUG / BRAND_ID / POD_PREFIX
+ *     --brand-display <s>      BRAND_DISPLAY
+ *     --substack-username <s>  SUBSTACK_USERNAME
+ *     --chrome-profile <s>     CHROME_PROFILE
+ *     --pod-ids <a,b,c>        POD_IDS (comma-separated)
+ *   Flags win over config when both are present.
  *
  * Output (default): a JSON object
  *   { projectRoot, projectBasename, specDir, vars, tasks[], warnings[] }
@@ -41,13 +54,48 @@ const TEMPLATES_DIR = path.resolve(SCRIPT_DIR, "..", "references", "templates");
 const SPEC_SUBPATH = path.join(".broadbanner", "scheduled-tasks");
 
 // ── arg parsing ──────────────────────────────────────────────────────────────
+// String-valued flags map to opts keys; both `--flag value` and `--flag=value`
+// forms are accepted. Override flags let the skill supply connector-derived vars
+// when there is no broadbanner.config.json.
+const STRING_FLAGS = {
+  "--project": "project",
+  "--basename": "basename",
+  "--brand-slug": "brandSlug",
+  "--brand-display": "brandDisplay",
+  "--substack-username": "substackUsername",
+  "--chrome-profile": "chromeProfile",
+  "--pod-ids": "podIds",
+};
+
 function parseArgs(argv) {
-  const opts = { project: null, scaffold: false, list: false };
+  const opts = {
+    project: null,
+    scaffold: false,
+    list: false,
+    basename: null,
+    brandSlug: null,
+    brandDisplay: null,
+    substackUsername: null,
+    chromeProfile: null,
+    podIds: null,
+  };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--project") opts.project = argv[++i];
-    else if (a.startsWith("--project=")) opts.project = a.slice("--project=".length);
-    else if (a === "--scaffold") opts.scaffold = true;
+    let matched = false;
+    for (const [flag, key] of Object.entries(STRING_FLAGS)) {
+      if (a === flag) {
+        opts[key] = argv[++i];
+        matched = true;
+        break;
+      }
+      if (a.startsWith(flag + "=")) {
+        opts[key] = a.slice(flag.length + 1);
+        matched = true;
+        break;
+      }
+    }
+    if (matched) continue;
+    if (a === "--scaffold") opts.scaffold = true;
     else if (a === "--list") opts.list = true;
     else if (a === "--help" || a === "-h") opts.help = true;
     else process.stderr.write(`warning: unknown option ${a}\n`);
@@ -76,32 +124,41 @@ function loadConfig(root) {
   }
 }
 
-// ── template variables, derived from config ──────────────────────────────────
-function deriveVars(root, cfg) {
-  const basename = path.basename(root);
+// ── template variables, derived from config + override flags ──────────────────
+// Override flags (opts.*) win over broadbanner.config.json, which is itself
+// optional — a creator on the connector/no-CLI path has no config, so the skill
+// passes the brand-scoped vars in from the MCP connector's get_creator_context.
+function deriveVars(root, cfg, opts = {}) {
+  const basename = opts.basename || path.basename(root);
   const brandSlug =
+    opts.brandSlug ||
     (cfg.user && cfg.user.brandSlugs && cfg.user.brandSlugs[0]) ||
     (cfg.brands && cfg.brands[0] && cfg.brands[0].id) ||
     "";
-  const brandDisplay = (cfg.brands && cfg.brands[0] && cfg.brands[0].displayName) || "";
+  const brandDisplay =
+    opts.brandDisplay || (cfg.brands && cfg.brands[0] && cfg.brands[0].displayName) || "";
   const chromeProfile =
+    opts.chromeProfile ||
     (cfg.chromeProfiles &&
       cfg.chromeProfiles.byBrand &&
       cfg.chromeProfiles.byBrand[brandSlug]) ||
     brandDisplay ||
     "";
-  const podIds = (cfg.user && cfg.user.effectivePodIds) || [];
+  const podIds =
+    opts.podIds != null
+      ? opts.podIds.split(",").map((s) => s.trim()).filter(Boolean)
+      : (cfg.user && cfg.user.effectivePodIds) || [];
   return {
     PROJECT_BASENAME: basename,
     PROJECT_ROOT: `~/${basename}`,
     CREDS_DIR: `~/.broadbanner/${basename}`,
     BRAND_SLUG: brandSlug,
-    BRAND_ID: (cfg.brands && cfg.brands[0] && cfg.brands[0].id) || brandSlug,
+    BRAND_ID: opts.brandSlug || (cfg.brands && cfg.brands[0] && cfg.brands[0].id) || brandSlug,
     BRAND_DISPLAY: brandDisplay,
     POD_PREFIX: brandSlug ? `${brandSlug}-` : "",
     POD_IDS: podIds.join(", "),
     CHROME_PROFILE: chromeProfile,
-    SUBSTACK_USERNAME: (cfg.user && cfg.user.substackUsername) || "",
+    SUBSTACK_USERNAME: opts.substackUsername || (cfg.user && cfg.user.substackUsername) || "",
   };
 }
 
@@ -195,17 +252,31 @@ function main() {
     ? path.resolve(opts.project.replace(/^~(?=$|\/)/, os.homedir()))
     : findProjectRoot(process.cwd());
 
-  if (!root || !fs.existsSync(path.join(root, "broadbanner.config.json"))) {
+  if (!root) {
     process.stderr.write(
-      "error: no broadbanner.config.json found (pass --project <path>)\n",
+      "error: no project root found (pass --project <path>)\n",
     );
     process.exit(1);
   }
 
-  const cfg = loadConfig(root);
-  const vars = deriveVars(root, cfg);
+  // broadbanner.config.json is OPTIONAL. With it (CLI path), vars are derived
+  // from it. Without it (connector/no-CLI path), vars come from the override
+  // flags the skill fills from the MCP connector's get_creator_context.
+  const hasConfig = fs.existsSync(path.join(root, "broadbanner.config.json"));
+  const cfg = hasConfig ? loadConfig(root) : {};
+  const vars = deriveVars(root, cfg, opts);
   const specDir = path.join(root, SPEC_SUBPATH);
   const warnings = [];
+  if (!hasConfig) {
+    warnings.push(
+      "no broadbanner.config.json — connector/no-CLI mode; brand-scoped vars come from override flags (the skill supplies them from get_creator_context). Pass --brand-slug for clip scoping.",
+    );
+    if (!vars.BRAND_SLUG) {
+      warnings.push(
+        "BRAND_SLUG is empty — clip release ({{BRAND_SLUG}}) won't be brand-scoped. Pass --brand-slug <slug> from get_creator_context.",
+      );
+    }
+  }
 
   let scaffolded = [];
   if (opts.scaffold) scaffolded = scaffold(specDir, warnings);

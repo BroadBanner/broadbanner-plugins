@@ -26,11 +26,22 @@ anything — installing into the wrong project is the exact bug this plugin fixe
 
 ## Step 1 — Locate the active project
 
-Determine the active project root: the mounted workspace folder containing
-`broadbanner.config.json` (e.g. `~/LevRemembers`). If you cannot identify it or
-it is not mounted, call `request_cowork_directory` for it and wait.
+Determine the active project root: the mounted workspace folder for this Cowork
+project (e.g. `~/LevRemembers`). If you cannot identify it or it is not mounted,
+call `request_cowork_directory` for it and wait.
 
 Translate that to its bash-sandbox mount path for running the collector.
+
+`broadbanner.config.json` in that folder is **optional**:
+
+- **It's present** (a project set up with `banner-admin init`): the collector
+  derives the brand-scoped template vars from it. Nothing extra to do.
+- **It's absent** (a creator on the connector / no-CLI path): the brand-scoped
+  vars come from the **MCP connector** instead. Call `get_creator_context` (the
+  BroadBanner connector tool) and note the creator's **brand slug**, **Substack
+  username**, and any **pod ids** — you'll pass them to the collector in Step 2.
+  If the connector isn't connected, stop and tell the user to add it first
+  (Settings → Connectors → `https://mcp.broadbanner.com/mcp`).
 
 ## Step 2 — Collect the specs (deterministic)
 
@@ -40,10 +51,23 @@ Run the bundled collector. Its zero-dependency, so plain `node` is enough:
 node "<SKILL_DIR>/scripts/collect-tasks.mjs" --project "<PROJECT_MOUNT_PATH>"
 ```
 
+When there is **no `broadbanner.config.json`**, pass the connector-derived values
+as flags so the brand-scoped templates (notably the clip task's `{{BRAND_SLUG}}`)
+resolve correctly:
+
+```bash
+node "<SKILL_DIR>/scripts/collect-tasks.mjs" --project "<PROJECT_MOUNT_PATH>" \
+  --brand-slug "<slug from get_creator_context>" \
+  --substack-username "<handle from get_creator_context>"
+```
+
 - `<SKILL_DIR>` is this skill's directory (from the skill location). If that path
   is not reachable from the bash sandbox, copy `scripts/collect-tasks.mjs` into
   the outputs dir and run it from there — it has no dependencies.
 - Add `--list` instead of bare invocation for a human-readable preview.
+- The collector emits a warning when running without a config and another if
+  `BRAND_SLUG` is still empty — surface both; an empty brand slug means the clip
+  task won't be brand-scoped.
 
 Parse the JSON. **Confirm `projectBasename` is the project you intend to install
 into.** If it is not, stop (see the filing warning above). Surface any
@@ -105,9 +129,16 @@ pause on permission prompts.
 ## Spec format & variables
 
 See `references/spec-format.md` for the full frontmatter schema, the
-`cronExpression`-vs-`fireAt` rules, and the `{{VAR}}` list resolved from
-`broadbanner.config.json`. Ready-made templates for the live-scheduling pair are
-in `references/templates/`.
+`cronExpression`-vs-`fireAt` rules, and the `{{VAR}}` list. Those vars resolve
+from `broadbanner.config.json` when it exists, otherwise from the collector's
+override flags (`--brand-slug`, `--substack-username`, `--basename`, …) — which
+this skill fills from the connector's `get_creator_context` on the no-CLI path.
+Ready-made templates for the release pair (`release-substack-text`,
+`release-substack-clips`) and the live-scheduling pair are in
+`references/templates/`. The release pair needs only the connector; the
+live-scheduling pair (`schedule-substack-live`, `schedule-restream-live`) still
+expects a full `broadbanner.config.json` + gateway token, so skip those on a
+connector-only setup unless the project is CLI-initialized.
 
 ## Expanding
 
