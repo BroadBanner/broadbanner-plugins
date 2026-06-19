@@ -18,18 +18,18 @@ exactly the failure mode this plugin exists to prevent.
 
 1. **Plugins installed in Cowork** — `broadbanner-social-distribution` (the
    `release-substack-clips` / `release-substack-text` skills) and
-   `broadbanner-scheduling` (this plugin). Install from the public marketplace —
-   no local credentials:
+   `broadbanner-scheduling` (this plugin). Install from the public marketplace
+   via the **Cowork UI** — no local credentials. (The `/plugin …` slash commands
+   are **Claude Code only** and do **not** work in Cowork.) In the Cowork section:
 
-   ```
-   /plugin marketplace add BroadBanner/broadbanner-plugins
-   /plugin install broadbanner-social-distribution@broadbanner
-   /plugin install broadbanner-scheduling@broadbanner
-   ```
+   > **Customize → the `+` next to "Personalize Plugins" → Create plugin → Add
+   > marketplace → Add from a repository**
 
-   Update later with `/plugin marketplace update broadbanner`. (First-time
-   machine setup for the CLIs and per-service auth: see
-   `Documentation/guides/broadbanner-cli-setup-guide.docx` and the numbered
+   When prompted for the repository, enter `BroadBanner/broadbanner-plugins`,
+   then install `broadbanner-social-distribution` and `broadbanner-scheduling`
+   from that marketplace. Manage/update them later from the same "Personalize
+   Plugins" panel. (First-time machine setup for the CLIs and per-service auth:
+   see `Documentation/guides/broadbanner-cli-setup-guide.docx` and the numbered
    per-service guides.)
 2. **BroadBanner MCP connector connected** — Cowork → Settings → Connectors → Add
    custom connector → `https://mcp.broadbanner.com/mcp` → sign in via WorkOS with
