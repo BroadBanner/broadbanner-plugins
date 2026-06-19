@@ -5,15 +5,25 @@ truth is a private repository; this repo holds the built, install-ready plugins.
 Skills are instructions only — **no secrets** (signing keys, tokens, app secrets,
 and the org passphrase all live in Workers / Wix Secrets, never in a SKILL.md).
 
-## Install (Claude Code / Cowork)
+## Install
+
+**Claude Cowork (desktop app)** — the `/plugin …` slash commands do **not** work
+here; add the marketplace through the UI. In the Cowork section:
+
+> Customize → the **+** next to "Personalize Plugins" → Create plugin → Add
+> marketplace → Add from a repository → `BroadBanner/broadbanner-plugins`
+
+Then install `broadbanner-social-distribution` + `broadbanner-scheduling` from
+that marketplace, and manage/update them from the same "Personalize Plugins" panel.
+
+**Claude Code (CLI)** — slash commands work:
 
 ```
 /plugin marketplace add BroadBanner/broadbanner-plugins
 /plugin install broadbanner-social-distribution@broadbanner
 ```
 
-To update later: `/plugin marketplace update broadbanner` (org admins can enable
-auto-update via managed settings).
+To update later in Claude Code: `/plugin marketplace update broadbanner`.
 
 ## Plugins
 

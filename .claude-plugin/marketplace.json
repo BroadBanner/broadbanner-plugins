@@ -11,6 +11,7 @@
     {
       "name": "broadbanner-episode-pipeline",
       "source": "./broadbanner-episode-pipeline",
+      "version": "0.6.0",
       "description": "End-to-end episode processing for Banner and Backbone Media. Orchestrates section selection, transcript download, transcript correction, episode review generation, and Pages publishing from a single Substack post URL.",
       "author": {
         "name": "Banner and Backbone Media"
@@ -19,6 +20,7 @@
     {
       "name": "broadbanner-restream",
       "source": "./broadbanner-restream",
+      "version": "0.15.0",
       "description": "Restream workflow automation for Banner and Backbone Media. Schedule live stream events in Restream Studio and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI.",
       "author": {
         "name": "Banner and Backbone Media"
@@ -27,6 +29,7 @@
     {
       "name": "broadbanner-scheduling",
       "source": "./broadbanner-scheduling",
+      "version": "0.10.0",
       "description": "Scheduled-task management for BroadBanner Cowork projects. Registers declarative scheduled-task specs (cron or one-time) into the Cowork scheduler from a project's .broadbanner/scheduled-tasks/ directory, filed under the project the skill is run from. Reusable across brands and expandable to any custom scheduled skill.",
       "author": {
         "name": "Banner and Backbone Media"
@@ -35,6 +38,7 @@
     {
       "name": "broadbanner-social-distribution",
       "source": "./broadbanner-social-distribution",
+      "version": "0.35.1",
       "description": "Social media distribution toolkit for Banner and Backbone Media. Post text or image notes to Substack/Bluesky/Threads, schedule Substack and Restream live streams, track cross-platform distribution status, and manage social publishing workflows.",
       "author": {
         "name": "Banner and Backbone Media"
