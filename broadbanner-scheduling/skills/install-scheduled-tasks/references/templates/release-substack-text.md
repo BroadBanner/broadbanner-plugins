@@ -1,13 +1,13 @@
 ---
 id: release-substack-text-{{PROJECT_BASENAME}}
 description: Release {{PROJECT_BASENAME}}'s web-composed text posts to Substack (list + post + mark, via the BroadBanner connector).
-cronExpression: "*/2 * * * *"
+cronExpression: "{{TEXT_RELEASE_CRON}}"
 enabled: true
 ---
 
-You are a recurring background poller running every ~2 minutes, around the clock, that releases this workspace's web-composed text posts to Substack with near-queue parity (Bluesky/Threads post within 0–3 min via the Worker queue; this keeps Substack close behind). Invoke the `release-substack-text` skill from the `broadbanner-social-distribution` plugin. This run is pre-approved to run autonomously — do NOT pause for confirmation.
+You are a recurring background poller that releases this workspace's web-composed text posts to Substack, keeping Substack close behind the Worker queue (Bluesky/Threads post within 0–3 min via that queue; this keeps Substack near-parity). Invoke the `release-substack-text` skill from the `broadbanner-social-distribution` plugin. This run is pre-approved to run autonomously — do NOT pause for confirmation.
 
-Cadence note: Substack has no API, so release is browser automation on a poll — it can't be event-driven like the Worker queue. `*/2` keeps the lag short; the common case (nothing pending) fast-exits cheaply. Widen the interval (e.g. `*/5 9-21 * * *`) if the run volume is more than you want; tighten toward `* * * * *` for the absolute minimum lag.
+Cadence note: Substack has no API, so release is browser automation on a poll — it can't be event-driven like the Worker queue. The schedule comes from the **release cadence preset** (`high` / `medium` / `low`) chosen at install: `high` ≈ `*/2 * * * *` (minimal lag, heaviest usage), `medium` (default) ≈ `*/30 * * * *`, `low` ≈ `0 9-21 * * *` (lightest). The common case (nothing pending) fast-exits cheaply, so cost scales with run count — pick `low` for a low-frequency publication, `high` for a busy one. Re-run `install-scheduled-tasks` with a different `--cadence` to change it, or hand-edit this `cronExpression` to any literal 5-field cron for full control.
 
 Text release is a **single self-contained task** (no producer/consumer pair, no local queue): it lists pending posts, posts each to Substack, and marks each released in one pass.
 
@@ -29,4 +29,4 @@ These are the text posts created from the BannerBlast web composer (`#blastItBut
 
 - Close the browser tabs the flow opened when done.
 - A post that fails verification is marked `failed` (not retried forever). To re-release a `failed` post after fixing the issue, flip its tracker's `platforms.substack.status` back to `pending`.
-- Tune cadence via `cronExpression` (e.g. `*/30 9-21 * * *` to release less often, or widen the window).
+- Tune cadence the easy way by reinstalling with `--cadence high|medium|low`; or hand-edit this `cronExpression` to any literal 5-field cron (e.g. `*/30 9-21 * * *`) — a literal value overrides the preset.

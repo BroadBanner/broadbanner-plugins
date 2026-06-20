@@ -1,13 +1,13 @@
 ---
 id: release-substack-clips-{{PROJECT_BASENAME}}
 description: Release {{PROJECT_BASENAME}}'s queued video clips to Substack (list + post + mark, via the BroadBanner connector).
-cronExpression: "*/30 9-21 * * *"
+cronExpression: "{{CLIP_RELEASE_CRON}}"
 enabled: true
 ---
 
-You are a recurring background poller running every ~30 minutes between 9am and 9pm local time, releasing this workspace's queued video clips to Substack. Invoke the `release-substack-clips` skill from the `broadbanner-social-distribution` plugin **for the `{{BRAND_SLUG}}` brand** — pass `brand: {{BRAND_SLUG}}` so it handles only this brand's clips and posts them to this brand's Substack account. This run is pre-approved to run autonomously — do NOT pause for per-clip confirmation.
+You are a recurring background poller that releases this workspace's queued video clips to Substack. Invoke the `release-substack-clips` skill from the `broadbanner-social-distribution` plugin **for the `{{BRAND_SLUG}}` brand** — pass `brand: {{BRAND_SLUG}}` so it handles only this brand's clips and posts them to this brand's Substack account. This run is pre-approved to run autonomously — do NOT pause for per-clip confirmation.
 
-Cadence note: video posts are slow and heavy, so this paces deliberately — the skill posts at most 2 clips per run and the `*/30` cron drips the rest out over the day rather than blast-posting. Widen the window or interval if you want fewer posts; the common case (nothing pending) fast-exits cheaply without opening a browser.
+Cadence note: video posts are slow and heavy, so this paces deliberately — the skill posts at most 2 clips per run and the cron drips the rest out over the day rather than blast-posting. The schedule comes from the **release cadence preset** (`high` / `medium` / `low`) chosen at install: `high` ≈ `*/15 8-22 * * *`, `medium` (default) ≈ `0 8-22 * * *` (hourly, 8am–10pm), `low` ≈ `0 10,14,18 * * *` (three passes a day). The common case (nothing pending) fast-exits cheaply without opening a browser — pick `low` for a low-frequency publication, `high` for a busy one.
 
 This **replaces the old `refill-clip-queue` + `drain-clip-queue` producer/consumer pair**. The local-queue split existed only because Cowork bash had no network — the MCP connector does, so the two collapse into this one self-contained task: it lists pending clips, posts each to Substack, and marks each released in one pass. No local queue, no `.creds/`, no `broadbanner.config.json`.
 
@@ -32,4 +32,4 @@ These are the video clips from the restream-clip pipeline. **Bluesky and Threads
 
 - Close any browser tabs the post flow opened.
 - A `failed` clip is not retried until reset to `pending` (flip its tracker's `platforms.substack.status` back to `pending` to re-release).
-- Tune cadence via `cronExpression` (e.g. `*/15 8-22 * * *` to post more often, or widen the window).
+- Tune cadence the easy way by reinstalling with `--cadence high|medium|low`; or hand-edit this `cronExpression` to any literal 5-field cron (e.g. `*/15 8-22 * * *` to post more often) — a literal value overrides the preset.

@@ -163,7 +163,18 @@ the BannerAndBackboneMedia copy → `@bannerandbackbone`, the NickParo copy →
 
 ### Cadence reference (don't conflate them)
 
-| Task | Cron | Cap |
-| --- | --- | --- |
-| `release-substack-clips` (video) | `*/30 9-21 * * *` (~30 min, 9am–9pm) | 2 clips/run |
-| `release-substack-text` (text) | `*/2 * * * *` (~2 min, 24/7) | — |
+The release pair's schedule comes from a **cadence preset** chosen at install
+(`install-scheduled-tasks` → `collect-tasks.mjs --cadence high|medium|low`,
+default `medium`). The templates carry `{{TEXT_RELEASE_CRON}}` /
+`{{CLIP_RELEASE_CRON}}` rather than a fixed cron, so the same spec serves a busy
+publication and a light one — reinstall with a different `--cadence` to change the
+frequency, or hand-edit a spec's `cronExpression` to a literal for full control.
+
+| Task | `high` | `medium` (default) | `low` | Cap |
+| --- | --- | --- | --- | --- |
+| `release-substack-clips` (video) | `*/15 8-22 * * *` | `0 8-22 * * *` (hourly, 8a–10p) | `0 10,14,18 * * *` | 2 clips/run |
+| `release-substack-text` (text) | `*/2 * * * *` (24/7) | `*/30 * * * *` | `0 9-21 * * *` | — |
+
+Pick `low` for a low-frequency creator (fewest runs, highest lag), `high` for a
+busy one (near-queue parity). Text release fast-exits when nothing is pending, so
+its cost scales with run count — the reason the default moved off the old `*/2`.

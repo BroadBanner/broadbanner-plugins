@@ -52,8 +52,37 @@ across brands.
 | `{{POD_IDS}}` | `user.effectivePodIds` joined | `lr-lr, lr-vfu, lr-ctwld` |
 | `{{CHROME_PROFILE}}` | `chromeProfiles.byBrand[slug]` ?? display | `Lev Remembers` |
 | `{{SUBSTACK_USERNAME}}` | `user.substackUsername` | `levparnas` |
+| `{{TEXT_RELEASE_CRON}}` | cadence preset (text) | `*/30 * * * *` |
+| `{{CLIP_RELEASE_CRON}}` | cadence preset (clips) | `0 8-22 * * *` |
 
 Unknown `{{VARS}}` are left untouched and reported as warnings.
+
+### Release cadence
+
+`{{TEXT_RELEASE_CRON}}` / `{{CLIP_RELEASE_CRON}}` let the release-substack pair
+pick a schedule from a **named preset** instead of a hard-coded cron, so a
+low-frequency creator isn't stuck on the heavy default. Choose one of
+`high | medium | low` (default `medium`) at collect time:
+
+```bash
+node collect-tasks.mjs --project ~/X --cadence low
+```
+
+| Preset | `{{TEXT_RELEASE_CRON}}` | `{{CLIP_RELEASE_CRON}}` |
+|---|---|---|
+| `high` | `*/2 * * * *` (24/7, minimal lag) | `*/15 8-22 * * *` |
+| `medium` (default) | `*/30 * * * *` | `0 8-22 * * *` (hourly 8am–10pm) |
+| `low` | `0 9-21 * * *` | `0 10,14,18 * * *` |
+
+Resolution order: a raw override (`--text-cron` / `--clip-cron`, or
+`scheduling.textCron` / `scheduling.clipCron` in config) > the named preset
+(`--cadence`, or `scheduling.cadence` in config) > `medium`. A literal cron typed
+directly into a scaffolded spec's `cronExpression` also wins — it isn't a `{{VAR}}`
+so the collector leaves it untouched. Config form:
+
+```json
+{ "scheduling": { "cadence": "low" } }
+```
 
 ## Normalized output
 

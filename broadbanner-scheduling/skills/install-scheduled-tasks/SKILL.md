@@ -61,10 +61,27 @@ node "<SKILL_DIR>/scripts/collect-tasks.mjs" --project "<PROJECT_MOUNT_PATH>" \
   --substack-username "<handle from get_creator_context>"
 ```
 
+To set how often the release pollers run, pass a cadence preset (the release
+templates read their cron from it — `medium` is the default if you omit it):
+
+```bash
+node "<SKILL_DIR>/scripts/collect-tasks.mjs" --project "<PROJECT_MOUNT_PATH>" \
+  --cadence low   # high (busy, 24/7) | medium (default) | low (light, ~daytime)
+```
+
+If the user asks to run the release tasks more or less often, that's this flag —
+reinstall with a different `--cadence` and the schedules update in place. `high` ≈
+text `*/2`, clips `*/15 8-22`; `medium` ≈ text `*/30`, clips hourly `0 8-22`; `low`
+≈ text `0 9-21`, clips `0 10,14,18`. For a one-off custom schedule, pass
+`--text-cron "<expr>"` / `--clip-cron "<expr>"` (or hand-edit the spec's
+`cronExpression`). See `references/spec-format.md` → **Release cadence** for the
+full table.
+
 - `<SKILL_DIR>` is this skill's directory (from the skill location). If that path
   is not reachable from the bash sandbox, copy `scripts/collect-tasks.mjs` into
   the outputs dir and run it from there — it has no dependencies.
-- Add `--list` instead of bare invocation for a human-readable preview.
+- Add `--list` instead of bare invocation for a human-readable preview (it prints
+  the resolved release cadence so you can confirm before installing).
 - The collector emits a warning when running without a config and another if
   `BRAND_SLUG` is still empty — surface both; an empty brand slug means the clip
   task won't be brand-scoped.

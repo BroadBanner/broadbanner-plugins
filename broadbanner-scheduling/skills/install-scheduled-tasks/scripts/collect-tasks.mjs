@@ -38,6 +38,17 @@
  *     --pod-ids <a,b,c>        POD_IDS (comma-separated)
  *   Flags win over config when both are present.
  *
+ *   Release cadence — the release-substack-{text,clips} templates pull their
+ *   cronExpression from {{TEXT_RELEASE_CRON}} / {{CLIP_RELEASE_CRON}}, resolved
+ *   from a named preset so a low-frequency creator isn't stuck on the heavy
+ *   default. Pick one of high | medium | low (default: medium):
+ *     --cadence <preset>       high (busy) | medium (default) | low (light)
+ *     --text-cron <expr>       raw override for {{TEXT_RELEASE_CRON}} (advanced)
+ *     --clip-cron <expr>       raw override for {{CLIP_RELEASE_CRON}} (advanced)
+ *   Config equivalent: { "scheduling": { "cadence": "low", "textCron"?, "clipCron"? } }.
+ *   Resolution: raw flag > raw config > preset. A literal cron typed straight
+ *   into a scaffolded spec also still wins (it's not a {{VAR}}).
+ *
  * Output (default): a JSON object
  *   { projectRoot, projectBasename, specDir, vars, tasks[], warnings[] }
  * where each task is
@@ -65,6 +76,9 @@ const STRING_FLAGS = {
   "--substack-username": "substackUsername",
   "--chrome-profile": "chromeProfile",
   "--pod-ids": "podIds",
+  "--cadence": "cadence",
+  "--text-cron": "textCron",
+  "--clip-cron": "clipCron",
 };
 
 function parseArgs(argv) {
@@ -78,6 +92,9 @@ function parseArgs(argv) {
     substackUsername: null,
     chromeProfile: null,
     podIds: null,
+    cadence: null,
+    textCron: null,
+    clipCron: null,
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
@@ -124,11 +141,45 @@ function loadConfig(root) {
   }
 }
 
+// ── release cadence presets ───────────────────────────────────────────────────
+// The release-substack-{text,clips} templates reference {{TEXT_RELEASE_CRON}} /
+// {{CLIP_RELEASE_CRON}} instead of a hard-coded cron, so a creator picks one word
+// (high | medium | low) instead of hand-tuning two cron strings. Text release
+// fast-exits when nothing is pending, so its cost scales with run count — the
+// reason a low-frequency creator wants a lighter cadence than the busy default.
+const CADENCE_PRESETS = {
+  // Busy publication: near-queue parity, around the clock.
+  high: { TEXT_RELEASE_CRON: "*/2 * * * *", CLIP_RELEASE_CRON: "*/15 8-22 * * *" },
+  // Default: every ~30 min for text, hourly 8am–10pm for clips.
+  medium: { TEXT_RELEASE_CRON: "*/30 * * * *", CLIP_RELEASE_CRON: "0 8-22 * * *" },
+  // Light: a handful of passes a day — lowest usage, highest lag.
+  low: { TEXT_RELEASE_CRON: "0 9-21 * * *", CLIP_RELEASE_CRON: "0 10,14,18 * * *" },
+};
+const DEFAULT_CADENCE = "medium";
+
+// Resolve the two release crons from (in order): a raw override (flag/config),
+// then the named preset. An unknown cadence name warns and falls back to medium.
+function resolveReleaseCrons(cfg, opts, warnings) {
+  const sched = (cfg && cfg.scheduling) || {};
+  let name = opts.cadence || sched.cadence || DEFAULT_CADENCE;
+  if (!Object.prototype.hasOwnProperty.call(CADENCE_PRESETS, name)) {
+    warnings.push(
+      `unknown cadence "${name}" — expected high|medium|low; using ${DEFAULT_CADENCE}`,
+    );
+    name = DEFAULT_CADENCE;
+  }
+  const preset = CADENCE_PRESETS[name];
+  return {
+    TEXT_RELEASE_CRON: opts.textCron || sched.textCron || preset.TEXT_RELEASE_CRON,
+    CLIP_RELEASE_CRON: opts.clipCron || sched.clipCron || preset.CLIP_RELEASE_CRON,
+  };
+}
+
 // ── template variables, derived from config + override flags ──────────────────
 // Override flags (opts.*) win over broadbanner.config.json, which is itself
 // optional — a creator on the connector/no-CLI path has no config, so the skill
 // passes the brand-scoped vars in from the MCP connector's get_creator_context.
-function deriveVars(root, cfg, opts = {}) {
+function deriveVars(root, cfg, opts = {}, warnings = []) {
   const basename = opts.basename || path.basename(root);
   const brandSlug =
     opts.brandSlug ||
@@ -159,6 +210,7 @@ function deriveVars(root, cfg, opts = {}) {
     POD_IDS: podIds.join(", "),
     CHROME_PROFILE: chromeProfile,
     SUBSTACK_USERNAME: opts.substackUsername || (cfg.user && cfg.user.substackUsername) || "",
+    ...resolveReleaseCrons(cfg, opts, warnings),
   };
 }
 
@@ -243,7 +295,8 @@ function main() {
   const opts = parseArgs(process.argv);
   if (opts.help) {
     process.stdout.write(
-      "Usage: node collect-tasks.mjs [--project <path>] [--scaffold] [--list]\n",
+      "Usage: node collect-tasks.mjs [--project <path>] [--scaffold] [--list]\n" +
+        "                              [--cadence high|medium|low] [--text-cron <expr>] [--clip-cron <expr>]\n",
     );
     return;
   }
@@ -264,9 +317,9 @@ function main() {
   // flags the skill fills from the MCP connector's get_creator_context.
   const hasConfig = fs.existsSync(path.join(root, "broadbanner.config.json"));
   const cfg = hasConfig ? loadConfig(root) : {};
-  const vars = deriveVars(root, cfg, opts);
-  const specDir = path.join(root, SPEC_SUBPATH);
   const warnings = [];
+  const vars = deriveVars(root, cfg, opts, warnings);
+  const specDir = path.join(root, SPEC_SUBPATH);
   if (!hasConfig) {
     warnings.push(
       "no broadbanner.config.json — connector/no-CLI mode; brand-scoped vars come from override flags (the skill supplies them from get_creator_context). Pass --brand-slug for clip scoping.",
@@ -349,6 +402,9 @@ function main() {
   if (opts.list) {
     process.stdout.write(`\nProject: ${vars.PROJECT_BASENAME}  (${root})\n`);
     process.stdout.write(`Spec dir: ${path.relative(root, specDir)}\n`);
+    process.stdout.write(
+      `Release cadence: text ${vars.TEXT_RELEASE_CRON} | clips ${vars.CLIP_RELEASE_CRON}\n`,
+    );
     if (scaffolded.length) {
       process.stdout.write(`Scaffolded: ${scaffolded.join(", ")}\n`);
     }
