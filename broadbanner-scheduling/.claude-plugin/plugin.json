@@ -1,6 +1,6 @@
 {
   "name": "broadbanner-scheduling",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Scheduled-task management for BroadBanner Cowork projects. Registers declarative scheduled-task specs (cron or one-time) into the Cowork scheduler from a project's .broadbanner/scheduled-tasks/ directory, filed under the project the skill is run from. Reusable across brands and expandable to any custom scheduled skill.",
   "author": {
     "name": "Banner and Backbone Media"
