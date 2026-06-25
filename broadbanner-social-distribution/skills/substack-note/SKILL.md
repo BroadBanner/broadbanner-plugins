@@ -1,6 +1,6 @@
 ---
 name: substack-note
-description: "Post a text Note to Substack, OR queue an image note for Bluesky/Threads. Uses the BroadBanner MCP connector for identity and queuing — no local credentials, config, or tracker files. Use when the user wants to post a note or says 'post this to Substack', 'share this as a note', 'put this on notes'. Also triggers for image notes or any image+caption distribution request. Text-note path: posts to Substack via browser automation, then ingests via the connector's post_text tool with Substack marked posted. Image-note path: no browser — hands the image to the connector's post_image tool, which uploads to R2 and queues Bluesky/Threads. Worker KV is SoT; no local tracker JSON is written."
+description: "Post a text Note to Substack, OR queue an image note for Bluesky/Threads via the BroadBanner MCP connector — no local credentials, config, or tracker files. Use when the user wants to post a note or says 'post this to Substack', 'share this as a note', 'put this on notes', or sends an image+caption. Text path: posts to Substack via browser automation, then queues Bluesky/Threads with the post_text tool (Substack marked posted). Image path: no browser — post_image uploads to R2 and queues Bluesky/Threads. Worker KV is SoT; no local tracker JSON."
 ---
 
 # Substack Note
