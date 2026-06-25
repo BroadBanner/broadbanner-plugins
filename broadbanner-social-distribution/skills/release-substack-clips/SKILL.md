@@ -92,12 +92,15 @@ is identified **by handle**, and the right Chrome profile is the one **already l
 multi-brand operator just keeps each brand's Substack logged into its own Chrome profile):
 
 1. `list_connected_browsers`. If none are connected → **stop and report** (no browser to drive).
-2. Select a connected browser; `navigate` to `https://substack.com/@{substackHandle}` and
-   `resize_window` to **1200×900**.
+2. Select a connected browser. Open a **dedicated MCP working tab** with `tabs_create_mcp`
+   and **record its tabId in a running `OPENED_TABS` list** — do not hijack the user's
+   current tab, and track every tab you open (including the per-clip verification tabs in
+   Step 3c) so Step 4 closes exactly the skill's own tabs. In that tab, `navigate` to
+   `https://substack.com/@{substackHandle}` and `resize_window` to **1200×900**.
 3. **Verify you are logged in as `{substackHandle}`** (the profile page shows that account).
-   - Wrong account, or a login screen → **stop and tell the user** to log into
-     `{substackHandle}`'s Substack in the browser Cowork drives. Posting under the wrong
-     identity is a public mistake — never guess across profiles.
+   - Wrong account, or a login screen → **clean up (Step 4) and stop**, telling the user to
+     log into `{substackHandle}`'s Substack in the browser Cowork drives. Posting under the
+     wrong identity is a public mistake — never guess across profiles.
 
 ---
 
@@ -166,11 +169,16 @@ Never click Post against an unrendered upload.
 1. **Click Post exactly once**, then immediately `postBtn.disabled = true` and
    `postBtn.style.pointerEvents = "none"`. Never click Post twice. Wait up to 20s for the
    modal to dismiss (video posts are slow).
-2. Open a second tab to `https://substack.com/@{substackHandle}`, wait 5s, confirm the
-   new note is present AND differs from the Step 3a baseline. **ANTI-DUPLICATE GUARD:**
-   before any retry, re-check the profile — the post may have succeeded even if the modal
-   misbehaved. Video uploads are slow, so the false-"failure" window is wide — be
-   conservative. Never re-click Post on an ambiguous result.
+2. Open a second tab to `https://substack.com/@{substackHandle}` (record its tabId in
+   `OPENED_TABS`), wait 5s, confirm the new note is present AND differs from the Step 3a
+   baseline. **ANTI-DUPLICATE GUARD:** before any retry, re-check the profile — the post may
+   have succeeded even if the modal misbehaved. Video uploads are slow, so the
+   false-"failure" window is wide — be conservative. Never re-click Post on an ambiguous
+   result.
+3. **Close this verification tab now** (`tabs_close_mcp` on its tabId) before moving to the
+   next clip — with up to 2 clips per run, leaving each verification tab open accumulates
+   tabs. Keep the composer working tab from Step 2; it's reused for the next clip and closed
+   in Step 4. If the close fails, log a warning and continue (Step 4 sweeps it up).
 
 ### 3d. Mark released (MCP tool)
 
@@ -183,9 +191,27 @@ Then proceed to the next clip. The browser stays selected across iterations.
 
 ---
 
-## Step 4: Clean up and report
+## Step 4: Clean up the browser, then report
 
-Close all MCP tabs (`tabs_context_mcp` → `tabs_close_mcp`). Report:
+**Browser cleanup is mandatory and runs on EVERY exit path** — success, a per-clip failure
+(CORS, missing object, upload-did-not-render), a wrong-account/login abort, or any unexpected
+stop **once a tab has been opened**. This is an unattended skill that runs on a schedule;
+video posting is heavy and a leaked tab is leaked forever — Chrome accumulates one per failed
+run. Treat this as a `finally`: never `stop and report` without first running the sweep below.
+
+Close the browser tabs the skill opened:
+
+1. `tabs_context_mcp` to enumerate the MCP tab group.
+2. `tabs_close_mcp` for **each** tab in that group (this catches the Step 2 composer working
+   tab plus any Step 3c verification tab not yet closed). Closing the whole MCP group is safe
+   — these are the skill's own tabs, never the user's.
+3. If a `tabs_close_mcp` call fails, **log a warning and keep going** — close the remaining
+   tabs and finish the report. A cleanup error must not block the run or leave siblings open.
+
+(If you exit before any tab was opened — empty queue in Step 1, connector missing, no
+connected browser — there is nothing to close; skip straight to the report.)
+
+Report:
 
 ```
 Released N Substack clip(s):
@@ -202,7 +228,14 @@ these clips are handled separately — this skill only touches Substack.
 ## Critical rules
 
 - **Unattended — never block on a prompt.** If something's missing (connector, handle,
-  browser/login), stop and report; don't ask and wait.
+  browser/login), clean up the browser (Step 4) and report; don't ask and wait.
+- **Always clean up the browser before exiting.** Once a tab is open, every exit path —
+  success or a per-clip failure (CORS, 403/404, upload-did-not-render) — runs the Step 4
+  sweep first. Close each verification tab in Step 3c as you go; a scheduled skill that leaks
+  tabs bloats Chrome indefinitely.
+- **One composer tab, reused; verification tabs closed per clip.** Open one MCP working tab
+  in Step 2, reuse it across clips, and close every tab (`OPENED_TABS` + the MCP group) in
+  Step 4. Never hijack the user's current tab.
 - **Never click Post more than once.** Verify against the profile before any retry.
 - **Window must be 1200×900** or the composer modal dismisses.
 - **Empty queue is normal** — fast-exit without touching Substack.

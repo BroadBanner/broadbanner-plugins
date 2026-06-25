@@ -56,15 +56,21 @@ Substack posting is browser automation (Option A — a local logged-in browser).
 **no brand→profile config**; the account is identified by `substackHandle`:
 
 1. `list_connected_browsers`. If none are connected → **stop and report** (no browser to drive).
-2. Select a connected browser; `navigate` to `https://substack.com/@{substackHandle}` and
+2. Select a connected browser. Open a **dedicated MCP working tab** with `tabs_create_mcp`
+   and **record its tabId in a running `OPENED_TABS` list** — do not hijack the user's
+   current tab, and track every tab you open so Step 4 can close exactly the skill's own
+   tabs. In that tab, `navigate` to `https://substack.com/@{substackHandle}` and
    `resize_window` to **1200×900**.
 3. **Verify you are logged in as `{substackHandle}`** (the profile page shows that account).
-   - Wrong account, or a login screen → **stop and tell the user** to log into
-     `{substackHandle}`'s Substack in the browser Cowork drives. Posting under the wrong
-     identity is a public mistake — never guess across profiles.
+   - Wrong account, or a login screen → **clean up (Step 4) and stop**, telling the user to
+     log into `{substackHandle}`'s Substack in the browser Cowork drives. Posting under the
+     wrong identity is a public mistake — never guess across profiles.
    - (Multiple connected browsers? Pick the one logged into `{substackHandle}`. A creator
      with several distinct Substack accounts is an edge case — handle the one matching
      `substackHandle` and flag the rest.)
+
+Reuse this one working tab for every post in the run — the verification in Step 3a reloads
+it in place rather than opening new tabs, so the run stays at a single tab.
 
 ---
 
@@ -104,9 +110,27 @@ Then proceed to the next post. The browser stays selected across iterations.
 
 ---
 
-## Step 4: Clean up and report
+## Step 4: Clean up the browser, then report
 
-Close all MCP tabs (`tabs_context_mcp` → `tabs_close_mcp`). Report:
+**Browser cleanup is mandatory and runs on EVERY exit path** — success, a per-post failure,
+a wrong-account/login abort, or any unexpected stop **once a tab has been opened**. This is
+an unattended skill that runs on a schedule; a leaked tab is leaked forever and Chrome
+accumulates one per failed run. Treat this as a `finally`: never `stop and report` without
+first running the sweep below.
+
+Close the browser tabs the skill opened:
+
+1. `tabs_context_mcp` to enumerate the MCP tab group.
+2. `tabs_close_mcp` for **each** tab in that group (this catches your `OPENED_TABS` working
+   tab plus anything else the run spawned). Closing the whole MCP group is safe — these are
+   the skill's own tabs, never the user's.
+3. If a `tabs_close_mcp` call fails, **log a warning and keep going** — close the remaining
+   tabs and finish the report. A cleanup error must not block the run or leave siblings open.
+
+(If you exit before any tab was opened — empty queue in Step 1, connector missing, no
+connected browser — there is nothing to close; skip straight to the report.)
+
+Report:
 
 ```
 Released N Substack post(s):
@@ -124,10 +148,17 @@ touches Substack.
 ## Critical rules
 
 - **Unattended — never block on a prompt.** If something's missing (connector, handle,
-  browser/login), stop and report; don't ask and wait.
+  browser/login), clean up the browser (Step 4) and report; don't ask and wait.
+- **Always clean up the browser before exiting.** Once a tab is open, every exit path —
+  success or failure — runs the Step 4 sweep first. A scheduled skill that leaks a tab per
+  failed run bloats Chrome indefinitely.
+- **One working tab, reused.** Open one MCP tab in Step 2, reload it for verification, close
+  it (and any siblings) in Step 4. Track tabIds in `OPENED_TABS`; never hijack the user's
+  current tab.
 - **Never click Post more than once.** Verify against the profile before any retry.
 - **Window must be 1200×900** or the composer modal dismisses.
-- **Empty queue is normal** — fast-exit without touching Substack.
+- **Empty queue is normal** — fast-exit without touching Substack (no tab opened, nothing to
+  clean up).
 - **Missing tools = connector not connected.** Do NOT fall back to `.creds/` or the CLI.
 - **One post at a time.** Post → mark → next. Never batch the browser posts.
 

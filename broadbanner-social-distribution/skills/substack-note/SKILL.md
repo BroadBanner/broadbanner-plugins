@@ -1,73 +1,51 @@
 ---
 name: substack-note
-description: "Post a text Note to Substack, OR queue an image note for Bluesky/Threads. Gateway-only auth (no HMAC). Use when the user wants to post a note or says 'post this to Substack', 'share this as a note', 'put this on notes'. Also triggers for image notes or any image+caption distribution request. Text-note path: posts to Substack via browser automation, then ingests the tracker into the BannerBlast Worker via the Gateway BFF. Image-note path: skips Substack, uploads image to R2 via the Gateway, then ingests. Worker KV is SoT; no local tracker JSON is written."
+description: "Post a text Note to Substack, OR queue an image note for Bluesky/Threads. Uses the BroadBanner MCP connector for identity and queuing — no local credentials, config, or tracker files. Use when the user wants to post a note or says 'post this to Substack', 'share this as a note', 'put this on notes'. Also triggers for image notes or any image+caption distribution request. Text-note path: posts to Substack via browser automation, then ingests via the connector's post_text tool with Substack marked posted. Image-note path: no browser — hands the image to the connector's post_image tool, which uploads to R2 and queues Bluesky/Threads. Worker KV is SoT; no local tracker JSON is written."
 ---
 
 # Substack Note
 
-Post a text Note to Substack, or queue an image note for Bluesky/Threads via the BroadBanner Gateway.
+Post a text Note to Substack, or queue an image note for Bluesky/Threads — entirely through the **BroadBanner MCP connector** (`mcp.broadbanner.com`).
 
 Two branches:
 
-- **Text note** — browser automation posts to Substack, then the skill calls `POST /v1/posts` against the Gateway with Substack already marked posted and Bluesky/Threads pending.
-- **Image note** — no browser. The skill uploads the image to R2 via `POST /v1/posts/media`, then calls `POST /v1/posts` with Substack skipped and Bluesky/Threads pending.
+- **Text note** — browser automation posts to Substack, then the skill calls the **`post_text`** tool with `substackPosted: true` (Substack recorded posted; Bluesky/Threads queued).
+- **Image note** — no browser. The skill calls the **`post_image`** tool with the image (a public URL or base64 bytes); the connector uploads to R2 and queues Bluesky/Threads with Substack skipped.
 
-Both branches authenticate **gateway-only**: a capability-token Bearer header against `gateway.broadbanner.com`. There is no HMAC fallback. If the gateway is down, stop and report — do not attempt to sign requests against `api.broadbanner.com`. Worker KV is the system of record; no local tracker JSON is written.
-
----
-
-## Step 0: Discover the project and read config
-
-The Cowork dispatch enumerates the user's mounted workspaces in the system prompt under "User selected a folder". Read directly from those — **do not glob `/sessions/*/mnt/*/`**, it wastes turns and the enumeration is already present.
-
-**1. Build the candidate list from the mounted workspaces** (folders the user has granted access to in this session). For each candidate, attempt a direct Read of `<workspace>/broadbanner.config.json`:
-
-- Zero hits → call `mcp__cowork__request_cowork_directory`, ask the user to add their BroadBanner folder, retry.
-- One hit → use it.
-- Multiple hits → list them, ask which to use.
-
-**2. Capture project variables from the config** (a single Read suffices — no `cat` shellout):
-
-| Variable          | Source                               | Example                                                          |
-| ----------------- | ------------------------------------ | ---------------------------------------------------------------- |
-| `PROJECT_ROOT`    | The mounted workspace path           | `/Users/<user>/NickParo`                                         |
-| `PROJECT_ID`      | Basename of `PROJECT_ROOT`           | `"NickParo"`                                                     |
-| `SUBSTACK_HANDLE` | `user.handle`                        | `"nickparo"`                                                     |
-| `BRAND_SLUG`      | `user.brandSlugs[0]`                 | `"sotsp"` (short publication id; mirrors D1's `publications.id`) |
-| `CHROME_PROFILE`  | `chromeProfiles.byBrand[BRAND_SLUG]` | `"Sick of this Shit Publications"`                               |
-
-`USER_ID` (the UUIDv4 identity for the Distribution Worker) is **not** in this config — it lives in `.creds/`. See Step 0.5.
-
-If `user.handle` is absent, ask once: "What's your Substack username?"
+**No local credentials, no config file, no tracker JSON.** Identity, the Substack handle, and the authorized pods all come from the connector (the creator signed in once via WorkOS). The browser is used *only* for the actual Substack text post. This is the post-CLI path — do **not** look for `broadbanner.config.json`, `.creds/`, `~/.broadbanner/`, `banner-blast init`, a cap-token, or HMAC signing.
 
 ---
 
-## Step 0.5: Load gateway credentials
+## Step 0: Prerequisite — the BroadBanner connector
 
-**Two files, two Reads.** Both creds live inside the workspace `.creds/` directory:
+This skill calls MCP tools from the **BroadBanner connector**: `get_creator_context`,
+`post_text`, and (image branch) `post_image`.
 
-```
-<PROJECT_ROOT>/.creds/gateway.token   ← cap-token Bearer for Authorization header
-<PROJECT_ROOT>/.creds/userid          ← plain UUIDv4 string for request bodies
-```
+If those tools aren't available, the connector isn't added/connected. **Stop and report:**
 
-Read both directly. If either is missing or empty, **stop immediately** and tell the user:
+> The BroadBanner connector isn't connected. In Cowork: Settings → Connectors → Add custom
+> connector → `https://mcp.broadbanner.com/mcp` → sign in (WorkOS) with your creator email.
 
-> Workspace credentials not found at `<PROJECT_ROOT>/.creds/`. Run `banner-blast init` (or `banner-admin init`) to provision them.
+Do not fall back to `broadbanner.config.json`, `.creds/`, or the CLI — that path is retired.
 
-(The `.creds/userid` file is a single-line UUID — no JSON parsing. If you read whitespace, trim it.)
+## Step 0.5: Resolve identity from the connector
 
-Set the constants:
+Call **`get_creator_context`** → `{ substackHandle, brand, brands, pods, ... }`. Capture:
 
-```
-API_BASE = "https://gateway.broadbanner.com/v1"
-AUTH_HDR = "Authorization: Bearer ${GATEWAY_TOKEN}"
-USER_ID  = <contents of .creds/userid, trimmed>
-```
+| Variable          | Source                          | Example      |
+| ----------------- | ------------------------------- | ------------ |
+| `SUBSTACK_HANDLE` | `substackHandle`                | `"nickparo"` |
+| `PODS`            | `pods` (authorized series ids)  | `["sotsp-im", "babm-afbc"]` |
 
-**Do not** read from `~/.broadbanner/`, do not look for `.env.json`, do not attempt HMAC signing. Gateway-only.
+If a **brand** was explicitly passed to this run (e.g. the task says `brand: babm`), pass it
+to `get_creator_context` so `substackHandle` resolves to that brand's account. Otherwise run
+brandless — `substackHandle` is the creator's default handle.
 
-**Fail-fast rule:** Steps 0 and 0.5 both complete before any browser work begins. A successful Substack post followed by a failed ingest is worse than catching the credential problem upfront.
+If `substackHandle` is null, ask once: "What's your Substack username?" — but never guess a
+handle; posting under the wrong account is a public mistake.
+
+There is no `USER_ID`, no cap-token, and no Chrome-profile config to load — the connector
+asserts identity, and the browser profile is selected **by handle** (Step 1.5).
 
 ---
 
@@ -75,24 +53,26 @@ USER_ID  = <contents of .creds/userid, trimmed>
 
 | Signal                                                              | Branch                   |
 | ------------------------------------------------------------------- | ------------------------ |
-| "image note", "post this image", file path or URL alongside caption | Image Note (Steps A1–A5) |
+| "image note", "post this image", file path or URL alongside caption | Image Note (Steps A1–A3) |
 | "post this note", text only, no image reference                     | Text Note (Steps 1–7)    |
 
 When ambiguous: ask once — "Is this text-only, or do you want to include an image?"
 
 ---
 
-## IMAGE NOTE PATH (Steps A1–A5)
+## IMAGE NOTE PATH (Steps A1–A3)
 
-Image notes skip Substack entirely. The skill uploads bytes to R2 via `POST /v1/posts/media`, then ingests a tracker via `POST /v1/posts`.
+Image notes skip Substack entirely and use **no browser**. The skill hands the image to the
+connector's **`post_image`** tool, which uploads it to R2 and ingests an image tracker
+(Substack skipped; Bluesky/Threads queued).
 
 ### Step A1: Confirm caption, image, and pod
 
-Resolve the pod:
+Resolve the pod from `PODS` (the `get_creator_context.pods` captured in Step 0.5):
 
-1. If the user tagged a pod explicitly → use that pod ID.
-2. Else if `user.defaultNotePodByBrand[BRAND_SLUG]` is set in config → use that.
-3. Else fetch the user's authorized pods: `GET ${API_BASE}/me` with `${AUTH_HDR}` → `.pods`. Show the list, ask the user to pick. Store as `POD_ID`.
+1. If the user tagged a pod explicitly → use that pod ID (it must be in `PODS`).
+2. Else if `PODS` has exactly one entry → use it.
+3. Else show the `PODS` list and ask the user to pick. Store as `POD_ID`.
 
 Show confirmation:
 
@@ -107,79 +87,41 @@ Pod:      {pod id}
 Ready to queue?
 ```
 
-### Step A2: Materialize the image bytes locally
+### Step A2: Resolve the image into a `post_image` argument
 
-Produce `IMAGE_PATH` and `IMAGE_MIME`:
+`post_image` accepts the image as **either** a public URL **or** base64 bytes. Prefer the URL.
 
-- Local file → detect MIME via `file --mime-type -b <path>`.
-- HTTPS URL → `curl -sSL -o /tmp/<basename> <url>`, detect MIME.
+- **Public HTTPS URL** → pass `imageUrl` verbatim. The connector fetches it server-side; no
+  download, no base64. This is the preferred path.
+- **Local file in the workspace** → read the bytes and base64-encode them, then pass
+  `imageBase64` + `mime`. Detect MIME first (e.g. `file --mime-type -b <path>`).
 
-Validate: MIME must be `image/jpeg`, `image/png`, `image/gif`, or `image/webp`. Size must be ≤ 5 MB. Fail loud on violations.
+Validate before calling: MIME must be `image/jpeg`, `image/png`, `image/gif`, or
+`image/webp`, and the image must be ≤ 5 MB. Fail loud on violations — the connector enforces
+the same limits and will reject otherwise.
 
-### Step A3: Upload to R2 via `POST /v1/posts/media`
+### Step A3: Queue via `post_image`, then report
 
-```bash
-curl -sS -X POST "${API_BASE}/posts/media" \
-  -H "${AUTH_HDR}" \
-  -F "uuid=${USER_ID}" \
-  -F "seriesId=${POD_ID}" \
-  -F "mediaType=image" \
-  -F "file=@${IMAGE_PATH};type=${IMAGE_MIME}"
-```
+Call **`post_image`** with `{ caption, podId, altText?, (imageUrl | imageBase64 + mime) }`.
+Append the brand from Step 0.5 only if one was explicitly passed to this run. The caption is
+the exact note text. Response: `{ trackerId, r2Key, publicUrl }`.
 
-Response (201): `{ "r2Key": "...", "publicUrl": "...", "size": ... }`
+If `post_image` errors, surface the message and stop — common causes are an unauthorized pod
+(not in `PODS`), an oversized/unsupported image, or an unreachable backend. Do **not** fall
+back to a cap-token, `POST /v1/posts/media`, or a local tracker.
 
-Retry policy: 5xx up to 3 attempts with 500ms → 1s → 2s backoff. The cap-token is reused as-is — no re-signing. 4xx → fail loud, surface the body.
-
-### Step A4: Ingest via `POST /v1/posts`
-
-```bash
-TRACKER_ID="$(date -u +%Y%m%d-%H%M%S)_substack-note"
-
-BODY_JSON=$(jq -n \
-  --arg uuid "$USER_ID" \
-  --arg id   "$TRACKER_ID" \
-  --arg ts   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --arg text "$CAPTION" \
-  --arg alt  "$ALT_TEXT" \
-  --arg key  "$R2_KEY" \
-  '{
-     uuid: $uuid,
-     tracker: {
-       id: $id,
-       source: "substack-note",
-       created_at: $ts,
-       text: $text,
-       image: ({ r2_key: $key } + (if $alt == "" then {} else { alt: $alt } end)),
-       platforms: {
-         substack: { status: "skipped", skipped_reason: "image-notes-not-posted" },
-         bluesky:  { status: "pending" },
-         threads:  { status: "pending" }
-       }
-     }
-   }')
-
-curl -sS -X POST "${API_BASE}/posts" \
-  -H "${AUTH_HDR}" \
-  -H "Content-Type: application/json" \
-  --data "$BODY_JSON"
-```
-
-`TRACKER_ID` must match `^[a-zA-Z0-9_-]{1,128}$` — the format above complies. Same retry policy as A3. Response (202): `{ "requestId": "...", "trackerId": "...", "scheduled": { ... } }`.
-
-### Step A5: Report
+Report:
 
 ```
 Image note queued
-Tracker ID: {TRACKER_ID}
-Request ID: {REQUEST_ID}
+Tracker ID: {trackerId}
 
   Substack: skipped
-  Bluesky:  scheduled for {BLUESKY_AT}
-  Threads:  scheduled for {THREADS_AT}
+  Bluesky:  queued
+  Threads:  queued
 ```
 
-No local files written. Worker KV is the system of record.
+No browser opened, no local files written. Worker KV is the system of record.
 
 ---
 
@@ -201,16 +143,22 @@ Once confirmed, post without asking again.
 
 **Pre-approved notes:** if the dispatch prompt says the note is pre-approved, skip this step. Go straight to Step 1.5.
 
-### Step 1.5: Select the correct Chrome profile
+### Step 1.5: Select the browser logged into `@{SUBSTACK_HANDLE}`
 
-Resolve the target profile from `chromeProfiles.byBrand[BRAND_SLUG]` (captured in Step 0). Pod overrides take precedence if the user tagged a specific pod (`chromeProfiles.bySeriesId[pod_id]`).
+The account is identified **by handle**, not by a config map. The right browser is the one
+already logged into `@{SUBSTACK_HANDLE}` (a multi-brand operator keeps each brand's Substack
+in its own Chrome profile, so selecting by handle picks the correct one):
 
 ```
-list_connected_browsers → find entry where name === <target profile>
+list_connected_browsers → pick the entry logged into @{SUBSTACK_HANDLE}
 select_browser({ deviceId: <matching deviceId> })
 ```
 
-Skip if the current browser already matches. If no connected browser matches, **stop and tell the user** — posting under the wrong account is a public mistake. Suggest pairing the missing profile via `switch_browser`.
+Skip if the current browser already matches. Login is verified for real in Step 2 (the
+profile page must show `@{SUBSTACK_HANDLE}`). If no connected browser is logged into that
+handle, **stop and tell the user** to log into `@{SUBSTACK_HANDLE}`'s Substack in the browser
+Cowork drives — posting under the wrong account is a public mistake. Suggest pairing it via
+`switch_browser`.
 
 ### Step 2: Open the browser, navigate, and capture baseline
 
@@ -340,74 +288,48 @@ If ambiguous: wait 5 seconds, reload once more, re-check. If still absent after 
 
 **ANTI-DUPLICATE GUARD:** Before any retry at any point in this workflow, verify against the profile first. A post may have succeeded even if the modal behaved unexpectedly.
 
-### Step 6: Ingest the tracker via gateway
+### Step 6: Queue Bluesky/Threads via `post_text`
 
-Navigate to `https://gateway.broadbanner.com` in the **same tab** (same-origin requirement for fetch), then run a single `javascript_tool` call:
+The Substack post is already live (browser). Now hand the same text to the connector so the
+Worker queue posts Bluesky and Threads — call the **`post_text`** tool:
 
-```javascript
-const body = JSON.stringify({
-  uuid: "<USER_ID>",
-  tracker: {
-    id: "<TRACKER_ID>",
-    source: "substack-note",
-    created_at: "<ISO_TIMESTAMP>",
-    text: "<NOTE_TEXT>",
-    platforms: {
-      substack: { status: "posted", posted_at: "<ISO_TIMESTAMP>" },
-      bluesky: { status: "pending" },
-      threads: { status: "pending" },
-    },
-  },
-});
-
-const resp = await fetch("/v1/posts", {
-  method: "POST",
-  headers: {
-    Authorization: "Bearer <GATEWAY_TOKEN>",
-    "Content-Type": "application/json",
-  },
-  body,
-});
-
-const data = await resp.json();
-JSON.stringify({ status: resp.status, data });
+```
+post_text({ text: "<NOTE_TEXT>", substackPosted: true })
 ```
 
-Replace all `<PLACEHOLDERS>` with values read in Steps 0 / 0.5.
+- `text` is the **exact posted text** — no trailing space, no URL-detection space from Step 4b.
+- `substackPosted: true` is **load-bearing**: it records the Substack slot `posted` (you just
+  posted it) instead of queuing it, so the scheduled `release-substack-text` drain does not
+  post it a second time. Omitting it would double-post Substack.
+- If a brand was explicitly passed to this run, `get_creator_context` in Step 0.5 already
+  resolved the matching handle; no brand argument is needed on `post_text`.
 
-`TRACKER_ID` format: `YYYYMMDD-HHMMSS_substack-note` (UTC). Must match `^[a-zA-Z0-9_-]{1,128}$`. The `text` field is the exact posted text — no trailing space, no URL-detection space from Step 4b.
+Response: `{ trackerId }`. The connector schedules Bluesky/Threads downstream.
 
-**Response (202):**
+**On failure:** if `post_text` errors, the **Substack post already succeeded** — do NOT
+re-post on Substack. Report the queue failure separately:
 
-```json
-{
-  "requestId": "<uuid>",
-  "trackerId": "20260515-193122_substack-note",
-  "scheduled": {
-    "bluesky": { "releaseAt": "...", "delaySeconds": 75 },
-    "threads": { "releaseAt": "...", "delaySeconds": 435 }
-  }
-}
-```
+> The Substack note posted, but queuing Bluesky/Threads via the connector failed ({error}).
+> The note is live on Substack; the cross-post can be retried once the connector is reachable.
 
-**Retry policy:** if status is 5xx, retry up to 3 times with 500ms → 1s → 2s backoff. The gateway token is reused as-is. If 4xx, fail loud — surface the response body (most likely a malformed `tracker.id` or a missing field). **Do not fall back to HMAC.** If the gateway is persistently down, report:
-
-> Gateway at gateway.broadbanner.com returned {status}. The Substack post succeeded but ingest failed — the tracker will need to be ingested manually once the gateway is back.
+Do **not** fall back to a cap-token, an in-browser `fetch` to the gateway, or HMAC — those
+paths are retired.
 
 ### Step 7: Clean up and report
 
-Close all tabs in the MCP group: `tabs_context_mcp` → `tabs_close_mcp` for each tab.
+Close every tab the skill opened: `tabs_context_mcp` → `tabs_close_mcp` for each tab in the
+MCP group. **Run this even if Step 6 failed** — once a tab is open, clean it up before
+reporting; never leave the browser tab behind.
 
 Report:
 
 ```
 Note posted to Substack
-Tracker ID: {TRACKER_ID}
-Request ID: {REQUEST_ID}
+Tracker ID: {trackerId}
 
   Substack: posted
-  Bluesky:  scheduled for {BLUESKY_AT}
-  Threads:  scheduled for {THREADS_AT}
+  Bluesky:  queued
+  Threads:  queued
 ```
 
 Worker KV is the system of record. No local tracker files are written.
@@ -423,8 +345,9 @@ Note on latency: typical ingest→posted is 1–15 minutes on Bluesky, with Thre
 - **Never retry the Post button.** If verification is ambiguous, check the profile before any retry.
 - **Anti-duplicate guard applies to ALL retries.** Before reopening the composer, re-entering text, or re-attempting Post, check the profile first.
 - **Modal disappearing unexpectedly** means the window was not resized to 1200×900 in Step 2.
-- **Gateway down after successful Substack post:** do NOT re-post on Substack. Report the ingest failure separately.
-- **Gateway 4xx on ingest:** do NOT retry. Surface the body — it indicates a malformed tracker.
+- **`post_text` fails after a successful Substack post:** do NOT re-post on Substack. Report the queue failure separately — the note is already live on Substack.
+- **`post_text` must carry `substackPosted: true`** on the text path — without it, Substack is queued and the scheduled drain double-posts the note.
+- **Connector tools missing** (`get_creator_context` / `post_text` / `post_image`): the connector isn't connected. Stop and report (Step 0) — never fall back to `.creds/`, a cap-token, or the CLI.
 
 ### Not logged in
 
@@ -456,13 +379,13 @@ Login prompt visible instead of profile → stop, tell the user to log in manual
 
 A clean text note run should complete in **25–35 assistant turns**:
 
-| Phase               | Target turns | Notes                                                                       |
-| ------------------- | ------------ | --------------------------------------------------------------------------- |
-| Setup + credentials | 2–3          | Direct Read of config + `.creds/gateway.token` from known mounted workspace |
-| Browser posting     | 8–12         | Navigate + baseline, open composer, JS insert, JS post                      |
-| Verification        | 2–4          | Reload + JS check on same page                                              |
-| Ingest              | 3–5          | Navigate to gateway, single fetch call                                      |
-| Cleanup + report    | 2–3          | Close tabs, format report                                                   |
+| Phase             | Target turns | Notes                                                          |
+| ----------------- | ------------ | -------------------------------------------------------------- |
+| Setup + identity  | 1–2          | `get_creator_context` — one tool call, no files               |
+| Browser posting   | 8–12         | Navigate + baseline, open composer, JS insert, JS post        |
+| Verification      | 2–4          | Reload + JS check on same page                                 |
+| Queue cross-posts | 1–2          | One `post_text` tool call (`substackPosted: true`)            |
+| Cleanup + report  | 2–3          | Close tabs, format report                                      |
 
 If a run exceeds 50 turns, something went wrong. Surface which phase ballooned.
 
@@ -472,5 +395,6 @@ If a run exceeds 50 turns, something went wrong. Surface which phase ballooned.
 
 - `references/js-verification.md` — deep dive on ProseMirror text-entry and Post-button verification.
 - `references/error-handling.md` — extended failure modes and recovery paths.
+- `../release-substack-text/SKILL.md` — the scheduled drain that posts `post_text`'s queued Substack notes (it must NOT receive ones this skill already posted, hence `substackPosted: true`).
 
-(The legacy `references/bb-distro-auth.md` was removed in the gateway-only cutover. There is no HMAC path in this skill any longer.)
+(The legacy gateway-cap-token and HMAC paths — and `references/bb-distro-auth.md` — were removed in the connector cutover. This skill holds no local credentials.)
