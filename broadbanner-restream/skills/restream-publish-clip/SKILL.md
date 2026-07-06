@@ -267,15 +267,15 @@ Quick version:
    via the brand prefix on `pod_id`, or via `BroadBanner-Core` pod-map if available).
 3. Else: skip the switch.
 
-If a target profile resolved:
+If a target deviceId resolved:
 
 ```
-list_connected_browsers → find entry where name === <target profile>
-select_browser({ deviceId: <matching deviceId> })
+list_connected_browsers → confirm <resolved deviceId> is in the connected list (ignore the `name` field — it's a volatile ordinal)
+select_browser({ deviceId: <resolved deviceId> })
 ```
 
-Skip `select_browser` if the current browser is already that profile. If no
-connected browser matches the resolved name, **stop and tell the user** —
+Skip `select_browser` if the current browser is already that deviceId. If the
+resolved deviceId is not in the connected list, **stop and tell the user** —
 publishing on the wrong account posts under the wrong identity. Suggest pairing
 the missing profile via `switch_browser`.
 

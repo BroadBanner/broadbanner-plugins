@@ -135,14 +135,14 @@ Quick version:
    hosted show to one personal account set just this).
 4. Else: skip the switch.
 
-If a target profile resolved:
+If a target deviceId resolved:
 
 ```
-list_connected_browsers → find entry where name === <target profile>
-select_browser({ deviceId: <matching deviceId> })
+list_connected_browsers → confirm <resolved deviceId> is in the connected list (ignore the `name` field — it's a volatile ordinal)
+select_browser({ deviceId: <resolved deviceId> })
 ```
 
-Skip if already selected. If no connected browser matches, **stop** —
+Skip if already selected. If the resolved deviceId is not in the connected list, **stop** —
 posting under the wrong account is destructive.
 
 ### Step 2: Open the browser, resize, and capture baseline

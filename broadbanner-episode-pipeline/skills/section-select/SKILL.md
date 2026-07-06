@@ -58,14 +58,14 @@ Before navigating, switch to the Claude-in-Chrome profile that owns the Substack
 3. Else `chromeProfiles.byBrand[brand]` (resolve `brand` via `<workspace-root>/pod-map.json` for this pod-id).
 4. Else: skip the switch.
 
-If a target profile resolved:
+If a target deviceId resolved:
 
 ```
-list_connected_browsers → find entry where name === <target profile>
-select_browser({ deviceId: <matching deviceId> })
+list_connected_browsers → confirm <resolved deviceId> is in the connected list (ignore the `name` field — it's a volatile ordinal)
+select_browser({ deviceId: <resolved deviceId> })
 ```
 
-Skip if already selected. If no connected browser matches, **stop and tell the user** — the section selector lives inside the Substack publication, so the wrong profile won't see the right section list.
+Skip if already selected. If the resolved deviceId is not in the connected list, **stop and tell the user** — the section selector lives inside the Substack publication, so the wrong profile won't see the right section list.
 
 ### Step 2: Navigate to the Substack editor
 

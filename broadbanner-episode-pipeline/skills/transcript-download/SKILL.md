@@ -70,14 +70,14 @@ Before navigating, switch to the Claude-in-Chrome profile that owns the Substack
 3. Else `chromeProfiles.byBrand[brand]` (the `brand` was resolved in Step 1 from the pod-map).
 4. Else: skip the switch.
 
-If a target profile resolved:
+If a target deviceId resolved:
 
 ```
-list_connected_browsers → find entry where name === <target profile>
-select_browser({ deviceId: <matching deviceId> })
+list_connected_browsers → confirm <resolved deviceId> is in the connected list (ignore the `name` field — it's a volatile ordinal)
+select_browser({ deviceId: <resolved deviceId> })
 ```
 
-Skip if already selected. If no connected browser matches, **stop and tell the user** — the transcript download must come from the publication that owns the post.
+Skip if already selected. If the resolved deviceId is not in the connected list, **stop and tell the user** — the transcript download must come from the publication that owns the post.
 
 ### Step 2: Navigate to the Substack post
 

@@ -334,18 +334,18 @@ For each show, before any browser action, resolve and switch to the right Claude
 
 Quick version:
 
-1. Look up `chromeProfiles.bySeriesId[show.seriesId]` from the config loaded in Step 0. If set, that's the target profile.
-2. Else look up `chromeProfiles.byBrand[show.brand]`. If set, that's the target profile.
+1. Look up `chromeProfiles.bySeriesId[show.seriesId]` from the config loaded in Step 0. If set, that's the target deviceId.
+2. Else look up `chromeProfiles.byBrand[show.brand]`. If set, that's the target deviceId.
 3. Else: skip the switch (no routing rule).
 
-If a target profile resolved:
+If a target deviceId resolved:
 
 ```
-list_connected_browsers → find entry where name === <target profile>
-select_browser({ deviceId: <matching deviceId> })
+list_connected_browsers → confirm <resolved deviceId> is in the connected list (ignore the `name` field — it's a volatile ordinal)
+select_browser({ deviceId: <resolved deviceId> })
 ```
 
-Skip `select_browser` if the current browser is already that profile. If no connected browser matches the resolved name, **stop and tell the user** — running on the wrong account will schedule under the wrong identity. Suggest pairing the missing profile via `switch_browser`.
+Skip `select_browser` if the current browser is already that profile. If the resolved deviceId is not in the connected list, **stop and tell the user** — running on the wrong account will schedule under the wrong identity. Suggest pairing the missing profile via `switch_browser`.
 
 When iterating multiple shows, **re-resolve and re-switch before each show**. A run can include shows from different pods (e.g., `sotsp-tfl` and `sotsp-cio`) that target different profiles. The existing "process shows grouped by publication" guidance still applies — group also by resolved profile to minimize switches.
 
