@@ -1,6 +1,6 @@
 {
   "name": "broadbanner-episode-pipeline",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "End-to-end episode processing for Banner and Backbone Media. Orchestrates section selection, transcript download, transcript correction, episode review generation, and Pages publishing from a single Substack post URL.",
   "author": {
     "name": "Banner and Backbone Media"
