@@ -1,16 +1,16 @@
 ---
 name: substack-note
-description: "Post a text Note to Substack, OR queue an image note for Bluesky/Threads via the BroadBanner MCP connector — no local credentials, config, or tracker files. Use when the user wants to post a note or says 'post this to Substack', 'share this as a note', 'put this on notes', or sends an image+caption. Text path: posts to Substack via browser automation, then queues Bluesky/Threads with the post_text tool (Substack marked posted). Image path: no browser — post_image uploads to R2 and queues Bluesky/Threads. Worker KV is SoT; no local tracker JSON."
+description: "Post a text Note to Substack, OR queue a text+image note (Substack + Bluesky + Threads) via the BroadBanner MCP connector — no local credentials, config, or tracker files. Use when the user wants to post a note or says 'post this to Substack', 'share this as a note', 'put this on notes', or sends an image+caption. Text path: posts to Substack via browser automation, then queues Bluesky/Threads with the post_text tool (Substack marked posted). Image path: no browser — post_image uploads to R2 and queues Bluesky/Threads immediately; Substack is released later by the scheduled release-substack-text skill (which attaches the image). Worker KV is SoT; no local tracker JSON."
 ---
 
 # Substack Note
 
-Post a text Note to Substack, or queue an image note for Bluesky/Threads — entirely through the **BroadBanner MCP connector** (`mcp.broadbanner.com`).
+Post a text Note to Substack, or queue a text+image note for all three platforms — entirely through the **BroadBanner MCP connector** (`mcp.broadbanner.com`).
 
 Two branches:
 
 - **Text note** — browser automation posts to Substack, then the skill calls the **`post_text`** tool with `substackPosted: true` (Substack recorded posted; Bluesky/Threads queued).
-- **Image note** — no browser. The skill calls the **`post_image`** tool with the image (a public URL or base64 bytes); the connector uploads to R2 and queues Bluesky/Threads with Substack skipped.
+- **Text+image note** — no browser here. The skill calls the **`post_image`** tool with the image (a public URL or base64 bytes); the connector uploads to R2 and queues Bluesky/Threads **immediately** (they post images via API), while Substack is left **pending** and released later by the scheduled `release-substack-text` skill, which fetches the image from R2 and posts it as a Note. (Substack has no posting API, so the image goes out on the browser-release schedule, not the instant this skill runs.)
 
 **No local credentials, no config file, no tracker JSON.** Identity, the Substack handle, and the authorized pods all come from the connector (the creator signed in once via WorkOS). The browser is used *only* for the actual Substack text post. This is the post-CLI path — do **not** look for `broadbanner.config.json`, `.creds/`, `~/.broadbanner/`, `banner-blast init`, a cap-token, or HMAC signing.
 
@@ -53,18 +53,20 @@ asserts identity, and the browser profile is selected **by handle** (Step 1.5).
 
 | Signal                                                              | Branch                   |
 | ------------------------------------------------------------------- | ------------------------ |
-| "image note", "post this image", file path or URL alongside caption | Image Note (Steps A1–A3) |
+| "image note", "post this image", file path or URL alongside caption | Text+Image Note (Steps A1–A3) |
 | "post this note", text only, no image reference                     | Text Note (Steps 1–7)    |
 
 When ambiguous: ask once — "Is this text-only, or do you want to include an image?"
 
 ---
 
-## IMAGE NOTE PATH (Steps A1–A3)
+## TEXT+IMAGE NOTE PATH (Steps A1–A3)
 
-Image notes skip Substack entirely and use **no browser**. The skill hands the image to the
-connector's **`post_image`** tool, which uploads it to R2 and ingests an image tracker
-(Substack skipped; Bluesky/Threads queued).
+This path uses **no browser**. The skill hands the image to the connector's **`post_image`**
+tool, which uploads it to R2 and ingests a text+image tracker: **Bluesky/Threads queue
+immediately** (they post images via API), and **Substack is left pending** for the scheduled
+`release-substack-text` skill to post via browser (it attaches the image from R2). Full
+release — all three platforms — just with Substack on the release schedule rather than instant.
 
 ### Step A1: Confirm caption, image, and pod
 
@@ -77,7 +79,8 @@ Resolve the pod from `PODS` (the `get_creator_context.pods` captured in Step 0.5
 Show confirmation:
 
 ```
-I'll queue this as an image note for Bluesky and Threads (Substack skipped):
+I'll queue this as a text+image note for Bluesky, Threads, and Substack
+(Bluesky/Threads post shortly; Substack goes out on the next scheduled release):
 
 Caption:  {caption text}
 Image:    {filename or URL}
@@ -113,15 +116,18 @@ back to a cap-token, `POST /v1/posts/media`, or a local tracker.
 Report:
 
 ```
-Image note queued
+Text+image note queued
 Tracker ID: {trackerId}
 
-  Substack: skipped
+  Substack: pending (releases on the next scheduled run)
   Bluesky:  queued
   Threads:  queued
 ```
 
-No browser opened, no local files written. Worker KV is the system of record.
+No browser opened, no local files written. Worker KV is the system of record. The image is
+now in R2; the scheduled `release-substack-text` skill will fetch it and post the Substack
+Note on its next run. (If the user only wants Bluesky/Threads and no Substack, pass
+`targets: { substack: false }` to `post_image` — then Substack is recorded skipped.)
 
 ---
 

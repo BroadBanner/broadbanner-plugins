@@ -1,18 +1,20 @@
 ---
 name: release-substack-text
-description: "Release queued text Notes to Substack. Uses the BroadBanner MCP connector to list the creator's pending text posts (from the BannerBlast web composer), posts each to Substack via browser automation, and marks it released — no local credentials or config. Runs unattended on a schedule. Triggers on 'release my Substack posts' / 'post my pending notes', or the scheduled release task. Reuses substack-note's browser posting; the existing tracker is marked posted, not re-ingested."
+description: "Release queued Notes to Substack — text OR text+image. Uses the BroadBanner MCP connector to list the creator's pending posts (from the BannerBlast web composer or substack-note), posts each to Substack via browser automation (attaching the image in-page from R2 when the post carries one), and marks it released — no local credentials or config. Runs unattended on a schedule. Triggers on 'release my Substack posts' / 'post my pending notes', or the scheduled release task. Reuses substack-note's browser posting; the existing tracker is marked posted, not re-ingested."
 ---
 
 # Release Substack Text Posts
 
-A background, **unattended** skill: pull the creator's text posts waiting to go out
-on Substack, post each as a Note via browser automation, and mark it released.
+A background, **unattended** skill: pull the creator's notes waiting to go out on
+Substack — **text or text+image** — post each as a Note via browser automation, and
+mark it released. Text-only notes just enter the text; text+image notes also fetch
+the image from R2 and attach it in-page before posting.
 
-This is the consumer half of the web text-post flow. The BannerBlast web composer
-(`#blastItButton`) ingests a tracker with `substack: pending` (plus `bluesky` /
-`threads`, which the Worker queue posts via API). The Worker queue **never** posts
-Substack — there's no API — so those notes sit `pending` until this skill releases
-them through the browser.
+This is the consumer half of the web post flow. The BannerBlast web composer (and the
+substack-note skill) ingest a tracker with `substack: pending` (plus `bluesky` /
+`threads`, which the Worker queue posts via API — including images). The Worker queue
+**never** posts Substack — there's no API — so those notes sit `pending` until this
+skill releases them through the browser.
 
 **No local credentials, no config file.** Identity, context, and data all come from
 the **BroadBanner MCP connector** (the creator signed in once via WorkOS). The browser
@@ -37,13 +39,18 @@ Do not fall back to `.creds/` or the CLI — that path is retired.
 ## Step 1: List pending posts
 
 Call the **`list_pending_substack`** tool. It returns
-`{ posts: [ { id, text, created_at } ] }` for the signed-in creator.
+`{ posts: [ { id, text, created_at, imageUrl?, altText? } ] }` for the signed-in creator.
 
 - **If `posts` is empty → exit immediately** with a one-line "nothing pending" report.
   Do **not** open a browser. This is the common, cheap path.
 
 Otherwise, sort `posts` oldest-first by `created_at`. Cap this run at **5** — process the
 oldest 5 and note any remainder goes out next run.
+
+**A post with an `imageUrl` is a text+image note.** `imageUrl` is the public
+`media.broadbanner.com` URL you fetch in-page (Step 3a-image) to attach the image before
+posting; `altText` (if present) is its accessibility description. Text-only posts have no
+`imageUrl` and skip the injection step entirely.
 
 ---
 
@@ -76,12 +83,12 @@ it in place rather than opening new tabs, so the run stays at a single tab.
 
 ## Step 3: For each pending post — post to Substack, then mark released
 
-Process posts **one at a time**. For each `{ id, text }`:
+Process posts **one at a time**. For each `{ id, text, imageUrl?, altText? }`:
 
-### 3a. Post the text to Substack (browser)
+### 3a. Post the note to Substack (browser)
 
-Reuse substack-note's TEXT NOTE path exactly — see `../substack-note/SKILL.md` Steps 2–5b
-and `../substack-note/references/js-verification.md`. Load-bearing steps:
+Reuse substack-note's TEXT NOTE path — see `../substack-note/SKILL.md` Steps 2–5b and
+`../substack-note/references/js-verification.md`. Load-bearing steps:
 
 1. On `https://substack.com/@{substackHandle}` (window 1200×900), capture the baseline
    top-note text.
@@ -89,15 +96,61 @@ and `../substack-note/references/js-verification.md`. Load-bearing steps:
    `[role="dialog"]` modal + `.ProseMirror` editor opened.
 3. Enter the text with **JavaScript** (never the `type` action):
    `document.execCommand("insertText", false, \`<text>\`)` — backtick template so line
-   breaks / em dashes / curly quotes survive. Confirm `editorText` is non-empty and the
-   Post button is enabled.
-4. **Click Post exactly once**, then immediately `postBtn.disabled = true` AND
-   `postBtn.style.pointerEvents = "none"`. Never click Post twice.
-5. Wait 6s, reload the tab, verify the note appears (baseline changed OR the first 60
-   chars are present).
+   breaks / em dashes / curly quotes survive. Confirm `editorText` is non-empty.
+4. **If the post has an `imageUrl`, attach the image now (Step 3a-image below) — before
+   clicking Post.** Text-only posts skip straight to step 5.
+5. Confirm the Post button is enabled. **Click Post exactly once**, then immediately
+   `postBtn.disabled = true` AND `postBtn.style.pointerEvents = "none"`. Never click Post
+   twice.
+6. Wait 6s (longer for image posts — they upload), reload the tab, verify the note appears
+   (baseline changed OR the first 60 chars are present).
 
 **ANTI-DUPLICATE GUARD:** before any retry, re-check the profile — a post may have
 succeeded even if the modal misbehaved. Never re-click Post on an ambiguous result.
+
+### 3a-image. Inject the image from R2 (image posts only — the load-bearing trick)
+
+Only for posts that carry an `imageUrl`. This mirrors the video-clip injection in
+`../release-substack-clips/SKILL.md` Step 3b, targeting the **image** file input. Run in the
+composer tab via `javascript_tool` (substitute `IMAGE_URL` + a filename). It fetches the
+image cross-origin, wraps it in a `File`, and hands it to the hidden image input:
+
+```js
+(async () => {
+  try {
+    const IMAGE_URL = "<imageUrl>";
+    const resp = await fetch(IMAGE_URL);
+    if (!resp.ok) return JSON.stringify({ ok:false, stage:"fetch", status:resp.status });
+    const blob = await resp.blob();
+    const file = new File([blob], "note-image", { type: blob.type || "image/jpeg" });
+    const input = [...document.querySelectorAll('input[type=file]')]
+      .find(i => (i.accept || '').includes('image'));
+    if (!input) return JSON.stringify({ ok:false, stage:"no-input" });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('input',  { bubbles:true }));
+    input.dispatchEvent(new Event('change', { bubbles:true }));
+    return JSON.stringify({ ok:true, bytes:blob.size });
+  } catch (e) {
+    return JSON.stringify({ ok:false, stage:"exception", err:String(e) });
+  }
+})()
+```
+
+- `ok:true` → handed off. Re-reading `input.files` as length 0 afterward is Substack
+  consuming the input — **expected**, not a failure.
+- `stage:"exception"` with `Failed to fetch` → **CORS not configured** on the media
+  endpoint. Mark this post `failed` (`error: "media CORS not configured"`) and skip it.
+- `stage:"fetch"` with 403/404 → object missing / WAF-blocked. Mark `failed` with the
+  status and skip.
+- `stage:"no-input"` → the composer hasn't exposed an image input; if the note text was
+  already entered, cancel the modal and mark `failed` (`error: "no image input"`).
+
+After a successful hand-off, **wait for the image tile to render** (poll up to 60s): ready
+when an `<img>` preview / attachment tile exists in the dialog AND Post is enabled. If the
+poll expires, cancel the modal and mark `failed` (`error: "image did not render"`). Never
+click Post against an unrendered upload.
 
 ### 3b. Mark released (MCP tool)
 
@@ -157,6 +210,11 @@ touches Substack.
   current tab.
 - **Never click Post more than once.** Verify against the profile before any retry.
 - **Window must be 1200×900** or the composer modal dismisses.
+- **Image posts: fetch + inject, never download-to-disk.** For a post with `imageUrl`, attach
+  it in-page (Step 3a-image) BEFORE clicking Post, and wait for the `<img>` tile — not just an
+  enabled Post button. CORS (`Failed to fetch`) is the only external dependency and is not
+  retryable from the skill — mark `failed` and move on. `input.files` reading 0 after
+  injection is success, not failure.
 - **Empty queue is normal** — fast-exit without touching Substack (no tab opened, nothing to
   clean up).
 - **Missing tools = connector not connected.** Do NOT fall back to `.creds/` or the CLI.
@@ -167,3 +225,5 @@ touches Substack.
 - `../substack-note/SKILL.md` — the browser-posting steps (Steps 2–5b).
 - `../substack-note/references/js-verification.md` — ProseMirror text-entry + Post-button verification.
 - `../substack-note/references/error-handling.md` — extended failure modes.
+- `../release-substack-clips/SKILL.md` — the video sibling; its Step 3b is the same fetch→File→input
+  injection trick this skill uses for images (Step 3a-image).
