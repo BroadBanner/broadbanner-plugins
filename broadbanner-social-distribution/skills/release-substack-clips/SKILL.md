@@ -1,6 +1,6 @@
 ---
 name: release-substack-clips
-description: "Release queued video clips to Substack as Notes. Uses the BroadBanner MCP connector to list the creator's pending clips (from the restream-clip pipeline), fetches each clip in-page from R2, posts it as a Substack video Note via browser automation, and marks it released — no local credentials, config, or tracker files. Runs unattended on a schedule. Triggers on 'release my Substack clips' / 'post my pending clips', or the scheduled clip-release task. Replaces the refill-clip-queue + drain-clip-queue pair."
+description: "Release queued videos to Substack as Notes — restream clips AND creator-uploaded videos (BannerBlast post_video / web composer). Uses the BroadBanner MCP connector to list the creator's pending videos, fetches each in-page from R2, posts it as a Substack video Note via browser automation, and marks it released — no local credentials, config, or tracker files. Runs unattended on a schedule. Triggers on 'release my Substack clips' / 'post my pending clips', or the scheduled clip-release task. Replaces the refill-clip-queue + drain-clip-queue pair."
 ---
 
 # Release Substack Clips
@@ -63,8 +63,12 @@ just because of its pod.**
 
 Call the **`list_pending_clips`** tool (pass `brand` from Step 0 if set). It returns
 `{ clips: [ { id, mediaUrl, caption, hashtags, podId, created_at } ] }` — the signed-in
-creator's `restream-clip` trackers whose Substack slot is pending, **filtered to the
-brand** when one is supplied.
+creator's video trackers whose Substack slot is pending, **filtered to the brand** when one
+is supplied. This covers both **restream clips** (`restream-clip`) and **creator-uploaded
+videos** (`social-push` — from BannerBlast `post_video` / the web composer). They release
+identically: fetch `mediaUrl` in-page, attach, post. Uploaded videos have `podId: null` and
+no hashtags — that's expected; just post the `caption`. A brand-scoped run only sees clips
+(uploads carry no pod), so uploaded videos release on the default brandless run.
 
 - **If `clips` is empty → exit immediately** with a one-line "nothing pending" report.
   Do **not** open a browser. This is the common, cheap path.
