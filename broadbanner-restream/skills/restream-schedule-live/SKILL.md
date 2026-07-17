@@ -15,7 +15,7 @@ All data access goes through these tools — there is no `curl`, no `API_BASE`, 
 
 | Tool                     | Args                                                                                      | Replaces                                                                                                                              |
 | ------------------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `list_schedulable_shows` | none                                                                                      | `GET /v1/shows` snapshot read. Returns `{ generatedAt, shows: [...], _fetch: { cfCacheStatus, age, cfRay } }` verbatim, served fresh each call. |
+| `list_schedulable_shows` | `{ states: ["substack_scheduled","restream_paired"] }`                                    | `GET /v1/shows` **filtered server-side** to those states. Returns `{ generatedAt, shows: [...matching], _fetch: { cfCacheStatus, totalShows, returnedShows, age, cfRay } }`, served fresh each call. **Always pass `states`** — the unfiltered org-wide snapshot is ~600 KB and overflows the tool-result cap. |
 | `get_restream_workspaces`| none                                                                                      | `GET /v1/restream-workspaces`. Returns `{ accounts: [{ id, workspaces: [{ workspaceName, isDefault, podIds }] }] }` verbatim.        |
 | `list_restream_events`   | `{ workspace?, event_status? }`                                                           | `GET /v1/restream-events`. Returns `{ restream_events: [...] }`. **Courtesy/informational only** — never a scheduling gate.          |
 | `upsert_restream_event`  | `{ showId, publication, event_status, event_id, scheduled_at, workspace? }`               | `PATCH /v1/restream-events/:show_id`. The tool sets `X-Actor: skill:restream-schedule-live`, `X-Publication`, and the `workspace` query param FOR you. |
@@ -166,7 +166,7 @@ The poller (`cli:restream-poller`) owns channel metadata (`show_title`, `show_da
 
 This skill is connector-only — there is no mount, no project to discover, no credential file, and no workspace selection to do here. All show data comes from `list_schedulable_shows`; the workspace → pod-id catalog comes from `get_restream_workspaces`.
 
-**Call `list_schedulable_shows`** (no arguments). It returns the `GET /v1/shows` envelope verbatim:
+**Call `list_schedulable_shows({ states: ["substack_scheduled", "restream_paired"] })`.** Passing `states` is required — it filters server-side to the eligible shows so the result stays small (the unfiltered snapshot overflows the tool-result cap). It returns:
 
 ```
 { generatedAt, shows: [...], _fetch: { cfCacheStatus, age, cfRay } }
@@ -178,7 +178,7 @@ Each call is served fresh — the Data-Worker KV cache and CF edge cache are byp
 
 A single stale read must **not** abort the run. The cache bypass is honored intermittently (incident 2026-06-08: one read came back ~8h stale and a retry seconds later was current, age ~2s) — so retry with exponential backoff and only abort if it is *still* stale after exhausting attempts:
 
-1. Call `list_schedulable_shows`.
+1. Call `list_schedulable_shows({ states: ["substack_scheduled", "restream_paired"] })`.
 2. Compute `age = (Date.now() - Date.parse(generatedAt)) / 1000`. If `age <= 600`, the snapshot is fresh — **break and proceed**.
 3. If stale (or the call errored transiently), back off `2s, 4s, 8s, …` capped at **30s**, then retry.
 4. Give up after **5** total attempts. On abort, report the last `generatedAt`, the computed age, and `_fetch.cfCacheStatus` (`HIT` = CF edge cache served a cached body; `MISS`/`BYPASS`/`DYNAMIC` = staleness is upstream in the Data-Worker KV cache). `_fetch.cfRay` pinpoints the request in Cloudflare logs.
@@ -218,10 +218,19 @@ HORIZON_CUTOFF=$(node -e "
 Apply the filter:
 
 ```javascript
+const nowMs = Date.now();
 const cutoffMs = Date.parse(HORIZON_CUTOFF);
-const eligible = scheduledShows.filter(
-  (s) => Date.parse(s.scheduledStart) <= cutoffMs,
-);
+const eligible = scheduledShows.filter((s) => {
+  const t = Date.parse(s.scheduledStart);
+  // LOWER BOUND (required): never schedule a show whose start is already in the
+  // past. Stale rows that never advanced would otherwise read as eligible and be
+  // scheduled INTO THE PAST. Upper bound is the horizon cutoff.
+  return t >= nowMs && t <= cutoffMs;
+});
+
+// Past-dated stale rows: skipped (not scheduled), flag for the operator to
+// reconcile/advance — they recur every run until fixed.
+const pastDated = scheduledShows.filter((s) => Date.parse(s.scheduledStart) < nowMs);
 ```
 
 Shows whose `scheduledStart` is past the cutoff are **deferred** — they stay at their current `hasLiveScheduled` value in D1 (`substack_scheduled` or `restream_paired`) and the Restream draft event remains Draft. A future run inside the window will pick them up. Do NOT write `restream_events` for deferred shows.

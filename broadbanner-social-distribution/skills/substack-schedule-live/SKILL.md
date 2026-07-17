@@ -15,7 +15,7 @@ All data access goes through these tools — there is no `curl`, no `API_BASE`, 
 
 | Tool                     | Args                                                                                     | Replaces                                                                                                                                              |
 | ------------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_schedulable_shows` | none                                                                                     | `GET /v1/shows` snapshot read. Returns the envelope verbatim: `{ generatedAt, shows: [...], _fetch: { cfCacheStatus, age, cfRay } }`, served fresh each call (KV + CF edge cache bypassed server-side). |
+| `list_schedulable_shows` | `{ states: ["title_customized"] }`                                                       | `GET /v1/shows` **filtered server-side** to those states. Returns `{ generatedAt, shows: [...matching], _fetch: { cfCacheStatus, totalShows, returnedShows, age, cfRay } }`, served fresh each call. **Always pass `states`** — the unfiltered org-wide snapshot is ~600 KB and overflows the tool-result cap. |
 | `set_show_schedule`      | `{ showId, schedule_state?, substack_livestream_url?, restream_stream_key? }` (any subset, snake_case) | `PATCH /v1/shows/:id`. Returns `{ ok, changed }`.                                                                                                    |
 | `set_show_cohost_invite` | `{ showId, contributorId, junction: "hosts"\|"guests", cohostInviteUrl: string\|null }`  | `PATCH /v1/shows/:id/{hosts,guests}/:contributor_id`. Returns `{ ok, changed }`.                                                                     |
 
@@ -107,7 +107,7 @@ When you report the show list to the user (Step 0) and the final summary (Step 1
 
 This skill is connector-only — there is no project to discover, no credential file to read, and no workspace mount. All show data comes from the `list_schedulable_shows` tool.
 
-**Call `list_schedulable_shows`** (no arguments). It returns the `GET /v1/shows` envelope verbatim:
+**Call `list_schedulable_shows({ states: ["title_customized"] })`.** Passing `states` is required — it filters server-side to the shows ready to schedule so the result stays small (the unfiltered snapshot overflows the tool-result cap). It returns:
 
 ```
 { generatedAt, shows: [...], _fetch: { cfCacheStatus, age, cfRay } }
@@ -119,7 +119,7 @@ Each call is served fresh — the Data-Worker KV cache and CF edge cache are byp
 
 A single stale read must **not** abort the run. The cache bypass is honored intermittently — incident 2026-06-08: one read came back ~8h stale and a manual retry seconds later was current (age ~2s); had the gate hard-aborted on the first read it would have silently skipped a real `title_customized` show due that night. So retry with exponential backoff and only abort if it is *still* stale after exhausting attempts:
 
-1. Call `list_schedulable_shows`.
+1. Call `list_schedulable_shows({ states: ["title_customized"] })`.
 2. Compute `age = (Date.now() - Date.parse(generatedAt)) / 1000`. If `age <= 600`, the snapshot is fresh — **break and proceed**.
 3. If stale (or the call errored transiently), back off `2s, 4s, 8s, …` capped at **30s**, then retry.
 4. Give up after **5** total attempts. On abort, report the last `generatedAt`, the computed age, and `_fetch.cfCacheStatus` (`HIT` = CF edge cache served a cached body; `MISS`/`BYPASS`/`DYNAMIC` = the staleness is upstream in the Data-Worker KV cache). `_fetch.cfRay` pinpoints the request in Cloudflare logs.
@@ -147,10 +147,21 @@ HORIZON_CUTOFF=$(node -e "
 Apply the filter to the `hasLiveScheduled === "title_customized"` set:
 
 ```javascript
+const nowMs = Date.now();
 const cutoffMs = Date.parse(HORIZON_CUTOFF);
-const eligible = readyShows.filter(
-  (s) => Date.parse(s.scheduledStart) <= cutoffMs,
-);
+const eligible = readyShows.filter((s) => {
+  const t = Date.parse(s.scheduledStart);
+  // LOWER BOUND (required): never schedule a show whose start is already in the
+  // past. Stale rows that never advanced off `title_customized` (e.g. an episode
+  // 2 weeks ago) would otherwise read as eligible and be scheduled INTO THE PAST.
+  // Upper bound is the horizon cutoff. Past-dated rows are skipped, not scheduled.
+  return t >= nowMs && t <= cutoffMs;
+});
+
+// Surface any past-dated stale rows so the operator can reconcile/advance them —
+// they will keep tripping every run until fixed. Report them separately from the
+// horizon-deferred (future) shows below.
+const pastDated = readyShows.filter((s) => Date.parse(s.scheduledStart) < nowMs);
 ```
 
 Shows whose `scheduledStart` is past the cutoff are **deferred** — they remain `hasLiveScheduled === "title_customized"` in D1 and will be picked up on a future run once they fall inside the window. Do NOT write anything to "defer" them; the state is correct as-is.
@@ -168,6 +179,13 @@ When presenting the list to the user (below), mention any shows that were deferr
 ```
 Filtered by 7-day horizon — deferred {M} show(s) scheduled >7d out:
   - {showTitle} ({scheduledStart in machine TZ}) — will be picked up on a later run
+```
+
+Also flag any **past-dated** stale rows (`pastDated`, from the lower-bound guard) so the operator can reconcile/advance them — these were NOT scheduled and will keep tripping every run until fixed in D1:
+
+```
+⚠️ Skipped {K} past-dated show(s) still at title_customized (their start is in the past — not scheduled):
+  - {showTitle} ({scheduledStart in machine TZ}, {N} days ago) — reconcile or advance the schedule_state in D1
 ```
 
 Present the list of ready shows to the user for confirmation. **Display the machine-local time** (computed per the recipe in "Timezone handling" above) so the user can verify what will actually be entered into Substack. Surface the show's stored timezone only when it differs from the machine TZ — that's the case where the conversion is meaningful and worth eyeballing.
