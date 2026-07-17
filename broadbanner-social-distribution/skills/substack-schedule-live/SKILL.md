@@ -1,6 +1,6 @@
 ---
 name: substack-schedule-live
-description: "Schedule a Substack live stream from BroadBanner show data. Use this skill when the user says 'schedule the lives', 'schedule substack streams', 'set up the live streams', or wants to create scheduled live video events on Substack for upcoming podcast episodes. Reads show data via the BroadBanner MCP connector's admin scheduling tools, automates the Substack 'Go live with stream key' form via browser, invites co-hosts, captures stream credentials, and writes them back to D1 through the same connector tools. Connector-only (OAuth) — no token files, config, or mount; requires a brand-admin or super-admin role on your BroadBanner account."
+description: "Schedule a Substack live stream from BroadBanner show data. Use when the user says 'schedule the lives', 'schedule substack streams', or 'set up the live streams' for upcoming podcast episodes. Reads show data via the BroadBanner MCP connector's admin tools, automates the Substack 'Go live with stream key' modal via browser, invites co-hosts, captures stream credentials, and writes them back to D1. Connector-only (OAuth); requires a brand-admin or super-admin role."
 ---
 
 # Substack Schedule Live

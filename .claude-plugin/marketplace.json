@@ -20,7 +20,7 @@
     {
       "name": "broadbanner-restream",
       "source": "./broadbanner-restream",
-      "version": "0.15.2",
+      "version": "0.16.0",
       "description": "Restream workflow automation for Banner and Backbone Media. Schedule live stream events in Restream Studio and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI.",
       "author": {
         "name": "Banner and Backbone Media"
@@ -38,7 +38,7 @@
     {
       "name": "broadbanner-social-distribution",
       "source": "./broadbanner-social-distribution",
-      "version": "0.38.0",
+      "version": "0.39.0",
       "description": "Social media distribution toolkit for Banner and Backbone Media. Post text or image notes to Substack/Bluesky/Threads, schedule Substack and Restream live streams, track cross-platform distribution status, and manage social publishing workflows.",
       "author": {
         "name": "Banner and Backbone Media"

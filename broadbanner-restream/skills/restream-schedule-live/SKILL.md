@@ -1,6 +1,6 @@
 ---
 name: restream-schedule-live
-description: "Schedule Restream events from BroadBanner show data. Use this skill when the user says 'schedule the restream events', 'schedule restream', 'set up restream', or wants to schedule draft events in Restream Studio for upcoming podcast episodes. Reads show data and writes scheduled-event state via the BroadBanner MCP connector's admin scheduling tools (`list_schedulable_shows`, `get_restream_workspaces`, `list_restream_events`, `upsert_restream_event`); automates the Restream event scheduling UI via browser, pairs the correct Substack channel, and writes the scheduled state so downstream consumers see the update. Connector-only (OAuth) — no token files, config, or mount; requires a brand-admin or super-admin role."
+description: "Schedule Restream Studio events from BroadBanner show data. Use when the user says 'schedule the restream events', 'schedule restream', or 'set up restream' for upcoming podcast episodes. Reads shows and writes scheduled-event state via the BroadBanner MCP connector's admin tools, and automates the Restream scheduling UI via browser to pair the correct Substack channel. Connector-only (OAuth); requires a brand-admin or super-admin role."
 ---
 
 # Restream Schedule Live
