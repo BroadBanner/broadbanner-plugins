@@ -1,229 +1,108 @@
-# Gateway authentication
+# Admin scheduling tools (MCP connector) — reference
 
-This skill talks exclusively to `https://gateway.broadbanner.com/v1` with a
-capability-token Bearer. The Gateway proxies to the Data Worker on the
-inside; the skill never speaks to `data.broadbanner.com` directly. There is
-no HMAC fallback under any circumstance — a 4xx/5xx at the Gateway is the
-failure to report, not a signal to route around it.
+This skill reads and writes the BroadBanner system of record **only through the
+BroadBanner MCP connector** (server `broadbanner`). There is no capability
+token, no `.creds/gateway.token` file, no config, no workspace mount, and no
+request signing. The creator authorizes the connector once via OAuth; the
+connector's admin tools proxy to the data plane (Gateway → Data Worker)
+server-side and stamp the actor / publication for you.
 
-## Credential location
+The tools **fail closed**: a connector session without a **brand-admin** or
+**super-admin** role gets an authorization error. Those roles are what the old
+admin-tier cap-token (`shows:read` + `restream:read` + `restream:write`) used to
+encode — now it's carried by the creator's connector session, not a file in the
+workspace.
 
-The capability token lives **inside the workspace** at:
+## Tools
 
-```
-<PROJECT_ROOT>/.creds/gateway.token
-```
+| Tool                      | Args                                                                          | Returns                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `list_schedulable_shows`  | none                                                                          | `{ generatedAt, shows: [...], _fetch: { cfCacheStatus, age, cfRay } }` — the `GET /v1/shows` envelope verbatim, served fresh each call. |
+| `get_restream_workspaces` | none                                                                          | `{ accounts: [{ id, workspaces: [{ workspaceName, isDefault, podIds }] }] }` verbatim — the account → workspace → pod-id catalog. |
+| `list_restream_events`    | `{ workspace?, event_status? }`                                               | `{ restream_events: [...] }` — the D1 cache. **Informational only**, never a scheduling gate.    |
+| `upsert_restream_event`   | `{ showId, publication, event_status, event_id, scheduled_at, workspace? }`   | `{ ok, created, changed, updated }`                                                              |
 
-`<PROJECT_ROOT>` is the mounted workspace folder (the one containing
-`broadbanner.config.json` and `Social-Distribution/`). The file is
-auto-issued by `banner-blast init` and `banner-admin init` when the
-operator's D1 `contributors.is_admin === 1`, with these claims (from
-`@broadbanner/core` 1.16.0+):
+`changed: false` is success — the row already matched what you sent.
 
-```
-sub:  <user email>
-caps: ["posts:write", "shows:read", "shows:write", "restream:read", "restream:write"]
-pods: []                              # unrestricted — admin-grade
-ttl:  90 days
-```
+### `list_schedulable_shows`
 
-Non-admin operators get a token with only `posts:write` and their
-pod-scoped allowlist — those tokens cannot drive this skill. The Gateway
-will return `403 forbidden — missing capability: restream:write` (or
-`restream:read` on the GETs) on first contact.
+Replaces the old `curl .../shows?fresh=1&_cb=...` snapshot read plus its
+temp-file/header-dump machinery. Each call is authoritative (no local file to go
+stale). The per-show schema is unchanged. Use `_fetch.cfCacheStatus` /
+`_fetch.age` / `_fetch.cfRay` for the freshness-gate abort diagnostic (see
+SKILL.md Step 0).
 
-Read the file directly with the Read tool. No JSON parsing — the file is a
-single line, the entire `bb1.<payload>.<sig>` token. Trim trailing
-whitespace if any.
+### `get_restream_workspaces`
 
-## Bearer header
+Replaces `GET /v1/restream-workspaces`. The response is account-oriented —
+`accounts[i]` is a Restream account (1:1 with networks), each with its
+`workspaces[]` and per-workspace `podIds[]`. Look up a pod by walking
+`accounts[].workspaces[].podIds[]`; the matching workspace's `workspaceName` is
+what you pass to `upsert_restream_event` — **unless `isDefault` is true, in which
+case OMIT the `workspace` arg entirely** (never pass an empty string).
 
-```
-API_BASE = "https://gateway.broadbanner.com/v1"
-AUTH_HDR = "Authorization: Bearer ${GATEWAY_TOKEN}"
-```
+### `list_restream_events`
 
-Reuse the same `AUTH_HDR` for every Gateway request. The cap-token is
-opaque to the skill — no re-signing per call, no per-route resource
-string. The Gateway verifies the token once on inbound, then mints
-whatever the Data Worker needs for its own HMAC scheme.
+Replaces the courtesy `GET /v1/restream-events?workspace=`. Filters by optional
+`workspace` and `event_status`. This is a read of the D1 cache and is **not** an
+authoritative "is this scheduled" signal — the browser status badge in Step 2 is
+the sole authority. Use it only for an informational log.
 
-## Routes used by this skill
+### `upsert_restream_event`
 
-| Operation                                          | Verb + path                                                    | Capability         |
-|----------------------------------------------------|----------------------------------------------------------------|--------------------|
-| Fetch snapshot                                     | `GET /v1/shows`                                                | `shows:read`       |
-| List restream events (informational)               | `GET /v1/restream-events?workspace=<ws>`                       | `restream:read`    |
-| Read one restream-event row (informational)        | `GET /v1/restream-events/<show_id>?workspace=<ws>`             | `restream:read`    |
-| Upsert restream-event state after scheduling       | `PATCH /v1/restream-events/<show_id>?workspace=<ws>`           | `restream:write`   |
+Replaces `PATCH /v1/restream-events/:show_id`. INSERTs if no row exists for the
+`(show_id, workspace)` pair, otherwise UPDATEs only the fields you pass.
 
-### GET /v1/shows
+- `publication` (**required**) — the `X-Publication` id (`sotsp`, `babm`, `lr`,
+  …). The tool sets the `X-Publication` header from it; without it the call
+  fails with a missing-publication error.
+- `workspace` (**optional**) — the Restream workspace name. **OMIT it when the
+  show's workspace is the account default** (`isDefault === true`) or when the
+  account has no workspace selector. Never pass an empty string. The tool
+  applies it as the `workspace` query param.
 
-Returns the same `wix-latest`-shaped JSON the legacy
-`data.broadbanner.com/snapshots/shows-latest.json` endpoint returned:
-
-```json
-{
-  "generatedAt": "<iso>",
-  "source": "d1",
-  "collectionId": "Import1",
-  "window": { ... },
-  "count": 116,
-  "shows": [ /* per-show schema unchanged */ ]
-}
-```
-
-**Cache-bypass:** the Gateway forwards the inbound query string to the
-Data Worker, so `?fresh=1` works end-to-end (skips the Data-Worker KV
-cache) and a `?_cb=<epoch>` random buster defeats any CF edge cache. See
-the 2026-05-21 stale-snapshot incident note in the Gateway-Worker source
-for context.
-
-```bash
-curl -sS "${API_BASE}/shows?fresh=1&_cb=$(date +%s)" \
-  -H "${AUTH_HDR}" \
-  -H "Accept: application/json" \
-  -o /tmp/wix-latest-snapshot.json
-```
-
-Consumers should filter `shows[]` exactly as they did against the local
-file or the direct Data-Worker endpoint — the per-show schema is
-identical (`hasLiveScheduled`, `restreamKey`, `livestreamLink`,
-`hosts[]`, `guests[]`, etc.).
-
-### GET /v1/restream-events
-
-List endpoint. Filters via `?workspace=<ws>` and/or `?event_status=<status>`
-(both optional). The Gateway forwards the query string unchanged.
-
-```bash
-curl -sS "${API_BASE}/restream-events?workspace=sick-of-this-show" \
-  -H "${AUTH_HDR}" \
-  -H "X-Publication: ${PUBLICATION_ID}"
-```
-
-Returns:
-
-```json
-{
-  "ok": true,
-  "cached_at": "<iso>",
-  "restream_events": [ /* RestreamEventRow[] */ ]
-}
-```
-
-This is informational only — Step 0 does NOT use it as a pre-flight
-filter (see the warning in `SKILL.md` Step 0).
-
-### GET /v1/restream-events/:show_id
-
-Single-row read. Workspace is part of row identity:
-`?workspace=sick-of-this-show` for a workspace-scoped row, omit the param
-entirely to address the NULL-workspace row.
-
-```bash
-curl -sS "${API_BASE}/restream-events/${SHOW_ID}?workspace=${WORKSPACE}" \
-  -H "${AUTH_HDR}" \
-  -H "X-Publication: ${PUBLICATION_ID}"
-```
-
-Returns `{ ok: true, restream_event: ... }` or 404.
-
-### PATCH /v1/restream-events/:show_id
-
-Upsert. INSERT if no row exists for the (show_id, workspace) pair,
-otherwise UPDATE only the fields in the body. Workspace cannot be changed
-via PATCH — it identifies the row.
-
-```bash
-curl -sS -X PATCH "${API_BASE}/restream-events/${SHOW_ID}?workspace=${WORKSPACE}" \
-  -H "${AUTH_HDR}" \
-  -H "X-Publication: ${PUBLICATION_ID}" \
-  -H "X-Actor: skill:restream-schedule-live" \
-  -H "Content-Type: application/json" \
-  -d '{"event_status":"scheduled","event_id":"<uuid>","scheduled_at":"<iso>"}'
-```
-
-Allowed body fields for `skill:restream-schedule-live`:
+Allowed write fields (the tool sends `X-Actor: skill:restream-schedule-live`,
+which the Data Worker constrains to these three):
 
 | Field          | Type             | Notes                                     |
-|----------------|------------------|-------------------------------------------|
+| -------------- | ---------------- | ----------------------------------------- |
 | `event_id`     | `string \| null` | Restream event UUID captured from the UI  |
 | `event_status` | enum             | `"scheduled"` after a successful schedule |
 | `scheduled_at` | `string \| null` | ISO 8601 timestamp                        |
 
-The Data-Worker rejects any other key in the body with `invalid_field`
-or, if the key is recognized but owned by another actor (the poller),
-`field_not_allowed_for_actor`. Both are 4xx — fail loud, no retry.
-
-Response shapes (passed through from the Data Worker):
+Response shapes:
 
 ```json
-{ "ok": true, "created": true,  "changed": true, "updated": { /* full row */ } }   // INSERT
-{ "ok": true, "created": false, "changed": true, "updated": { /* changed fields */ } } // UPDATE
-{ "error": "not_found" }                                                            // 404 — show_id doesn't exist in D1.shows
-{ "error": "field_not_allowed_for_actor", "field": "...", "actor": "..." }          // 403
-{ "error": "invalid_field", "message": "..." }                                      // 400
+{ "ok": true, "created": true,  "changed": true, "updated": { /* full row */ } }        // INSERT
+{ "ok": true, "created": false, "changed": true, "updated": { /* changed fields */ } }  // UPDATE
 ```
 
-## Required headers on `/v1/restream-events/*`
+A `not_found` means the `show_id` doesn't exist in D1's `shows` table (reconcile
+lag or a deleted show) — surface it; do not retry blindly.
 
-The Data Worker is publication-scoped and enforces a per-actor field
-allowlist. The Gateway forwards both headers from the inbound request
-unchanged. **Set both explicitly on every call.**
+## Actor / publication — set by the tool
 
-| Header          | Value                                  | Why                                                          |
-|-----------------|----------------------------------------|--------------------------------------------------------------|
-| `X-Actor`       | `skill:restream-schedule-live`         | Drives the field allowlist on PATCH (`event_id`, `event_status`, `scheduled_at` only). |
-| `X-Publication` | The show's publication id (e.g. `sotsp`) | Repo construction requires this; without it the call 400s with `missing_publication`. |
+`upsert_restream_event` sets `X-Actor: skill:restream-schedule-live`,
+`X-Publication` (from `publication`), and the `workspace` query param itself.
+The skill never builds a header or a query string — there is no HTTP call from
+the skill.
 
-If `X-Actor` is omitted, the Gateway auto-stamps the cap-token's `sub`
-(the user's email), which is NOT in the Data-Worker actor allowlist —
-the PATCH will 403 with `field_not_allowed_for_actor`. Intentional
-fail-loud shape; always send the header.
+## Retry / failure policy
 
-## X-Actor on `/v1/shows/:id` PATCH (snapshot writes — not used by this skill)
-
-For reference: the `/v1/shows` PATCH paths use the Gateway's automatic
-`X-Actor` auto-stamping from the cap-token `sub`, because the Data
-Worker's `/shows` route does NOT have an actor-driven field allowlist.
-The two routes have different conventions on purpose.
-
-## Retry policy
-
-Exponential backoff. Max 3 retries. Base 500 ms, doubling each attempt
-(500 ms → 1 s → 2 s).
-
-- Retry on **5xx** or network errors.
-- **Do not** retry **4xx** — they indicate a request-shape bug, an
-  expired token, or a missing capability. Fail loud so the user sees
-  the cause.
-- **No re-signing.** Unlike the legacy HMAC flow, the cap-token has no
-  per-call timestamp. Re-use the same Bearer value across all retries.
-
-## Failure-mode quick reference
-
-| Status                                                    | Meaning                                            | Action                                              |
-|-----------------------------------------------------------|----------------------------------------------------|-----------------------------------------------------|
-| `401 unauthorized`                                        | Cap-token missing, malformed, or expired           | Stop. Tell user to re-run init or reissue token.    |
-| `403 forbidden — missing capability: shows:read`          | Workspace token isn't admin-tier                   | Stop. User needs `is_admin=1` in D1.                |
-| `403 forbidden — missing capability: restream:write`      | Workspace token predates Core 1.16.0               | Stop. Tell user to re-run `banner-blast init --update`. |
-| `403 field_not_allowed_for_actor`                         | X-Actor omitted or wrong on PATCH                  | Bug — verify the request sets `X-Actor: skill:restream-schedule-live`. |
-| `400 missing_publication`                                 | X-Publication header missing                       | Bug — verify the request sets `X-Publication`.      |
-| `400 invalid_field`                                       | Bad payload field name or value                    | Fail loud — this is a skill bug.                    |
-| `400 invalid_workspace`                                   | `?workspace=` value is malformed or is the `__none__` sentinel | Bug — workspace must be kebab-case; omit the param entirely for the NULL row. |
-| `404 not_found` (PATCH)                                   | Show id doesn't exist in D1.shows                  | Surface to user; suggest `banner-admin reconcile` or manual add. |
-| `502 bad_gateway`                                         | Data Worker unreachable from Gateway               | Stop. Do NOT bypass to `data.broadbanner.com`.      |
-| `5xx` other / network                                     | Transient                                          | Retry per policy above.                             |
+- **Transient / `5xx` / network** on `upsert_restream_event` → retry the tool
+  call, up to 3×, brief backoff (500 ms → 1 s → 2 s). Upsert is atomic — no
+  read-then-write race.
+- **Authorization error** → the connector session isn't a brand-admin or
+  super-admin. **Stop** and tell the user. There is no fallback.
+- **Request-shape error** (`invalid_field`, `field_not_allowed_for_actor`,
+  missing publication, `not_found` on the show) → fail loud; retry can't fix a
+  bad request. For `not_found`, suggest a reconcile or manual show add.
 
 ## Decisions
 
-- Gateway-only — no HMAC fallback under any circumstance.
-- Cap-token is reused as-is across all calls in a run.
-- `X-Actor` is required on `/v1/restream-events/*` and must be set explicitly to
-  `skill:restream-schedule-live`. The Gateway forwards inbound `X-Actor`
-  untouched; the Data Worker is the actor-allowlist authority.
-- `X-Publication` is required on `/v1/restream-events/*`. Derive it from the
-  show's `publicationId` (e.g. `sotsp`, `babm`, `lr`).
+- Connector-only — no `.creds` token, no HMAC, no direct `gateway`/`data`
+  hostname call under any circumstance.
+- Admin authorization rides on the creator's OAuth connector session, not a
+  workspace file.
+- Actor, publication, and workspace routing are handled by the tools.
 - `changed: false` is success.
-- 4xx fails loud, no retry. 5xx retries with exponential backoff.

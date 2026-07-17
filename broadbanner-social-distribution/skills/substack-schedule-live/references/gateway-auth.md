@@ -1,189 +1,82 @@
-# Gateway authentication
+# Admin scheduling tools (MCP connector) — reference
 
-Skills that read or write the BroadBanner system of record now go through
-`https://gateway.broadbanner.com/v1` with a capability-token Bearer. There is
-no HMAC fallback. The Gateway proxies to the Data Worker on the inside; skills
-never speak to `data.broadbanner.com` directly.
+This skill reads and writes the BroadBanner system of record **only through the
+BroadBanner MCP connector** (server `broadbanner`). There is no capability
+token, no `.creds/gateway.token` file, no config, no workspace mount, and no
+request signing. The creator authorizes the connector once via OAuth; the
+connector's admin tools proxy to the data plane (Gateway → Data Worker)
+server-side and stamp the change_log actor for you.
 
-## Credential location
+The tools **fail closed**: a connector session without a **brand-admin** or
+**super-admin** role gets an authorization error. Those roles are what the old
+admin-tier cap-token (`shows:read` + `shows:write`) used to encode — now it's
+carried by the creator's connector session, not a file in the workspace.
 
-The capability token lives **inside the workspace** at:
+## Tools
 
-```
-<PROJECT_ROOT>/.creds/gateway.token
-```
-
-`<PROJECT_ROOT>` is the mounted workspace folder (the one containing
-`broadbanner.config.json` and `Social-Distribution/`). The file is auto-issued
-by `banner-blast init` and `banner-admin init` when the operator's D1
-`contributors.is_admin === 1`, with these claims:
-
-```
-sub:  <user email>
-caps: ["posts:write", "shows:read", "shows:write"]
-pods: []                              # unrestricted — admin-grade
-ttl:  90 days
-```
-
-Non-admin operators get a token with only `posts:write` and their pod-scoped
-allowlist — those tokens cannot drive this skill. The Gateway will return
-`403 forbidden — missing capability: shows:write`.
-
-Read the file directly with the Read tool. No JSON parsing — the file is a
-single line, the entire `bb1.<payload>.<sig>` token. Trim trailing whitespace
-if any.
-
-## Bearer header
-
-```
-API_BASE = "https://gateway.broadbanner.com/v1"
-AUTH_HDR = "Authorization: Bearer ${GATEWAY_TOKEN}"
-```
-
-Reuse the same `AUTH_HDR` for every request. The cap-token is opaque to
-skills — no re-signing per call, no per-route resource string. The Gateway
-verifies the token once on inbound, then mints whatever the Data Worker needs
-for its own HMAC scheme.
-
-## Routes used by this skill
-
-| Operation                                          | Verb + path                                                  |
-|----------------------------------------------------|--------------------------------------------------------------|
-| Fetch snapshot                                     | `GET /v1/shows`                                              |
-| Mark show in-progress / scheduled                  | `PATCH /v1/shows/<show_id>`                                  |
-| Set cohost invite URL (host)                       | `PATCH /v1/shows/<show_id>/hosts/<contributor_id>`           |
-| Set cohost invite URL (guest)                      | `PATCH /v1/shows/<show_id>/guests/<contributor_id>`          |
-
-### GET /v1/shows
-
-Returns the same `wix-latest`-shaped JSON the legacy
-`data.broadbanner.com/snapshots/shows-latest.json` endpoint returns:
-
-```json
-{
-  "generatedAt": "<iso>",
-  "source": "d1",
-  "collectionId": "Import1",
-  "window": { ... },
-  "count": 116,
-  "shows": [ /* per-show schema unchanged */ ]
-}
-```
-
-### PATCH /v1/shows/:id
-
-Partial-update of managed columns. Omitted fields are left alone. Updatable
-fields:
-
-| Field                       | Type             | Notes                                              |
-|-----------------------------|------------------|----------------------------------------------------|
-| `schedule_state`            | enum             | `"unscheduled" \| "title_customized" \| "substack_scheduling" \| "substack_scheduled" \| "live" \| "completed"` (verbose vocabulary post-migration 0016) |
-| `substack_livestream_url`   | string \| null   | Public Substack live URL (renamed from `livestream_link` in 0016) |
-| `restream_stream_key`       | string \| null   | Stream key captured from Substack                  |
-
-The pre-0016 column `substack_live_url` was retired in the same migration. Senders MUST NOT include it; the Data Worker will reject it with `invalid_field`.
-
-```bash
-curl -sS -X PATCH "${API_BASE}/shows/${SHOW_ID}" \
-  -H "${AUTH_HDR}" \
-  -H "Content-Type: application/json" \
-  -d '{"schedule_state":"substack_scheduled","substack_livestream_url":"...","restream_stream_key":"..."}'
-```
-
-Response shapes (passed through from the Data Worker):
-
-```json
-{ "ok": true, "changed": true, "updated": { "id": "<show id>", "substack_livestream_url": "..." } }
-{ "ok": true, "changed": false }
-{ "error": "not_found" }
-{ "error": "invalid_field", "message": "..." }
-```
+| Tool                     | Args                                                                                     | Returns                                                             |
+| ------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `list_schedulable_shows` | none                                                                                     | `{ generatedAt, shows: [...], _fetch: { cfCacheStatus, age, cfRay } }` — the `GET /v1/shows` envelope verbatim, served fresh each call (Data-Worker KV + CF edge cache bypassed server-side). |
+| `set_show_schedule`      | `{ showId, schedule_state?, substack_livestream_url?, restream_stream_key? }` (any subset) | `{ ok, changed }`                                                  |
+| `set_show_cohost_invite` | `{ showId, contributorId, junction: "hosts"\|"guests", cohostInviteUrl: string\|null }`  | `{ ok, changed }`                                                  |
 
 `changed: false` is success — the row already matched what you sent.
 
-### PATCH /v1/shows/:id/{hosts,guests}/:contributor_id
+### `list_schedulable_shows`
 
-Single field allowed: `cohost_invite_url: string | null`.
+Replaces the old `curl .../shows?fresh=1&_cb=...` snapshot read plus its
+temp-file/header-dump machinery. Each call is authoritative (no local file to go
+stale). The per-show schema is unchanged: `hasLiveScheduled` (wire name for the
+D1 `schedule_state` column), `restreamKey`, `substackLivestreamUrl`, nested
+`hosts[]`/`guests[]`/`primaryHost`. Use `_fetch.cfCacheStatus` / `_fetch.age` /
+`_fetch.cfRay` for the freshness-gate abort diagnostic (see SKILL.md Step 0).
 
-```bash
-curl -sS -X PATCH "${API_BASE}/shows/${SHOW_ID}/hosts/${CONTRIBUTOR_ID}" \
-  -H "${AUTH_HDR}" \
-  -H "Content-Type: application/json" \
-  -d '{"cohost_invite_url":"https://substack.com/?live_stream_invite_id=12345"}'
-```
+### `set_show_schedule`
 
-## X-Actor — set automatically
+Replaces `PATCH /v1/shows/:id`. Partial update — omitted fields are left alone.
+Fields (snake_case):
 
-The Gateway derives the outbound `X-Actor` header from the cap-token's `sub`
-claim and forwards it to the Data Worker for the change_log. **Do not set
-X-Actor yourself** — the Gateway's value wins, and your value would just be
-overwritten. If the workspace token was issued for the user, the change_log
-will record their email; if it was issued specifically as
-`skill:substack-schedule-live`, that value lands instead.
+| Field                       | Type             | Notes                                              |
+| --------------------------- | ---------------- | -------------------------------------------------- |
+| `schedule_state`            | enum             | `"unscheduled" \| "title_customized" \| "substack_scheduling" \| "substack_scheduled" \| "live" \| "completed"` (verbose vocabulary since migration 0016) |
+| `substack_livestream_url`   | string \| null   | Public Substack live URL (renamed from `livestream_link` in 0016) |
+| `restream_stream_key`       | string \| null   | Stream key captured from Substack                  |
 
-## Retry policy
+The pre-0016 columns `substack_live_url` / `livestream_link` are retired —
+senders MUST use `substack_livestream_url`. A bad field name returns an
+`invalid_field`-class error.
 
-Exponential backoff. Max 3 retries. Base 500 ms, doubling each attempt
-(500 ms → 1 s → 2 s).
+### `set_show_cohost_invite`
 
-- Retry on **5xx** or network errors.
-- **Do not** retry **4xx** — they indicate a request-shape bug, an expired
-  token, or a missing capability. Fail loud so the user sees the cause.
-- **No re-signing.** Unlike the legacy HMAC flow, the cap-token has no
-  per-call timestamp. Re-use the same Bearer value across all retries.
+Replaces `PATCH /v1/shows/:id/{hosts,guests}/:contributor_id`. Sets a single
+field, `cohost_invite_url`. Pass `cohostInviteUrl: null` to clear it (the
+`accepted` case) or a string to set it (the `pending` case). To preserve a prior
+value, simply do not call the tool for that cohost.
 
-Reference bash wrapper:
+## Actor / publication — set automatically
 
-```bash
-patch_with_retry() {
-  local url="$1" body="$2"
-  local delay_ms=500
+The tools stamp the change_log actor (and, for restream, the publication)
+server-side. Skills never set `X-Actor` or `X-Publication` — there is no header
+to build, because there is no HTTP call from the skill.
 
-  for attempt in 1 2 3 4; do
-    local response status
-    response=$(curl -sS -X PATCH "$url" \
-      -H "${AUTH_HDR}" \
-      -H "Content-Type: application/json" \
-      -w "\n%{http_code}" \
-      -d "$body" 2>&1)
-    status=$(echo "$response" | tail -n1)
+## Retry / failure policy
 
-    if [[ "$status" =~ ^2 ]]; then
-      echo "$response" | sed '$d'
-      return 0
-    fi
-    if [[ "$status" =~ ^4 ]]; then
-      echo "PATCH $url failed with $status (no retry on 4xx)" >&2
-      echo "$response" | sed '$d' >&2
-      return 1
-    fi
-    if (( attempt < 4 )); then
-      sleep "$(awk "BEGIN { print $delay_ms / 1000 }")"
-      delay_ms=$(( delay_ms * 2 ))
-    fi
-  done
-
-  echo "PATCH $url exhausted retries" >&2
-  return 1
-}
-```
-
-## Failure-mode quick reference
-
-| Status                                                    | Meaning                                            | Action                                              |
-|-----------------------------------------------------------|----------------------------------------------------|-----------------------------------------------------|
-| `401 unauthorized`                                        | Cap-token missing, malformed, or expired           | Stop. Tell user to re-run init or reissue token.    |
-| `403 forbidden — missing capability: shows:write`         | Workspace token isn't admin-tier                   | Stop. User needs `is_admin=1` in D1.                |
-| `404 not_found` (PATCH /v1/shows/:id)                     | Show id doesn't exist                              | Fail loud for this show, continue to next.          |
-| `404 not_found` (PATCH /v1/shows/:id/{hosts,guests}/:cid) | Junction row missing — reconcile lag               | Skip this cohost, continue. Re-run after reconcile. |
-| `400 invalid_field`                                       | Bad payload field name or value                    | Fail loud — this is a skill bug.                    |
-| `502 bad_gateway`                                         | Data Worker unreachable from Gateway               | Stop. Do NOT bypass to `data.broadbanner.com`.      |
-| `5xx` other / network                                     | Transient                                          | Retry per policy above.                             |
+- **Transient / `5xx` / network** on a write tool → retry the tool call, up to
+  3×, brief backoff (500 ms → 1 s → 2 s). No re-signing, no timestamps.
+- **Authorization error** → the connector session isn't a brand-admin or
+  super-admin. **Stop** and tell the user to use an account with that role.
+  There is no fallback.
+- **Request-shape error** (`invalid_field`, `not_found` on a show) → fail loud
+  for that show; retry can't fix a bad request. Continue to the next show.
+- **Junction `not_found`** on `set_show_cohost_invite` → the cohost's junction
+  row hasn't been mirrored yet by the reconcile cron. Skip that one cohost,
+  continue; a re-run after the next reconcile cycle succeeds.
 
 ## Decisions
 
-- Gateway-only — no HMAC fallback under any circumstance.
-- Cap-token is reused as-is across all calls in a run.
-- `X-Actor` is set by the Gateway from the token's `sub`; skills don't set it.
+- Connector-only — no `.creds` token, no HMAC, no direct `gateway`/`data`
+  hostname call under any circumstance.
+- Admin authorization rides on the creator's OAuth connector session, not a
+  workspace file.
+- The actor (and publication) are stamped by the tools; skills don't set them.
 - `changed: false` is success.
-- 4xx fails loud, no retry. 5xx retries with exponential backoff.

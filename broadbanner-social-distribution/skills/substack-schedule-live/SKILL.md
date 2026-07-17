@@ -1,19 +1,31 @@
 ---
 name: substack-schedule-live
-description: "Schedule a Substack live stream from BroadBanner show data. Use this skill when the user says 'schedule the lives', 'schedule substack streams', 'set up the live streams', or wants to create scheduled live video events on Substack for upcoming podcast episodes. Reads show data from the BroadBanner Gateway snapshot endpoint, automates the Substack 'Go live with stream key' form via browser, invites co-hosts, captures stream credentials, and PATCHes them back to D1 through the Gateway BFF. Gateway-only auth (no HMAC); requires an admin-tier capability token."
+description: "Schedule a Substack live stream from BroadBanner show data. Use this skill when the user says 'schedule the lives', 'schedule substack streams', 'set up the live streams', or wants to create scheduled live video events on Substack for upcoming podcast episodes. Reads show data via the BroadBanner MCP connector's admin scheduling tools, automates the Substack 'Go live with stream key' form via browser, invites co-hosts, captures stream credentials, and writes them back to D1 through the same connector tools. Connector-only (OAuth) — no token files, config, or mount; requires a brand-admin or super-admin role on your BroadBanner account."
 ---
 
 # Substack Schedule Live
 
-Schedule upcoming podcast live streams on Substack using show data from the BroadBanner Gateway (`https://gateway.broadbanner.com/v1`). The Gateway proxies snapshot reads and managed-field writes to the Data Worker — this skill never talks to `data.broadbanner.com` directly. It automates the "Go live with stream key" modal in the Substack publisher dashboard, fills in the title and schedule, invites co-hosts, captures the generated stream URL and stream key, and PATCHes the results back to D1 via the Gateway.
+Schedule upcoming podcast live streams on Substack using show data from the **BroadBanner MCP connector** (server `broadbanner`). The connector's admin scheduling tools serve fresh show data and accept managed-field writes, proxying to the data plane server-side — this skill never talks to `gateway.broadbanner.com` or `data.broadbanner.com` directly, and holds no credentials of its own. It automates the "Go live with stream key" modal in the Substack publisher dashboard, fills in the title and schedule, invites co-hosts, captures the generated stream URL and stream key, and writes the results back to D1 via the connector tools.
 
-This skill authenticates **gateway-only** with a capability token Bearer. There is no HMAC fallback. If the Gateway is unreachable, stop and report — do not attempt to sign requests against `data.broadbanner.com`.
+This skill authenticates **only through the MCP connector**, which the creator has authorized via OAuth — there is no token file, no config file, no mount, and no request signing. The connector's admin tools fail closed: a session without a brand-admin or super-admin role gets an authorization error. If a tool call fails that way, stop and report — there is no direct-API fallback to route around it.
+
+## Admin scheduling tools (MCP connector `broadbanner`)
+
+All data access goes through these tools — there is no `curl`, no `API_BASE`, no auth header, no local file:
+
+| Tool                     | Args                                                                                     | Replaces                                                                                                                                              |
+| ------------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_schedulable_shows` | none                                                                                     | `GET /v1/shows` snapshot read. Returns the envelope verbatim: `{ generatedAt, shows: [...], _fetch: { cfCacheStatus, age, cfRay } }`, served fresh each call (KV + CF edge cache bypassed server-side). |
+| `set_show_schedule`      | `{ showId, schedule_state?, substack_livestream_url?, restream_stream_key? }` (any subset, snake_case) | `PATCH /v1/shows/:id`. Returns `{ ok, changed }`.                                                                                                    |
+| `set_show_cohost_invite` | `{ showId, contributorId, junction: "hosts"\|"guests", cohostInviteUrl: string\|null }`  | `PATCH /v1/shows/:id/{hosts,guests}/:contributor_id`. Returns `{ ok, changed }`.                                                                     |
+
+`changed: false` is success — the row already matched what you sent. The tools stamp the change_log actor server-side; the skill never sets it. On a transient/`5xx` tool error, retry the call (up to 3×, brief backoff). On an authorization error, stop — the connector session isn't admin. See `references/gateway-auth.md` for the full tool reference.
 
 ## Prerequisites
 
 - The user must be logged in to the correct Substack publication in Chrome before running.
-- The BroadBanner Gateway must be reachable at `https://gateway.broadbanner.com` and the workspace must hold an **admin-tier** capability token at `<PROJECT_ROOT>/.creds/gateway.token` carrying `caps: ["shows:read","shows:write"]` (auto-issued for D1.contributors.is_admin === 1 by `banner-blast init` / `banner-admin init`). See `references/gateway-auth.md` for the auth pattern.
-- D1 must contain shows with `hasLiveScheduled === "title_customized"` — pulled from the Gateway snapshot endpoint in Step 0.
+- The BroadBanner MCP connector (server `broadbanner`) must be connected and the creator's session must carry a **brand-admin or super-admin** role — the admin scheduling tools fail closed otherwise (you'll get an authorization error). No token file, config, or workspace mount is required.
+- D1 must contain shows with `hasLiveScheduled === "title_customized"` — surfaced by `list_schedulable_shows` in Step 0.
 
 ## Tool reliability guide
 
@@ -47,12 +59,11 @@ Substack's "Schedule for a future date" input is `type="datetime-local"` — the
 
 > **The conversion target is the BROWSER's timezone — not the bash environment's.** In a scheduled/Cowork run, this skill's shell executes in a sandbox whose `TZ` is often **UTC**, while Chrome runs on the operator's machine. So `new Date(utc).getHours()` in bash (which reads the *shell's* ambient zone) produces a value that is wrong by the full UTC offset (5–6h), not just the 1-hour ET↔CT case. **Never rely on the shell's ambient timezone.** Resolve the browser's IANA zone explicitly and convert against it.
 
-**Resolve the browser timezone (`BROWSER_TZ`) once, before computing any datetime.** Resolve it as soon as a browser is connected — Step 0.5 selects the Chrome profile, and the `Intl` eval is environment-level (works on any open tab; no Substack navigation needed). If you present the Step 0 eligible-show preview *before* the browser is connected, use the config/ask fallbacks below, or defer the local-time columns until after Step 0.5. Re-confirm at Step 4 if in doubt. Resolution order:
+**Resolve the browser timezone (`BROWSER_TZ`) once, before computing any datetime.** Resolve it as soon as a browser is connected — the `Intl` eval is environment-level (works on any open tab; no Substack navigation needed). If you present the Step 0 eligible-show preview *before* a browser is connected, defer the local-time columns until a browser is available, or ask the user. Re-confirm at Step 4 if in doubt. Resolution order:
 
-1. **Browser eval (authoritative).** With any tab active in the selected profile:
+1. **Browser eval (authoritative).** With any tab active:
    `javascript_tool` → `Intl.DateTimeFormat().resolvedOptions().timeZone` (e.g. `"America/Chicago"`). Use that as `BROWSER_TZ`.
-2. **If `javascript_tool` is blocked:** read `operatorTimeZone` from `broadbanner.config.json` if present.
-3. **If still unresolved:** ask the user "What timezone is your computer set to?" and accept an IANA name (e.g. `America/Chicago`).
+2. **If `javascript_tool` is blocked:** ask the user "What timezone is your computer set to?" and accept an IANA name (e.g. `America/Chicago`).
 
 Do **not** fall back to the shell's own timezone — that is the bug this replaces.
 
@@ -92,181 +103,30 @@ When you report the show list to the user (Step 0) and the final summary (Step 1
 
 ## Step-by-step workflow
 
-### Step 0: Discover the project, load gateway credentials, fetch snapshot
+### Step 0: Fetch show data and run the freshness gate
 
-**0a. Discover the project.** The Cowork dispatch enumerates the user's mounted workspaces in the system prompt under "User selected a folder". For each candidate, attempt a direct Read of `<workspace>/broadbanner.config.json`:
+This skill is connector-only — there is no project to discover, no credential file to read, and no workspace mount. All show data comes from the `list_schedulable_shows` tool.
 
-- Zero hits → call `mcp__cowork__request_cowork_directory`, ask the user to add their BroadBanner workspace, retry.
-- One hit → use it.
-- Multiple hits → list them, ask which to use.
-
-Capture `PROJECT_ROOT` (the mounted workspace path, e.g. `/Users/<user>/SickOfThisShitPublications`). Also capture the `chromeProfiles` block from `broadbanner.config.json` if present — you'll need it in Step 0.5 for profile routing.
-
-**0b. Load the gateway capability token.** Read it directly from the workspace `.creds/` directory:
+**Call `list_schedulable_shows`** (no arguments). It returns the `GET /v1/shows` envelope verbatim:
 
 ```
-<PROJECT_ROOT>/.creds/gateway.token   ← cap-token Bearer for Authorization header
+{ generatedAt, shows: [...], _fetch: { cfCacheStatus, age, cfRay } }
 ```
 
-If the file is missing, empty, or carries only `posts:write` (i.e. a non-admin token), **stop immediately** and tell the user:
+Each call is served fresh — the Data-Worker KV cache and CF edge cache are bypassed server-side, so a successful call is authoritative. The per-show schema is unchanged (`hasLiveScheduled`, `restreamKey`, `substackLivestreamUrl`, nested `hosts[]`/`guests[]`/`primaryHost`). `hasLiveScheduled` is the wire name for the D1 `schedule_state` column (verbose vocabulary since migration 0016).
 
-> Workspace gateway token not found or insufficient at `<PROJECT_ROOT>/.creds/gateway.token`. This skill needs an admin-tier token with `shows:read` + `shows:write`. Re-run `banner-blast init <project-id> --update` (or `banner-admin init`) on an account where `is_admin === 1` in D1, or mint one manually with `banner-admin tokens issue --for <you> --caps posts:write,shows:read,shows:write`.
+**Verify the snapshot is actually fresh — retry, then abort.** Check the top-level `generatedAt` on the returned envelope. Because the origin stamps `generatedAt` at build time (`new Date()` in `build.ts`), a fresh rebuild is **always** ~0s old — so an age older than ~10 minutes means the read didn't reach a live origin: either the Data-Worker KV cache or the CF edge cache served a stale blob. An old `generatedAt` is **never** "D1 reconcile lag" — a live rebuild reads current D1 and re-stamps `generatedAt`, so reconcile state cannot manifest as an old age.
 
-Set the constants:
+A single stale read must **not** abort the run. The cache bypass is honored intermittently — incident 2026-06-08: one read came back ~8h stale and a manual retry seconds later was current (age ~2s); had the gate hard-aborted on the first read it would have silently skipped a real `title_customized` show due that night. So retry with exponential backoff and only abort if it is *still* stale after exhausting attempts:
 
-```
-API_BASE = "https://gateway.broadbanner.com/v1"
-AUTH_HDR = "Authorization: Bearer ${GATEWAY_TOKEN}"
-```
+1. Call `list_schedulable_shows`.
+2. Compute `age = (Date.now() - Date.parse(generatedAt)) / 1000`. If `age <= 600`, the snapshot is fresh — **break and proceed**.
+3. If stale (or the call errored transiently), back off `2s, 4s, 8s, …` capped at **30s**, then retry.
+4. Give up after **5** total attempts. On abort, report the last `generatedAt`, the computed age, and `_fetch.cfCacheStatus` (`HIT` = CF edge cache served a cached body; `MISS`/`BYPASS`/`DYNAMIC` = the staleness is upstream in the Data-Worker KV cache). `_fetch.cfRay` pinpoints the request in Cloudflare logs.
 
-**Do not** read from `~/.broadbanner/`, do not look for `.env.json`, do not load `BROADBANNER_ENC_PASSPHRASE`, do not attempt HMAC signing. Gateway-only.
+Because the tool has no local file to leave behind, a failed or malformed read simply throws and is retried — the "stale leftover file" and false "reconcile-lag" abort classes from the old curl+temp-file design are impossible here. Only **persistent** staleness across all 5 attempts aborts the run — and the abort diagnostic (`_fetch.cfCacheStatus`) points at the real culprit (KV vs CF edge), never a phantom reconcile fault.
 
-**Fail-fast rule:** Steps 0a and 0b both complete before any browser work begins. A successful Substack post followed by a failed PATCH is worse than catching the credential problem upfront.
-
-**0c. Fetch the snapshot via the Gateway** (`GET /v1/shows`):
-
-```bash
-# Always bypass caches on the read — the snapshot endpoint is fronted by
-# a KV cache (Data-Worker) and may sit behind a CF edge cache on the
-# gateway hostname. Two query params cover both layers:
-#   - `?fresh=1` — Data-Worker honors this and skips its KV cache, rebuilding
-#     from D1. Forwarded by the Gateway (since 2026-05-21).
-#   - `?_cb=<epoch>` — unique URL each run, defeats any CF edge cache that
-#     might otherwise serve a stale gateway response.
-# Without these, scheduled-task runs can read multi-day-stale data (incident
-# 2026-05-21: 2-day-old snapshot caused tonight's eligible show to be missed).
-#
-# Wrapped in a function because the freshness gate below RETRIES it: the
-# cache-bypass is not always honored on the first try (incident 2026-06-08:
-# fresh=1 returned an ~8h-stale snapshot, then a plain re-fetch seconds later
-# returned current data — so the eligible show only appeared on retry). Each
-# call uses a NEW _cb so every attempt is a distinct URL to the edge.
-# The body is written with a SHELL redirect (`>`), NEVER curl's `-o`. In Cowork
-# / scheduled sandboxes, curl's own file opens under /tmp fail with "write error
-# 23" while shell redirection to the same path succeeds. With `-o`, a failed
-# write silently leaves the body file holding a PREVIOUS run's snapshot, which
-# the freshness gate then misreads as live-but-stale data — the false "reconcile
-# lag" abort of 2026-06-11, where the gate parsed a 42h-old leftover while the
-# live origin was 0s fresh. Unique temp files (mktemp) + an exit-code + JSON
-# check make a failed fetch a hard, retryable error instead of a silent stale read.
-SNAP_BODY="$(mktemp 2>/dev/null || echo "/tmp/bb-snap.$$.json")"
-SNAP_HDR="$(mktemp 2>/dev/null || echo "/tmp/bb-hdr.$$.txt")"
-
-fetch_snapshot() {
-  local cb="fresh=1&_cb=$(date +%s)-$RANDOM"
-  : > "$SNAP_BODY"
-  # Try capturing headers (-D) too; if the sandbox rejects that file open,
-  # retry without -D so the body still lands via the shell redirect. Headers
-  # are best-effort (diagnostics only); body correctness never depends on them.
-  curl -sS "${API_BASE}/shows?${cb}" \
-    -H "${AUTH_HDR}" -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
-    -H "Accept: application/json" \
-    -D "$SNAP_HDR" > "$SNAP_BODY" 2>/dev/null
-  local rc=$?
-  if [ "$rc" -ne 0 ]; then
-    : > "$SNAP_HDR" 2>/dev/null || true
-    curl -sS "${API_BASE}/shows?${cb}" \
-      -H "${AUTH_HDR}" -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
-      -H "Accept: application/json" > "$SNAP_BODY" 2>/dev/null
-    rc=$?
-  fi
-  if [ "$rc" -ne 0 ]; then
-    echo "fetch_snapshot: curl transport error (exit $rc)" >&2
-    return 1
-  fi
-  # The body MUST be a snapshot envelope. An auth-error JSON, truncated read, or
-  # empty file fails this and is treated as a retryable FETCH failure — never
-  # parsed for a (missing/old) generatedAt off a non-snapshot or stale file.
-  if ! jq -e '.generatedAt and (.shows | type == "array")' "$SNAP_BODY" >/dev/null 2>&1; then
-    echo "fetch_snapshot: response is not a valid snapshot envelope" >&2
-    return 1
-  fi
-  return 0
-}
-```
-
-The `-D` flag dumps the response headers so the freshness gate below can report cache provenance (`cf-cache-status`, `x-cache`, `cf-ray`) on abort — best-effort, since `$SNAP_HDR` may be empty in a write-restricted sandbox.
-
-After the freshness gate below confirms the snapshot is current, parse `$SNAP_BODY` and filter the `shows` array for entries where `hasLiveScheduled === "title_customized"`. If none are found, report "No shows ready to schedule" and stop.
-
-The Gateway proxies this to the Data Worker's snapshot endpoint with the inbound query string preserved, so `?fresh=1` reaches the Data-Worker's snapshot route (the `?_cb` param is harmless ballast that just makes each URL unique). Response shape is unchanged from `shows[]`/`hosts[]`/`guests[]` nesting; the per-show field set as of migration 0016 carries `hasLiveScheduled` (new verbose vocabulary), `restreamKey`, and `substackLivestreamUrl` (renamed from `livestreamLink`). The rest of this skill operates against the parsed snapshot, treating it as the source of truth for read state.
-
-**Verify the snapshot is actually fresh — retry, then abort.** Sanity-check `generatedAt` (top-level field on the snapshot envelope). If it's older than ~10 minutes, you are not holding a live response. Because the origin stamps `generatedAt` at build time (`new Date()` in `build.ts`), a successful `fresh=1` rebuild is **always** ~0s old — so an old age means one of: (a) a **failed fetch this run** left a stale `$SNAP_BODY` leftover (the most common cause, now caught by `fetch_snapshot`'s exit-code + JSON check); (b) the Data-Worker KV cache served a stale blob (`x-cache: hit`, i.e. `fresh=1` didn't reach origin); or (c) the CF edge cache served a cached body (`cf-cache-status: HIT`). It is **never** "D1 reconcile lag" — a live rebuild reads current D1 and re-stamps `generatedAt`, so reconcile state cannot manifest as an old `generatedAt`.
-
-A single stale read must **not** abort the run. The cache bypass is honored intermittently — incident 2026-06-08: `fresh=1` returned an ~8h-stale snapshot and the gate hard-aborted, silently skipping a real `title_customized` show that was due that night; a manual re-fetch seconds later returned current data (age ~2s). So the gate **re-fetches with backoff** and only aborts if it is *still* stale (or still unparseable) after exhausting retries. Treat both stale-age and parse-failure as retryable — a transient malformed/cached response can cause either, and retrying is cheap. The final abort message captures the cache headers so a genuine, persistent staleness is self-diagnosing.
-
-```bash
-MAX_ATTEMPTS="${FRESHNESS_MAX_ATTEMPTS:-5}"   # total snapshot fetches before giving up
-FRESH_OK=0
-attempt=1
-while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
-  # Fetch FIRST, inside the loop. fetch_snapshot returns non-zero on any
-  # transport error or non-snapshot body — those are retryable and must NOT be
-  # confused with "stale data". The previous design fetched outside the loop and
-  # ignored curl's exit code, so a failed write left it parsing a stale leftover
-  # file (the 2026-06-11 false "reconcile lag" abort).
-  if ! fetch_snapshot; then
-    echo "freshness-gate attempt ${attempt}/${MAX_ATTEMPTS}: fetch failed (transport error or non-snapshot body); will retry" >&2
-  else
-    GENERATED_AT=$(jq -r '.generatedAt' "$SNAP_BODY" 2>/dev/null)
-
-    # Cache provenance for the abort line (best-effort; $SNAP_HDR may be empty in
-    # a write-restricted sandbox). IMPORTANT — how to read an old age here:
-    #   `generatedAt` is stamped by the ORIGIN at BUILD time (`new Date()` in
-    #   build.ts:505), so a genuine `fresh=1` rebuild is ALWAYS age ~0. The
-    #   "neither header + old age = reconcile lag" reading is a FALLACY — a live
-    #   origin rebuild can't return an old generatedAt. If you see x-cache:bypassed
-    #   AND an old generatedAt, you are NOT looking at a live response: it's a
-    #   stale LOCAL artifact (leftover $SNAP_BODY). The only real stale-cache
-    #   cases are x-cache:hit (fresh=1 didn't reach origin) or cf-cache-status:HIT
-    #   (CF edge served a cached body). cf-ray = request id for Cloudflare logs.
-    CACHE_DIAG=$(grep -iE '^(cf-cache-status|x-cache|cf-ray|age):' "$SNAP_HDR" 2>/dev/null \
-      | tr -d '\r' | paste -sd' ' -)
-    [ -z "$CACHE_DIAG" ] && CACHE_DIAG="(no cache headers captured)"
-
-    # Env var MUST precede `node` so it lands in process.env (not argv). Exits
-    # non-zero on parse failure → the case-check treats it as a retryable miss.
-    AGE_SECONDS=$(GA="$GENERATED_AT" node -e '
-      const raw = process.env.GA || "";
-      const ts = new Date(raw).getTime();
-      if (!Number.isFinite(ts)) {
-        console.error("freshness-gate: could not parse generatedAt=" + JSON.stringify(raw));
-        process.exit(2);
-      }
-      console.log(Math.floor((Date.now() - ts) / 1000));
-    ')
-
-    case "$AGE_SECONDS" in
-      ''|*[!0-9-]*)
-        echo "freshness-gate attempt ${attempt}/${MAX_ATTEMPTS}: unparseable generatedAt=$GENERATED_AT, age=$AGE_SECONDS | $CACHE_DIAG" >&2
-        ;;
-      *)
-        if [ "$AGE_SECONDS" -le 600 ]; then
-          FRESH_OK=1
-          break   # snapshot is fresh — proceed
-        fi
-        echo "freshness-gate attempt ${attempt}/${MAX_ATTEMPTS}: snapshot ${AGE_SECONDS}s old (generatedAt=$GENERATED_AT) | $CACHE_DIAG" >&2
-        ;;
-    esac
-  fi
-
-  # Failed fetch, stale, or unparseable — back off (2s,4s,8s,…, capped 30s) and
-  # loop; the next iteration re-fetches with a fresh _cb.
-  if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
-    sleep_s=$(( 2 ** attempt )); [ "$sleep_s" -gt 30 ] && sleep_s=30
-    sleep "$sleep_s"
-  fi
-  attempt=$(( attempt + 1 ))
-done
-
-if [ "$FRESH_OK" -ne 1 ]; then
-  echo "ABORT: could not obtain a fresh snapshot after ${MAX_ATTEMPTS} attempts — last generatedAt=$GENERATED_AT, age=$AGE_SECONDS — $CACHE_DIAG" >&2
-  echo "  → Diagnose by header: x-cache:hit = fresh=1 not reaching origin (Gateway/KV); cf-cache-status:HIT = CF edge cache. An old age with NO cache headers (or x-cache:bypassed) is NOT reconcile lag — generatedAt is build-time, so a live rebuild is always ~0s; an old value means a stale LOCAL file or a failed fetch this run. Sanity-check the live origin directly: curl \"\${API_BASE}/shows?fresh=1&_cb=\$(date +%s)\" -H \"\${AUTH_HDR}\" | jq .generatedAt — if THAT is current, the fault is local, not infra. cf-ray pinpoints the request in Cloudflare logs." >&2
-  exit 1
-fi
-```
-
-The fetch-inside-the-loop + exit-code/JSON check means a failed write or transport error is a *retryable fetch miss*, not a silently-parsed stale leftover — the leftover-file path that produced the 2026-06-11 false abort is closed. A transient stale/cached read no longer skips a real eligible show either; the loop re-fetches until the snapshot is current. Only **persistent** failure across all `MAX_ATTEMPTS` aborts the run — and the abort message points at the real culprits (failed local fetch, KV, or CF edge), not a phantom reconcile fault — while still treating unknown-freshness as stale rather than proceeding on data it cannot verify.
+After the freshness gate confirms the snapshot is current, filter the `shows` array for entries where `hasLiveScheduled === "title_customized"`. If none are found, report "No shows ready to schedule" and stop.
 
 #### Scheduling-horizon filter (default 7 days, overrideable)
 
@@ -293,7 +153,7 @@ const eligible = readyShows.filter(
 );
 ```
 
-Shows whose `scheduledStart` is past the cutoff are **deferred** — they remain `hasLiveScheduled === "title_customized"` in D1 and will be picked up on a future run once they fall inside the window. Do NOT PATCH anything to "defer" them; the state is correct as-is.
+Shows whose `scheduledStart` is past the cutoff are **deferred** — they remain `hasLiveScheduled === "title_customized"` in D1 and will be picked up on a future run once they fall inside the window. Do NOT write anything to "defer" them; the state is correct as-is.
 
 **Overriding the window for backfills.** The default exists to keep the platform tidy. Override it when the user explicitly asks for a wider sweep — common phrases include:
 
@@ -309,8 +169,6 @@ When presenting the list to the user (below), mention any shows that were deferr
 Filtered by 7-day horizon — deferred {M} show(s) scheduled >7d out:
   - {showTitle} ({scheduledStart in machine TZ}) — will be picked up on a later run
 ```
-
-Also load `broadbanner.config.json` from the brand workspace root (alongside `Social-Distribution/`). Capture the `chromeProfiles` block (if present) — you'll need it in Step 0.5 to pick the correct browser profile per show. If the block is absent, profile-routing is disabled and the skill will use the currently-selected browser for every show.
 
 Present the list of ready shows to the user for confirmation. **Display the machine-local time** (computed per the recipe in "Timezone handling" above) so the user can verify what will actually be entered into Substack. Surface the show's stored timezone only when it differs from the machine TZ — that's the case where the conversion is meaningful and worth eyeballing.
 
@@ -328,49 +186,23 @@ Found {N} show(s) ready to schedule (machine TZ: {MACHINE_TZ_ABBR}):
 Proceed with scheduling all?
 ```
 
-### Step 0.5: Select the correct Chrome profile
-
-For each show, before any browser action, resolve and switch to the right Claude-in-Chrome profile based on the show's `seriesId` and `brand`. See `references/chrome-profile-routing.md` for the full algorithm.
-
-Quick version:
-
-1. Look up `chromeProfiles.bySeriesId[show.seriesId]` from the config loaded in Step 0. If set, that's the target deviceId.
-2. Else look up `chromeProfiles.byBrand[show.brand]`. If set, that's the target deviceId.
-3. Else: skip the switch (no routing rule).
-
-If a target deviceId resolved:
-
-```
-list_connected_browsers → confirm <resolved deviceId> is in the connected list (ignore the `name` field — it's a volatile ordinal)
-select_browser({ deviceId: <resolved deviceId> })
-```
-
-Skip `select_browser` if the current browser is already that profile. If the resolved deviceId is not in the connected list, **stop and tell the user** — running on the wrong account will schedule under the wrong identity. Suggest pairing the missing profile via `switch_browser`.
-
-When iterating multiple shows, **re-resolve and re-switch before each show**. A run can include shows from different pods (e.g., `sotsp-tfl` and `sotsp-cio`) that target different profiles. The existing "process shows grouped by publication" guidance still applies — group also by resolved profile to minimize switches.
-
-Run this resolution once for the show being acted on **before** Step 1 (Mark show as in-progress). The mark-in-progress step is a JSON write, but the rest of this skill is browser-driven, so the profile switch must precede every show's browser interaction.
+This skill runs from a **single connected Chrome browser profile** — brand-admin scheduling is production support, and the operator can schedule for themselves as primary host and for another user as primary host, across multiple publications, all in that one profile. There is no per-show profile routing; use whatever browser is currently connected.
 
 ### Step 1: Mark show as in-progress
 
-For the show being processed, PATCH the Gateway to set `schedule_state = "substack_scheduling"`. This prevents duplicate scheduling if the skill is interrupted and re-run.
+For the show being processed, call `set_show_schedule` to set `schedule_state = "substack_scheduling"`. This prevents duplicate scheduling if the skill is interrupted and re-run.
 
-```bash
-curl -sS -X PATCH "${API_BASE}/shows/${SHOW_ID}" \
-  -H "${AUTH_HDR}" \
-  -H "Content-Type: application/json" \
-  -d '{"schedule_state":"substack_scheduling"}'
+```
+set_show_schedule({ showId: <show.id>, schedule_state: "substack_scheduling" })
 ```
 
-Verify the response has `ok: true` (either `changed: true` or `changed: false` is fine — both mean the row reflects the desired state). On any non-2xx, abort the run for this show and surface the error to the user — see the retry policy in `references/gateway-auth.md`.
+The tool returns `{ ok, changed }` — either `changed: true` or `changed: false` is fine (both mean the row now reflects the desired state). On a transient tool error, retry the call; on an authorization error, stop (see Error handling). The tool stamps the change_log actor server-side (the creator's identity, or `skill:substack-schedule-live`); the skill never sets it.
 
-The Gateway stamps `X-Actor` from the cap-token's `sub` claim automatically, so the change_log will record the user's email (or `skill:substack-schedule-live` if the token was issued for the skill specifically). Skills do not set `X-Actor` themselves.
-
-Note: the D1 column is named `schedule_state`; the snapshot endpoint surfaces it on the wire as `hasLiveScheduled` for backward compat with consumers that read the legacy field name. Values use the verbose vocabulary established in migration 0016: `unscheduled`, `title_customized`, `substack_scheduling`, `substack_scheduled`, `live`, `completed`. The pre-0016 set (`pending`/`ready`/`in_progress`/`scheduled`) is no longer accepted — the CHECK constraint will reject it.
+Note: the D1 column is named `schedule_state`; the read side surfaces it on the wire as `hasLiveScheduled` for backward compat with consumers that read the legacy field name. Values use the verbose vocabulary established in migration 0016: `unscheduled`, `title_customized`, `substack_scheduling`, `substack_scheduled`, `live`, `completed`. The pre-0016 set (`pending`/`ready`/`in_progress`/`scheduled`) is no longer accepted — the CHECK constraint will reject it.
 
 ### Step 2: Pre-check for existing scheduled live
 
-Before opening the scheduling modal, verify that a live stream with the same title hasn't already been scheduled on Substack. This catches cases where a previous run partially completed (e.g., the live was created but the JSON wasn't updated) or where someone scheduled the live manually.
+Before opening the scheduling modal, verify that a live stream with the same title hasn't already been scheduled on Substack. This catches cases where a previous run partially completed (e.g., the live was created but the state wasn't updated) or where someone scheduled the live manually.
 
 #### 2a: Navigate to scheduled lives page
 
@@ -393,13 +225,10 @@ read_page: filter=all
 
 #### 2c: Decide whether to proceed
 
-- **If a matching title is found:** This show is already scheduled on Substack. PATCH the Gateway to set `schedule_state = "substack_scheduled"` (do NOT include `substack_livestream_url` or `restream_stream_key` in this payload — we don't have fresh values from Substack, and PATCH leaves omitted fields alone so existing values are preserved):
+- **If a matching title is found:** This show is already scheduled on Substack. Call `set_show_schedule` to set `schedule_state = "substack_scheduled"` (do NOT include `substack_livestream_url` or `restream_stream_key` — we don't have fresh values from Substack, and the tool leaves omitted fields alone so existing values are preserved):
 
-  ```bash
-  curl -sS -X PATCH "${API_BASE}/shows/${SHOW_ID}" \
-    -H "${AUTH_HDR}" \
-    -H "Content-Type: application/json" \
-    -d '{"schedule_state":"substack_scheduled"}'
+  ```
+  set_show_schedule({ showId: <show.id>, schedule_state: "substack_scheduled" })
   ```
 
   Close the tab via `tabs_close_mcp`. Log the skip reason and move to the next show (Step 9).
@@ -577,7 +406,7 @@ The dialog will contain:
 
 Identify each value by its label (`generic` elements with text "Link to stream", "Server URL", "Stream key") and the adjacent `textbox` element's value.
 
-Store the **Link to stream** as `substackLivestreamUrl` and the **Stream key** as `restreamKey` for the JSON update.
+Store the **Link to stream** as `substackLivestreamUrl` and the **Stream key** as `restreamKey` for the D1 write.
 
 ### Step 7: Capture cohost invite links
 
@@ -659,87 +488,70 @@ Store the full mapping keyed by `handle` (the Substack username without `@`) for
 
 #### 7d: Close the invite tab
 
-After the API call completes, close the tab opened in 7a via `tabs_close_mcp`. Retain the invite mapping in memory for the PATCH calls in Step 8b.
+After the API call completes, close the tab opened in 7a via `tabs_close_mcp`. Retain the invite mapping in memory for the write calls in Step 8b.
 
-If the API call fails (network error or non-200 response), log a warning and **skip ALL junction PATCHes in Step 8b** for this show — do not overwrite stored `cohost_invite_url` values in D1 with `null` just because this run couldn't reach the Substack API. PATCH is partial-update by design, so omitting the field entirely preserves whatever D1 already has. Continue with Step 8a (the show's managed-field PATCH) regardless — the cohost-invite scrape is separable from the show-level write.
+If the API call fails (network error or non-200 response), log a warning and **skip ALL junction writes in Step 8b** for this show — do not overwrite stored `cohost_invite_url` values in D1 with `null` just because this run couldn't reach the Substack API. The write tool is partial-update by design, so not calling it for a cohost preserves whatever D1 already has. Continue with Step 8a (the show's managed-field write) regardless — the cohost-invite scrape is separable from the show-level write.
 
-### Step 8: Write results back to D1 (via the Gateway)
+### Step 8: Write results back to D1 (via the connector)
 
-D1 is the system of record for managed fields. This step has TWO parts — one PATCH for the show's managed columns, then one PATCH per cohost for the invite link junctions. **Both go through the Gateway** at `gateway.broadbanner.com/v1/shows/...`. The Gateway proxies them to the Data Worker and stamps `X-Actor` from the cap-token automatically.
+D1 is the system of record for managed fields. This step has TWO parts — one call for the show's managed columns (`set_show_schedule`), then one call per cohost for the invite-link junctions (`set_show_cohost_invite`). Both tools proxy to the Data Worker server-side and stamp the actor for you.
 
-**Workspace scoping** is enforced server-side (the PATCH endpoints take a show id and look up the show in D1; you can't accidentally touch a different publication's data). The local `wix-latest.json` file is NO LONGER written by this skill — D1 is authoritative.
+**Workspace scoping** is enforced server-side (the tools take a show id and resolve the show in D1; you can't accidentally touch a different publication's data). The local `wix-latest.json` file is NO LONGER written by this skill — D1 is authoritative.
 
-#### 8a: PATCH the show's managed fields
+#### 8a: Write the show's managed fields
 
-Payload — only the fields that have new values:
+Call `set_show_schedule` with only the fields that have new values:
 
-```json
-{
-  "schedule_state": "substack_scheduled",
-  "substack_livestream_url": "<Link to stream value>",
-  "restream_stream_key": "<Stream key value>"
-}
+```
+set_show_schedule({
+  showId: <show.id>,
+  schedule_state: "substack_scheduled",
+  substack_livestream_url: "<Link to stream value>",
+  restream_stream_key: "<Stream key value>",
+})
 ```
 
-```bash
-curl -sS -X PATCH "${API_BASE}/shows/${SHOW_ID}" \
-  -H "${AUTH_HDR}" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n \
-    --arg ll "$LIVESTREAM_LINK" \
-    --arg sk "$STREAM_KEY" \
-    '{schedule_state: "substack_scheduled", substack_livestream_url: $ll, restream_stream_key: $sk}')"
-```
+On a transient/`5xx` tool error, retry the call (up to 3×, brief backoff — 500 ms → 1 s → 2 s). On an authorization error, stop. On a request-shape error (e.g. an unknown field or a missing show), fail loud for this show — retrying won't fix it.
 
-On 5xx or network error, retry per the policy in `references/gateway-auth.md` (3 max retries, base 500ms, doubling). The cap-token is reused as-is — there's nothing to re-sign. On 4xx, fail loud — that's a request-shape bug (or an expired token).
+Note on field names: the tool takes snake_case (`substack_livestream_url`, `restream_stream_key`); the read side surfaces these as `substackLivestreamUrl` and `restreamKey`. (Pre-0016 the column was `livestream_link` / `livestreamLink`; senders MUST use the new name now.)
 
-Note on field names: D1 uses snake_case (`substack_livestream_url`, `restream_stream_key`); the snapshot endpoint surfaces these as `substackLivestreamUrl` and `restreamKey` for read consumers. Send snake_case on PATCH. (Pre-0016 the column was `livestream_link` / `livestreamLink`; senders MUST use the new name now.)
+#### 8b: Write cohost invite URLs
 
-#### 8b: PATCH cohost invite URLs
+For each person in the show's `hosts[]` and `guests[]` arrays (NOT `primaryHost` — primary hosts aren't cohosts and don't get invite links), call `set_show_cohost_invite` with the captured `cohostInviteLink`.
 
-For each person in the show's `hosts[]` and `guests[]` arrays (NOT `primaryHost` — primary hosts aren't cohosts and don't get invite links), PATCH their junction row with the captured `cohostInviteLink`.
-
-**Resolve which array each cohost belongs to.** Cohosts in `hosts[]` use the `/v1/shows/<id>/hosts/<contributor_id>` endpoint; cohosts in `guests[]` use `/v1/shows/<id>/guests/<contributor_id>`. The arrays come from the snapshot read in Step 0.
+**Resolve which array each cohost belongs to.** Cohosts in `hosts[]` use `junction: "hosts"`; cohosts in `guests[]` use `junction: "guests"`. The arrays come from the snapshot read in Step 0.
 
 **Match by `substackUsername` ↔ `handle`** (same matching rule as before). Fall back to case-insensitive `name` comparison only if `substackUsername` is null.
 
-**Map invite status to the patched value:**
+**Map invite status to the written value:**
 
-- API returned the cohost with `status === "pending"` → `cohost_invite_url` = `"https://substack.com/?live_stream_invite_id={invite.id}"`
-- API returned the cohost with `status === "accepted"` → `cohost_invite_url` = `null` (they've joined, link no longer meaningful)
-- API returned but cohost is NOT in response → **skip this PATCH entirely** — don't overwrite a prior value with null. The endpoint is partial-update, so not sending the field leaves the existing value alone.
-- API call failed → **skip ALL invite PATCHes for this show** — never overwrite with null on API failure. (Same preservation rule as the legacy local-file flow.)
+- API returned the cohost with `status === "pending"` → `cohostInviteUrl = "https://substack.com/?live_stream_invite_id={invite.id}"`
+- API returned the cohost with `status === "accepted"` → `cohostInviteUrl = null` (they've joined, link no longer meaningful)
+- API returned but cohost is NOT in response → **skip this cohost entirely** — don't call the tool, so the prior value is preserved.
+- API call failed → **skip ALL invite writes for this show** — never overwrite with null on API failure.
 
-**Per-cohost PATCH (the cap-token is reused — no signing needed):**
+**Per-cohost write** (the tool leaves the field alone if you don't call it; pass an explicit `null` to clear it):
 
-```bash
-# For each cohost where we have a value to write:
-CONTRIBUTOR_ID="<host.id or guest.id from the snapshot>"
-JUNCTION="hosts"  # or "guests"
-INVITE_URL="<computed URL or null>"
-
-# Build payload — `null` is a literal JSON null when accepted is true
-if [ "$INVITE_URL" = "null" ]; then
-  BODY='{"cohost_invite_url": null}'
-else
-  BODY=$(jq -n --arg u "$INVITE_URL" '{cohost_invite_url: $u}')
-fi
-
-curl -sS -X PATCH "${API_BASE}/shows/${SHOW_ID}/${JUNCTION}/${CONTRIBUTOR_ID}" \
-  -H "${AUTH_HDR}" \
-  -H "Content-Type: application/json" \
-  -d "$BODY"
+```
+set_show_cohost_invite({
+  showId: <show.id>,
+  contributorId: <host.id or guest.id from the snapshot>,
+  junction: "hosts",              // or "guests"
+  cohostInviteUrl: "<computed URL>" | null,
+})
 ```
 
-If a junction PATCH returns 404 (`not_found`), the cohort isn't joined to the show at the D1 level — likely a contributor that was added to Wix's `hosts[]`/`guests[]` array but the reconcile cron hasn't picked it up yet. Skip with a warning and move on; the next reconcile cycle will create the junction row, and a re-run will then succeed.
+`cohostInviteUrl: null` clears the invite (the `accepted` case); a string sets it (the `pending` case).
+
+If the call reports the junction row is missing (`not_found`), the cohost isn't joined to the show at the D1 level — likely a contributor that was added to Wix's `hosts[]`/`guests[]` array but the reconcile cron hasn't picked it up yet. Skip with a warning and move on; the next reconcile cycle will create the junction row, and a re-run will then succeed.
 
 #### 8c: No local file write
 
-This skill does not touch `BroadBanner/Social-Distribution/wix-latest.json`. D1 is the source of truth, served via the Gateway snapshot endpoint (`GET /v1/shows`); the legacy local `wix-latest.json` file and the `banner-admin wix-poller` that wrote it are deprecated and may be absent or stale. Skill writes flow through the Gateway PATCH endpoints exclusively. Do NOT add any local-file mutation here.
+This skill does not touch `BroadBanner/Social-Distribution/wix-latest.json`. D1 is the source of truth, served by `list_schedulable_shows`; the legacy local `wix-latest.json` file and the `banner-admin wix-poller` that wrote it are deprecated and may be absent or stale. Skill writes flow through the connector tools exclusively. Do NOT add any local-file mutation here.
 
 ### Step 9: Close the browser tab
 
-After PATCH-ing D1, close the tab used for this show via `tabs_close_mcp`:
+After writing to D1, close the tab used for this show via `tabs_close_mcp`:
 
 ```
 tabs_close_mcp: tabId=<current_tab_id>
@@ -755,14 +567,14 @@ If there are additional shows with `hasLiveScheduled === "title_customized"`:
 
 2. Create a **new tab** and navigate to the next show's `substackLiveUrl`. Do not reuse tabs — the modal state may not reset cleanly.
 
-3. Process shows one at a time. After each show, confirm the PATCHes succeeded (Steps 8a/8b each returned `ok: true`) and the tab is closed before moving to the next.
+3. Process shows one at a time. After each show, confirm the writes succeeded (Steps 8a/8b each returned `ok: true`) and the tab is closed before moving to the next.
 
 ### Step 11: Final report
 
 After all shows are processed, present a summary:
 
 ```
-Substack live streams scheduled (D1 PATCH confirmed via Gateway) — times shown in {MACHINE_TZ_ABBR}:
+Substack live streams scheduled (D1 write confirmed via connector) — times shown in {MACHINE_TZ_ABBR}:
 
 1. {showTitle} — {LOCAL_DATE} at {LOCAL_TIME} {MACHINE_TZ_ABBR}
    {if localTimeZone differs from machine TZ:
@@ -771,13 +583,13 @@ Substack live streams scheduled (D1 PATCH confirmed via Gateway) — times shown
    Stream link: {substackLivestreamUrl}
    Stream key: {restreamKey}
    schedule_state: substack_scheduled
-   Co-host invites PATCHed:
+   Co-host invites written:
      - {name}: {cohostInviteLink | "already accepted (null)" | "skipped — not in API response"}
      - ...
 
-All shows updated in D1 via PATCH /v1/shows/:id (Gateway → Data Worker).
-The snapshot cache will pick up the changes within 5 minutes (or immediately
-for the next consumer that bypasses the cache).
+All shows updated in D1 via the set_show_schedule connector tool.
+The read cache will pick up the changes within 5 minutes (or immediately
+for the next fresh read).
 ```
 
 If any shows were skipped (already scheduled per pre-check), list them separately:
@@ -786,11 +598,11 @@ If any shows were skipped (already scheduled per pre-check), list them separatel
 Skipped (already scheduled on Substack):
 
 1. {showTitle} — found existing scheduled live with matching title
-   PATCH /v1/shows/{id} {"schedule_state":"substack_scheduled"} → ok:true
+   set_show_schedule → schedule_state: substack_scheduled → ok:true
 ```
 
 If any shows failed, list them separately with the failure reason — distinguishing between
-browser-automation failures (e.g. modal didn't open) and PATCH failures (e.g. 5xx after retry).
+browser-automation failures (e.g. modal didn't open) and write failures (e.g. tool errored after retry).
 
 ## Error handling
 
@@ -804,17 +616,16 @@ browser-automation failures (e.g. modal didn't open) and PATCH failures (e.g. 5x
 - **Co-host checkbox can't be clicked:** The checkbox is a `<button>`, not `<input>`. If `left_click` is blocked, ask the user to check it manually.
 - **Date/time input rejected:** Substack may enforce minimum scheduling windows (e.g., must be at least 1 hour in the future). If the date is rejected, alert the user with the scheduled time and ask for guidance.
 - **Stream credentials not displayed:** Use `read_page` to find the credentials. They are in textbox elements in the second dialog. If truly not present, report the failure — the user can retrieve credentials manually from the Substack dashboard.
-- **Invites API returns non-200 or fails:** Log a warning, **skip ALL invite junction PATCHes for this show** (do NOT overwrite stored values with null on API failure), and continue. The user can retrieve invite links manually from the Substack dashboard at `{substackBaseUrl}/publish/home?action=setup-live-stream&stream_id={streamId}` — the "Co-host status" section in that modal displays each cohost's invite status and a "Copy invite link" button.
-- **Cohost already accepted (`status === "accepted"`):** PATCH `cohost_invite_url: null` for that junction — they're confirmed and no invite link is needed.
-- **Cohost in show but not found in invites API response:** Skip the PATCH for this cohost entirely. PATCH is partial-update, so omitting the field preserves any prior value in D1.
-- **`substackUsername` is null on a cohost:** Fall back to case-insensitive name matching against `invitedUser.name` from the API. If still no match, skip the PATCH for this cohost.
+- **Invites API returns non-200 or fails:** Log a warning, **skip ALL invite junction writes for this show** (do NOT overwrite stored values with null on API failure), and continue. The user can retrieve invite links manually from the Substack dashboard at `{substackBaseUrl}/publish/home?action=setup-live-stream&stream_id={streamId}` — the "Co-host status" section in that modal displays each cohost's invite status and a "Copy invite link" button.
+- **Cohost already accepted (`status === "accepted"`):** Call `set_show_cohost_invite` with `cohostInviteUrl: null` for that junction — they're confirmed and no invite link is needed.
+- **Cohost in show but not found in invites API response:** Skip the write for this cohost entirely. Not calling the tool preserves any prior value in D1.
+- **`substackUsername` is null on a cohost:** Fall back to case-insensitive name matching against `invitedUser.name` from the API. If still no match, skip the write for this cohost.
 - **Multiple shows on same publication:** Process sequentially. Create a new tab for each show — the URL triggers a fresh modal each time.
-- **PATCH /v1/shows/:id returns 5xx or network error:** Retry with exponential backoff per `references/gateway-auth.md` (3 max retries; 500 ms → 1 s → 2 s). The cap-token is reused as-is — no re-signing needed. After retries exhaust, report the failure for this show and continue to the next show — don't abort the whole run.
-- **PATCH /v1/shows/:id returns 401 (`unauthorized`):** The cap-token is missing, malformed, or expired. Stop the run and tell the user to re-run `banner-blast init <project-id> --update` (or mint a fresh token via `banner-admin tokens issue`). Do NOT fall back to HMAC against `data.broadbanner.com`.
-- **PATCH /v1/shows/:id returns 403 (`forbidden — missing capability: shows:write`):** The workspace token doesn't carry `shows:write`. This skill is admin-tier; the user's D1 contributor row needs `is_admin = 1`. Stop and report.
-- **PATCH /v1/shows/:id returns other 4xx (`not_found`, `invalid_field`):** Fail loud for this show with the response body. Do NOT retry — 4xx indicates a request-shape bug or a missing show in D1, neither of which retry can fix. Continue to the next show.
-- **PATCH /v1/shows/:id/{hosts,guests}/:contributor_id returns 404 (`not_found`):** The junction row doesn't exist in D1 yet — likely a contributor that was just added to Wix and the reconcile cron hasn't picked it up. Log a warning, skip this cohost's invite PATCH, and continue. The next reconcile cycle will create the junction; a re-run of this skill will then succeed.
-- **Gateway 502 (`bad_gateway`) or any persistent gateway-side failure:** The Data Worker is unreachable from the Gateway. Stop the run, tell the user, and **do NOT fall back to direct `data.broadbanner.com` HMAC** — that bypass path is intentionally not in this skill any longer.
+- **A `set_show_schedule` / `set_show_cohost_invite` call errors transiently (`5xx`/network):** Retry the tool call (up to 3×, brief backoff — 500 ms → 1 s → 2 s). After retries exhaust, report the failure for this show and continue to the next show — don't abort the whole run.
+- **A tool returns an authorization error:** The connector session isn't authorized for admin scheduling — you need a brand-admin or super-admin role on your BroadBanner account. Stop the run and tell the user; there is no fallback path.
+- **A tool returns a request-shape error (`invalid_field`, or `not_found` on the show):** Fail loud for this show with the message. Do NOT retry — a 4xx-class error indicates a bad request or a missing show in D1, neither of which retry can fix. Continue to the next show.
+- **`set_show_cohost_invite` reports the junction row missing (`not_found`):** The junction doesn't exist in D1 yet — likely a contributor just added to Wix's `hosts[]`/`guests[]` that the reconcile cron hasn't picked up. Log a warning, skip this cohost's invite write, and continue. The next reconcile cycle creates the junction; a re-run of this skill will then succeed.
+- **The connector or its data plane is unreachable:** Stop the run and tell the user. There is no direct-API bypass — this skill talks only to the connector tools.
 
 ## Key technical notes
 
@@ -823,9 +634,10 @@ browser-automation failures (e.g. modal didn't open) and PATCH failures (e.g. 5x
 - **Date/time input is `type="datetime-local"`** — set it via `form_input` with ISO format `YYYY-MM-DDTHH:MM`. Do NOT use the calendar picker or formatted date strings. The value MUST be in the **browser's timezone** (`BROWSER_TZ`, resolved per the "Timezone handling" recipe) — compute it from `scheduledStart` by passing the zone explicitly to `Intl.DateTimeFormat`, never via the shell's ambient `TZ`/`getHours()` (the sandbox shell is often UTC). Never feed `scheduledStartLocal` directly; it's in the show's stored TZ.
 - **Set the date/time LAST** in the modal to avoid extension interference after the datetime-local input is modified.
 - **The primary host comes from `show.primaryHost`** — resolved from Import2's `primaryHostName` reference via ContributorProfiles → Affiliates name matching. Select them in the "The person going live is..." `<select>` dropdown. They are already excluded from the `hosts` array by the poller.
-- **The `substackUsername` field** is pre-extracted and normalized by the Data Worker reconcile cron (no `@` prefix, no whitespace) when it mirrors Wix into D1, and is served by the snapshot endpoint. Use it directly for co-host search.
+- **The `substackUsername` field** is pre-extracted and normalized by the Data Worker reconcile cron (no `@` prefix, no whitespace) when it mirrors Wix into D1, and is served on the read side. Use it directly for co-host search.
 - **Co-hosts must have Substack accounts with the app installed.** If a co-host doesn't appear in search results, they may not have installed the Substack app — note this in the failure report.
 - **Process shows grouped by publication** to minimize account-switching. Sort ready shows by `substackLiveUrl` before processing.
 - **The "Invite co-hosts" toggle changes the main button** from "Generate stream key" / "Schedule stream" to "Continue".
 - **Substack renders TWO dialog elements.** The first contains the main modal, the second contains the co-host / credentials modal. Always scope `read_page` to the correct dialog ref.
 - **Always create a new tab** for each show. Do not reuse tabs — modal state and extension interference can carry over.
+- **Single browser profile.** This is production-support scheduling run from whatever Chrome profile is connected; there is no per-show profile routing. The operator can schedule for themselves and for other primary hosts across publications in that one profile.
