@@ -2,7 +2,7 @@
 /**
  * collect-tasks.mjs
  *
- * Deterministic enumerator for the `install-scheduled-tasks` skill.
+ * Deterministic enumerator for the `manage` skill (broadbanner-scheduled-tasks).
  *
  * It does the parts that should NOT be left to a language model: find the
  * project root, derive per-project template variables from
@@ -24,6 +24,10 @@
  *                     broadbanner.config.json).
  *   --scaffold        Copy any shipped templates that the project is missing
  *                     into <root>/.broadbanner/scheduled-tasks/, then continue.
+ *   --templates-dir <path>  Scaffold/refresh from THIS directory instead of the
+ *                     engine's bundled references/templates/. A tier plugin (e.g.
+ *                     broadbanner-pre-production) passes its own templates dir here
+ *                     to install its task specs through the shared engine.
  *   --refresh         Like --scaffold, but ALSO overwrite existing specs from the
  *                     shipped templates (picks up template updates after a plugin
  *                     upgrade). Replaces local edits to those specs — reported in
@@ -32,7 +36,7 @@
  *
  *   Connector/no-CLI mode — broadbanner.config.json is OPTIONAL. When it is
  *   absent (a creator who never ran `banner-admin init`), the brand-scoped
- *   template vars come from these flags instead, which the install-scheduled-tasks
+ *   template vars come from these flags instead, which the manage
  *   skill fills from the MCP connector's get_creator_context:
  *     --basename <s>           PROJECT_BASENAME / task-id label (default: dir name)
  *     --brand-slug <s>         BRAND_SLUG / BRAND_ID / POD_PREFIX
@@ -64,7 +68,10 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const TEMPLATES_DIR = path.resolve(SCRIPT_DIR, "..", "references", "templates");
+// Default scaffold source: this engine's own bundled templates. A tier plugin can
+// override it with --templates-dir <path> to scaffold ITS templates through the
+// shared engine (var resolution, cadence, --refresh, the regression guard all reused).
+const DEFAULT_TEMPLATES_DIR = path.resolve(SCRIPT_DIR, "..", "references", "templates");
 const SPEC_SUBPATH = path.join(".broadbanner", "scheduled-tasks");
 
 // ── arg parsing ──────────────────────────────────────────────────────────────
@@ -73,6 +80,7 @@ const SPEC_SUBPATH = path.join(".broadbanner", "scheduled-tasks");
 // when there is no broadbanner.config.json.
 const STRING_FLAGS = {
   "--project": "project",
+  "--templates-dir": "templatesDir",
   "--basename": "basename",
   "--brand-slug": "brandSlug",
   "--brand-display": "brandDisplay",
@@ -86,6 +94,7 @@ const STRING_FLAGS = {
 function parseArgs(argv) {
   const opts = {
     project: null,
+    templatesDir: null,
     scaffold: false,
     refresh: false,
     list: false,
@@ -273,20 +282,20 @@ function coerceBool(v, dflt) {
 // escape hatch for when a plugin update ships new template content but the
 // project's already-scaffolded specs are stale. Refreshed files are reported
 // separately so the skill can tell the user what was overwritten.
-function scaffold(specDir, warnings, refresh = false) {
+function scaffold(specDir, templatesDir, warnings, refresh = false) {
   const copied = [];
   const refreshed = [];
-  if (!fs.existsSync(TEMPLATES_DIR)) {
-    warnings.push(`no templates dir at ${TEMPLATES_DIR}`);
+  if (!fs.existsSync(templatesDir)) {
+    warnings.push(`no templates dir at ${templatesDir}`);
     return { copied, refreshed };
   }
   fs.mkdirSync(specDir, { recursive: true });
-  for (const f of fs.readdirSync(TEMPLATES_DIR)) {
+  for (const f of fs.readdirSync(templatesDir)) {
     if (!f.endsWith(".md")) continue;
     const dest = path.join(specDir, f);
     const exists = fs.existsSync(dest);
     if (exists && !refresh) continue; // default: never clobber project specs
-    fs.copyFileSync(path.join(TEMPLATES_DIR, f), dest);
+    fs.copyFileSync(path.join(templatesDir, f), dest);
     (exists ? refreshed : copied).push(f);
   }
   if (refreshed.length) {
@@ -302,7 +311,7 @@ function main() {
   const opts = parseArgs(process.argv);
   if (opts.help) {
     process.stdout.write(
-      "Usage: node collect-tasks.mjs [--project <path>] [--scaffold] [--refresh] [--list]\n" +
+      "Usage: node collect-tasks.mjs [--project <path>] [--templates-dir <path>] [--scaffold] [--refresh] [--list]\n" +
         "                              [--cadence high|medium|low] [--text-cron <expr>] [--clip-cron <expr>]\n",
     );
     return;
@@ -338,10 +347,16 @@ function main() {
     }
   }
 
+  // Scaffold source: --templates-dir if given (a tier plugin scaffolding ITS own
+  // templates through this engine), else this engine's bundled templates.
+  const templatesDir = opts.templatesDir
+    ? path.resolve(opts.templatesDir.replace(/^~(?=$|\/)/, os.homedir()))
+    : DEFAULT_TEMPLATES_DIR;
+
   let scaffolded = [];
   let refreshed = [];
   if (opts.scaffold || opts.refresh) {
-    ({ copied: scaffolded, refreshed } = scaffold(specDir, warnings, opts.refresh));
+    ({ copied: scaffolded, refreshed } = scaffold(specDir, templatesDir, warnings, opts.refresh));
   }
 
   const tasks = [];

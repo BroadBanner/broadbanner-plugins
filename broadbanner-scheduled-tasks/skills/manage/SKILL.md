@@ -1,9 +1,9 @@
 ---
-name: install-scheduled-tasks
-description: "Install, update, or uninstall Cowork scheduled tasks for a BroadBanner project from declarative spec files. Use when the user says 'install/register/sync the scheduled tasks', 'set up scheduling', or 'uninstall/remove/delete the scheduled tasks', or after editing a spec in .broadbanner/scheduled-tasks/. Resolves per-project template vars and registers each via the Cowork scheduler, filed under the project it's run from; the uninstall flow deletes this project's tasks (and optionally their specs). Idempotent."
+name: manage
+description: "Install, update, or uninstall Cowork scheduled tasks for a BroadBanner project. REQUIRES an action — install (register/sync specs), update (re-sync or --refresh existing), or uninstall (remove tasks, optionally their specs). Use when the user says 'install/register/sync the scheduled tasks', 'update/refresh the scheduled tasks', 'uninstall/remove/delete/clean up the scheduled tasks', or 'set up scheduling'. Resolves per-project template vars and registers each via the Cowork scheduler, filed under the project it's run from."
 ---
 
-# Install Scheduled Tasks
+# Manage Scheduled Tasks
 
 Register a BroadBanner project's declarative scheduled-task specs into the Cowork
 scheduler. Each spec under `<PROJECT_ROOT>/.broadbanner/scheduled-tasks/*.md`
@@ -25,12 +25,12 @@ Cowork on the machine where the single BroadBanner Chrome profile stays open and
 logged in** at fire time. A scheduled run with no connected browser stops and
 reports (nothing posted/scheduled).
 
-**Two separate requirements — do both:** (1) run this install skill from an "on
-your computer" desktop Cowork session, AND (2) create each task with its
-**run-location set to "this computer"** (Step 4). Requirement (1) alone is NOT
-enough — `create_scheduled_task` defaults to **cloud**, so a task installed from a
-local session still lands as "Runs in cloud" unless you explicitly set the
-run-location. Every task must show **"Runs on this computer"** when done.
+**Run location is the Cowork _Home run-mode_ setting, not a per-task argument.** If
+Cowork Home is on the beta **"run in cloud"** mode, every task you create runs in the
+cloud and can never reach local Chrome. **Before installing, set Cowork Home to run on
+your computer** (turn the beta "run in cloud" mode OFF); then every task files as a
+local ("Runs on this computer") task. Verify each task shows **"Runs on this computer"**
+after install (Step 4).
 
 ## ⚠️ Project filing — read first
 
@@ -41,6 +41,31 @@ this skill**. There is no project parameter on the create tool.
 not the one whose tasks you are installing, stop and tell the user to switch to
 that project's Cowork chat first. Confirm the match in Step 2 before creating
 anything — installing into the wrong project is the exact bug this plugin fixes.
+
+## Step 0 — Determine the action (install | update | uninstall)
+
+This skill **requires an action**. Resolve it in order:
+
+1. An explicit action in the invocation/args — `manage install`, `manage update`,
+   `manage uninstall`.
+2. Else infer from the user's phrasing: "install / register / sync / set up" →
+   **install**; "update / refresh / re-sync" → **update**; "uninstall / remove /
+   delete / clean up" → **uninstall**.
+3. If neither is present or it's ambiguous, **ask once**: "install, update, or
+   uninstall the scheduled tasks?"
+
+Then route:
+
+- **install** → Steps 1–5 (locate project → collect specs → diff → create/update →
+  report). Scaffolds missing specs. The default register/sync flow.
+- **update** → the same flow as install, for a project whose tasks are already
+  registered: re-sync schedule/enabled from specs, and — only when the user wants the
+  shipped template content refreshed — run the collector with `--refresh` first
+  (Step 2) to overwrite stale specs, then apply. The prompt-regression guard (Step 3)
+  still holds: never replace a live task's prompt without explicit confirmation.
+- **uninstall** → the **Uninstall / remove tasks** section below (skip Steps 2–5).
+
+All three obey the **Project filing** rule — they act only on the active project's tasks.
 
 ## Step 1 — Locate the active project
 
@@ -267,7 +292,7 @@ rather than remove.
 
 A registered task and its **spec file** (`<PROJECT_ROOT>/.broadbanner/scheduled-tasks/<name>.md`)
 are separate. Deleting the task does NOT delete the spec — and if the spec remains, a
-future `install-scheduled-tasks` run will **recreate** the task. So after deleting,
+future `manage install` run will **recreate** the task. So after deleting,
 **ask** whether to also delete the matching spec file(s):
 
 - **Yes** → remove the spec file so it won't be reinstalled.
@@ -289,15 +314,15 @@ See `references/spec-format.md` for the full frontmatter schema, the
 from `broadbanner.config.json` when it exists, otherwise from the collector's
 override flags (`--brand-slug`, `--substack-username`, `--basename`, …) — which
 this skill fills from the connector's `get_creator_context` on the no-CLI path.
-Ready-made templates for the release pair (`release-substack-text`,
-`release-substack-clips`) and the live-scheduling pair (`schedule-substack-live`,
-`schedule-restream-live`) are in `references/templates/`. **All four are now
-connector-only** — they run on the **BroadBanner MCP connector** with no
-`broadbanner.config.json`, no `.creds/gateway.token`, and no mount. (The release
-pair lives in `broadbanner-social-distribution`; the live-scheduling pair lives in
-`broadbanner-live-production` — install both plugins for a full set.) The collector
-resolves brand-scoped vars from `broadbanner.config.json` when present, otherwise
-from the connector-derived override flags.
+This engine bundles the **release pair** templates (`release-substack-text`,
+`release-substack-clips`, banner_blast/Core) in its own `references/templates/` — the
+default `--scaffold` source. The **auto-scheduling pair** (`schedule-substack-live`,
+`schedule-restream-live`) is the **Pre-Production Assistant** add-on and ships in the
+**`broadbanner-pre-production`** plugin; its `auto-schedule-lives` skill installs them
+through this engine by passing `--templates-dir <its templates>`. All templates are
+**connector-only** (BroadBanner MCP connector; no `broadbanner.config.json`, no
+`.creds/gateway.token`, no mount). The collector resolves brand-scoped vars from
+`broadbanner.config.json` when present, otherwise from the connector-derived override flags.
 
 ## Expanding
 

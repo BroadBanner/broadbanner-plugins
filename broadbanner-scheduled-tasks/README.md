@@ -1,6 +1,7 @@
-# BroadBanner Scheduling Plugin
+# BroadBanner Scheduled-Tasks Plugin
 
-Scheduled-task management for BroadBanner Cowork projects.
+The scheduled-task engine for BroadBanner Cowork projects. (Renamed from
+`broadbanner-scheduling`; the skill is now `manage`, action-driven.)
 
 > **New operator? Start with [`OPERATOR-RUNBOOK.md`](OPERATOR-RUNBOOK.md)** — the
 > step-by-step, machine-independent procedure for installing and managing these
@@ -29,7 +30,7 @@ is filed under the project the skill is run from.
 
 | Skill | Description |
 |---|---|
-| `install-scheduled-tasks` | Read declarative scheduled-task specs from `<PROJECT_ROOT>/.broadbanner/scheduled-tasks/*.md`, resolve per-project template variables, and create/update them in the Cowork scheduler. Idempotent: existing tasks are updated only when they differ, and a live task's prompt is never overwritten without explicit confirmation. Also **uninstalls** — say "remove/uninstall the scheduled tasks" to delete this project's registered tasks (and optionally their specs). Run from the target project. |
+| `manage` | Action-driven (`install` \| `update` \| `uninstall`). **install**: read declarative specs from `<PROJECT_ROOT>/.broadbanner/scheduled-tasks/*.md`, resolve per-project vars, and create/update them in the Cowork scheduler (idempotent; a live task's prompt is never overwritten without explicit confirmation). **update**: re-sync/`--refresh` existing tasks. **uninstall**: delete this project's registered tasks (and optionally their specs). Invoke `/broadbanner-scheduled-tasks:manage <action>`; run from the target project. |
 
 ## Task specs
 
@@ -48,11 +49,11 @@ Each spec is a self-contained Markdown file: YAML frontmatter
 that is the prompt executed on each run. Bodies may use `{{VARS}}`
 (e.g. `{{POD_PREFIX}}`, `{{PROJECT_ROOT}}`) which are resolved per-project from
 `broadbanner.config.json`. See
-[`skills/install-scheduled-tasks/references/spec-format.md`](skills/install-scheduled-tasks/references/spec-format.md)
+[`skills/manage/references/spec-format.md`](skills/manage/references/spec-format.md)
 for the full schema and variable list.
 
 Ready-made templates ship in
-[`skills/install-scheduled-tasks/references/templates/`](skills/install-scheduled-tasks/references/templates/)
+[`skills/manage/references/templates/`](skills/manage/references/templates/)
 for both the release pair (`release-substack-text`, `release-substack-clips` — from
 `broadbanner-social-distribution`) and the live-scheduling pair
 (`schedule-substack-live`, `restream-schedule-live` — from
@@ -63,9 +64,10 @@ them into a project that has none yet (`collect-tasks.mjs --scaffold`).
 ## Expanding it
 
 To add a new scheduled task to a brand: drop a new `<name>.md` spec into that
-project's `.broadbanner/scheduled-tasks/`, then run `install-scheduled-tasks`
-from that project. No plugin changes required. To add a new **reusable**
-template for all brands, add it under `references/templates/`.
+project's `.broadbanner/scheduled-tasks/`, then run `manage install` from that
+project. No plugin changes required. To add a new **reusable** template for all
+brands, add it under `references/templates/` (or ship it in a tier plugin and
+pass `--templates-dir`).
 
 ## Requirements
 
