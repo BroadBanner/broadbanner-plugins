@@ -1,6 +1,8 @@
 ---
 name: substack-note
 description: "Post a text Note to Substack, OR queue a text+image note (Substack + Bluesky + Threads) via the BroadBanner MCP connector — no local credentials, config, or tracker files. Use when the user wants to post a note, says 'post this to Substack' / 'share this as a note', or sends an image+caption. Text path: browser-posts to Substack, then queues Bluesky/Threads via post_text. Image path: no browser — post_image queues Bluesky/Threads now; Substack releases later via release-substack-text (which attaches the image). Worker KV is SoT."
+metadata:
+  requiresTool: banner_blast
 ---
 
 # Substack Note
@@ -12,7 +14,7 @@ Two branches:
 - **Text note** — browser automation posts to Substack, then the skill calls the **`post_text`** tool with `substackPosted: true` (Substack recorded posted; Bluesky/Threads queued).
 - **Text+image note** — no browser here. The skill calls the **`post_image`** tool with the image (a public URL or base64 bytes); the connector uploads to R2 and queues Bluesky/Threads **immediately** (they post images via API), while Substack is left **pending** and released later by the scheduled `release-substack-text` skill, which fetches the image from R2 and posts it as a Note. (Substack has no posting API, so the image goes out on the browser-release schedule, not the instant this skill runs.)
 
-**No local credentials, no config file, no tracker JSON.** Identity, the Substack handle, and the authorized pods all come from the connector (the creator signed in once via WorkOS). The browser is used *only* for the actual Substack text post. This is the post-CLI path — do **not** look for `broadbanner.config.json`, `.creds/`, `~/.broadbanner/`, `banner-blast init`, a cap-token, or HMAC signing.
+**No local credentials, no config file, no tracker JSON.** Identity, the Substack handle, and the authorized series all come from the connector (the creator signed in once via WorkOS). The browser is used *only* for the actual Substack text post. This is the post-CLI path — do **not** look for `broadbanner.config.json`, `.creds/`, `~/.broadbanner/`, `banner-blast init`, a cap-token, or HMAC signing.
 
 ---
 
@@ -45,7 +47,19 @@ If `substackHandle` is null, ask once: "What's your Substack username?" — but 
 handle; posting under the wrong account is a public mistake.
 
 There is no `USER_ID`, no cap-token, and no Chrome-profile config to load — the connector
-asserts identity, and the browser profile is selected **by handle** (Step 1.5).
+asserts identity, and the skill runs on the single connected Chrome profile (Step 1.5).
+
+**Entitlement preflight (advisory).** This skill is declared
+`metadata.requiresTool: banner_blast`. If `get_creator_context` returns a capability
+summary (`entitledTools` / `caps` / `tier`), confirm `banner_blast` ∈ `entitledTools`
+(or `creators:write` ∈ `caps`). If those fields are **present and the entitlement is
+absent**, stop **before** any browser/queue work with the CTA below and do nothing
+else. If the context response **omits** these fields (older connector), proceed — the
+server-side cap check on `post_text` / `post_image` is the backstop.
+
+> ⚠️ Posting to Substack needs the **Core** plan (`banner_blast`). Your account isn't
+> entitled yet — add it from your member portal →
+> https://app.broadbanner.com/pricing/membership. Nothing was posted.
 
 ---
 
@@ -68,11 +82,11 @@ immediately** (they post images via API), and **Substack is left pending** for t
 `release-substack-text` skill to post via browser (it attaches the image from R2). Full
 release — all three platforms — just with Substack on the release schedule rather than instant.
 
-### Step A1: Confirm caption, image, and pod
+### Step A1: Confirm caption, image, and series
 
-Resolve the pod from `PODS` (the `get_creator_context.pods` captured in Step 0.5):
+Resolve the series from `PODS` (the `get_creator_context.pods` captured in Step 0.5):
 
-1. If the user tagged a pod explicitly → use that pod ID (it must be in `PODS`).
+1. If the user tagged a series explicitly → use that series ID (it must be in `PODS`).
 2. Else if `PODS` has exactly one entry → use it.
 3. Else show the `PODS` list and ask the user to pick. Store as `POD_ID`.
 
@@ -85,7 +99,7 @@ I'll queue this as a text+image note for Bluesky, Threads, and Substack
 Caption:  {caption text}
 Image:    {filename or URL}
 Alt text: {alt text or "(none — recommended to add one)"}
-Pod:      {pod id}
+Series:   {series id}
 
 Ready to queue?
 ```
@@ -109,7 +123,7 @@ Call **`post_image`** with `{ caption, podId, altText?, (imageUrl | imageBase64 
 Append the brand from Step 0.5 only if one was explicitly passed to this run. The caption is
 the exact note text. Response: `{ trackerId, r2Key, publicUrl }`.
 
-If `post_image` errors, surface the message and stop — common causes are an unauthorized pod
+If `post_image` errors, surface the message and stop — common causes are an unauthorized series
 (not in `PODS`), an oversized/unsupported image, or an unreachable backend. Do **not** fall
 back to a cap-token, `POST /v1/posts/media`, or a local tracker.
 
@@ -149,22 +163,17 @@ Once confirmed, post without asking again.
 
 **Pre-approved notes:** if the dispatch prompt says the note is pre-approved, skip this step. Go straight to Step 1.5.
 
-### Step 1.5: Select the browser logged into `@{SUBSTACK_HANDLE}`
+### Step 1.5: Use the single connected browser
 
-The account is identified **by handle**, not by a config map. The right browser is the one
-already logged into `@{SUBSTACK_HANDLE}` (a multi-brand operator keeps each brand's Substack
-in its own Chrome profile, so selecting by handle picks the correct one):
+This skill runs on the operator's **single connected Chrome profile** — there is no
+profile map, no enumeration, and no `select_browser` routing. Use whatever browser is
+currently connected. If **no** browser is connected, **stop and tell the user** to
+connect (pair) the browser Cowork drives.
 
-```
-list_connected_browsers → pick the entry logged into @{SUBSTACK_HANDLE}
-select_browser({ deviceId: <matching deviceId> })
-```
-
-Skip if the current browser already matches. Login is verified for real in Step 2 (the
-profile page must show `@{SUBSTACK_HANDLE}`). If no connected browser is logged into that
-handle, **stop and tell the user** to log into `@{SUBSTACK_HANDLE}`'s Substack in the browser
-Cowork drives — posting under the wrong account is a public mistake. Suggest pairing it via
-`switch_browser`.
+Login is verified for real in Step 2 (the profile page must show `@{SUBSTACK_HANDLE}`).
+If the connected browser is logged into a **different** account, **stop and tell the
+user** to log into `@{SUBSTACK_HANDLE}`'s Substack in that browser — posting under the
+wrong account is a public mistake. Never switch to "another" browser to find the handle.
 
 ### Step 2: Open the browser, navigate, and capture baseline
 

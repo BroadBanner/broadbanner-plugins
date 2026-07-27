@@ -4,7 +4,7 @@ description: Run the substack-schedule-live skill daily for {{BRAND_DISPLAY}} �
 cronExpression: 10 3 * * *
 enabled: true
 ---
-You are running on a daily ~3:10am schedule. Invoke the `substack-schedule-live` skill from the `broadbanner-social-distribution` plugin. This run is pre-approved to run autonomously — do NOT pause for per-show confirmation.
+You are running on a daily ~3:10am schedule. Invoke the `substack-schedule-live` skill from the `broadbanner-live-production` plugin. This run is pre-approved to run autonomously — do NOT pause for per-show confirmation.
 
 ## Workspace pin
 
@@ -16,7 +16,7 @@ Invoke the skill; it handles the snapshot fetch, filtering, and Substack automat
 
 1. Fetches the current show snapshot from the BroadBanner Gateway/Data Worker (credentials in `{{CREDS_DIR}}/.env.json`).
 2. Filters shows that are titled, host-resolved, and waiting to be scheduled on Substack.
-   - **Brand isolation:** ALSO require the show's `podId` starts with `{{POD_PREFIX}}` ({{BRAND_DISPLAY}} pods: {{POD_IDS}}). Never process shows from other brands.
+   - **Brand isolation:** ALSO require the show's `podId` starts with `{{POD_PREFIX}}` ({{BRAND_DISPLAY}} series: {{POD_IDS}}). Never process shows from other brands.
 3. Applies the default 7-day scheduling horizon.
 4. If no eligible shows remain, exit quietly ("No shows ready to schedule"). This is the common case — not an error.
 5. Otherwise schedule each on Substack and PATCH the Data Worker with the scheduled state plus captured stream credentials.

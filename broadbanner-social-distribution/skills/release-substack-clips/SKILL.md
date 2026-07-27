@@ -1,6 +1,8 @@
 ---
 name: release-substack-clips
 description: "Release queued videos to Substack as Notes — restream clips AND creator-uploaded videos (BannerBlast post_video / web composer). Uses the BroadBanner MCP connector to list the creator's pending videos, fetches each in-page from R2, posts it as a Substack video Note via browser automation, and marks it released — no local credentials, config, or tracker files. Runs unattended on a schedule. Triggers on 'release my Substack clips' / 'post my pending clips', or the scheduled clip-release task. Replaces the refill-clip-queue + drain-clip-queue pair."
+metadata:
+  requiresTool: banner_blast
 ---
 
 # Release Substack Clips
@@ -57,7 +59,7 @@ it hosts, regardless of which brand each show belongs to — to **its own** hand
 independently, so the same clip legitimately goes out from the host's queue to the host
 handle **and** from the brand's queue to the brand handle — that is intended, not a
 double-post. **Never reassign a clip to a different handle than the running identity's
-just because of its pod.**
+just because of its series.**
 
 ## Step 1: List pending clips
 
@@ -68,7 +70,7 @@ is supplied. This covers both **restream clips** (`restream-clip`) and **creator
 videos** (`social-push` — from BannerBlast `post_video` / the web composer). They release
 identically: fetch `mediaUrl` in-page, attach, post. Uploaded videos have `podId: null` and
 no hashtags — that's expected; just post the `caption`. A brand-scoped run only sees clips
-(uploads carry no pod), so uploaded videos release on the default brandless run.
+(uploads carry no series), so uploaded videos release on the default brandless run.
 
 - **If `clips` is empty → exit immediately** with a one-line "nothing pending" report.
   Do **not** open a browser. This is the common, cheap path.
@@ -90,21 +92,27 @@ Call **`get_creator_context`** (pass the same `brand` from Step 0 if set) →
 account these clips post to. **With a brand, `substackHandle` is that brand's account**
 (e.g. `bannerandbackbone` for `babm`); without one it's the creator's default handle.
 
-Substack posting is browser automation (Option A — a local logged-in browser). The account
-is identified **by handle**, and the right Chrome profile is the one **already logged into
-`@{substackHandle}`** (no brand→profile-name config — profiles are selected by handle, so a
-multi-brand operator just keeps each brand's Substack logged into its own Chrome profile):
+**Entitlement preflight (advisory).** This skill is declared
+`metadata.requiresTool: banner_blast`. If the context returns a capability summary
+(`entitledTools` / `caps`) and `banner_blast` is **present-and-absent**, **do not open a
+browser** — exit quietly with a one-line "skipped: account not entitled for `banner_blast`"
+report (unattended; never prompt). If the fields are omitted (older connector), proceed —
+the server-side cap check is the backstop.
 
-1. `list_connected_browsers`. If none are connected → **stop and report** (no browser to drive).
-2. Select a connected browser. Open a **dedicated MCP working tab** with `tabs_create_mcp`
-   and **record its tabId in a running `OPENED_TABS` list** — do not hijack the user's
-   current tab, and track every tab you open (including the per-clip verification tabs in
-   Step 3c) so Step 4 closes exactly the skill's own tabs. In that tab, `navigate` to
-   `https://substack.com/@{substackHandle}` and `resize_window` to **1200×900**.
+Substack posting is browser automation (a local logged-in browser). This skill runs on
+the operator's **single connected Chrome profile** — no profile map, no enumeration, no
+`select_browser` routing:
+
+1. If **no** browser is connected → **stop and report** (no browser to drive).
+2. Use the single connected browser. Open a **dedicated MCP working tab** with
+   `tabs_create_mcp` and **record its tabId in a running `OPENED_TABS` list** — do not
+   hijack the user's current tab, and track every tab you open (including the per-clip
+   verification tabs in Step 3c) so Step 4 closes exactly the skill's own tabs. In that tab,
+   `navigate` to `https://substack.com/@{substackHandle}` and `resize_window` to **1200×900**.
 3. **Verify you are logged in as `{substackHandle}`** (the profile page shows that account).
    - Wrong account, or a login screen → **clean up (Step 4) and stop**, telling the user to
      log into `{substackHandle}`'s Substack in the browser Cowork drives. Posting under the
-     wrong identity is a public mistake — never guess across profiles.
+     wrong identity is a public mistake — never switch to "another" browser.
 
 ---
 

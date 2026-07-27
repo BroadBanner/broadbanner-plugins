@@ -28,9 +28,9 @@ To update later in Claude Code: `/plugin marketplace update broadbanner`.
 ## Plugins
 
 - `broadbanner-episode-pipeline` — End-to-end episode processing for Banner and Backbone Media. Orchestrates section selection, transcript download, transcript correction, episode review generation, and Pages publishing from a single Substack post URL.
-- `broadbanner-restream` — Restream workflow automation for Banner and Backbone Media. Schedule live stream events in Restream Studio and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI.
+- `broadbanner-live-production` — Creator+ live-production automation for Banner and Backbone Media. Schedule Substack and Restream live streams for the series you host, and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI. Maps to the creator_workspace entitlement (Creator+).
 - `broadbanner-scheduling` — Scheduled-task management for BroadBanner Cowork projects. Registers declarative scheduled-task specs (cron or one-time) into the Cowork scheduler from a project's .broadbanner/scheduled-tasks/ directory, filed under the project the skill is run from. Reusable across brands and expandable to any custom scheduled skill.
-- `broadbanner-social-distribution` — Social media distribution toolkit for Banner and Backbone Media. Post text or image notes to Substack/Bluesky/Threads, schedule Substack and Restream live streams, track cross-platform distribution status, and manage social publishing workflows.
+- `broadbanner-social-distribution` — Social posting toolkit for Banner and Backbone Media (Core tier / banner_blast). Post text, image, and video notes to Substack/Bluesky/Threads and release queued Substack notes and clips. Runs on a single connected Chrome profile. Live-stream scheduling moved to the broadbanner-live-production plugin.
 
 ---
 

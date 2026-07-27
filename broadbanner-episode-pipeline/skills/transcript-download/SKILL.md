@@ -33,7 +33,7 @@ Gather these from the user before starting. Use `<workspace-root>/pod-map.json` 
 | Input                 | Required    | Example                                              | Notes                                                                                                                          |
 | --------------------- | ----------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Substack URL          | Yes         | `https://sickofthis.substack.com/publish/post/12345` | Draft or published post URL                                                                                                    |
-| Pod ID                | Yes         | `sotsp-im`                                           | Must match an entry in `<workspace-root>/pod-map.json`                                                                      |
+| Series ID             | Yes         | `sotsp-im`                                           | Must match an entry in `<workspace-root>/pod-map.json`                                                                      |
 | Episode number        | Conditional | `25`                                                 | Integer. Required for season-based and book-based shows; **not used** for episodic shows.                                      |
 | Season or Book number | Conditional | `--season 1` or `--book 4`                           | Mutually exclusive. Required (or defaults to season 1) for season-based and book-based shows; **not used** for episodic shows. |
 | Short title           | Conditional | `forrest-page`                                       | Kebab-case; derived from post title if omitted. **Required** for episodic shows — it becomes the filename slug.                |
@@ -63,7 +63,7 @@ Required inputs depend on `broadbanner.config.json.shows[<pod-id>].seasonBookMod
 
 ### Step 1.5: Select the correct Chrome profile
 
-Before navigating, switch to the Claude-in-Chrome profile that owns the Substack publication for this episode's pod. See `../../references/chrome-profile-routing.md` for the full algorithm.
+Before navigating, switch to the Claude-in-Chrome profile that owns the Substack publication for this episode's series. See `../../references/chrome-profile-routing.md` for the full algorithm.
 
 1. Load `broadbanner.config.json` from the brand workspace root and read `chromeProfiles`.
 2. Look up `chromeProfiles.bySeriesId[pod_id]` first.

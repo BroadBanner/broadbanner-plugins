@@ -36,7 +36,7 @@ SKILL.md Step 0).
 
 Replaces `GET /v1/restream-workspaces`. The response is account-oriented —
 `accounts[i]` is a Restream account (1:1 with networks), each with its
-`workspaces[]` and per-workspace `podIds[]`. Look up a pod by walking
+`workspaces[]` and per-workspace `podIds[]`. Look up a series by walking
 `accounts[].workspaces[].podIds[]`; the matching workspace's `workspaceName` is
 what you pass to `upsert_restream_event` — **unless `isDefault` is true, in which
 case OMIT the `workspace` arg entirely** (never pass an empty string).

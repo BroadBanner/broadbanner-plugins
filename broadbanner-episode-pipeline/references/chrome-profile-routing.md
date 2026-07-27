@@ -1,6 +1,6 @@
 # Chrome Profile Routing
 
-Some pods belong to shared/co-owned Substack and Restream accounts that live in a separate Chrome profile from the brand's primary profile. Browser-driving skills must select the correct Claude-in-Chrome browser profile **before** any browser action, otherwise the automation will hit the wrong account.
+Some series belong to shared/co-owned Substack and Restream accounts that live in a separate Chrome profile from the brand's primary profile. Browser-driving skills must select the correct Claude-in-Chrome browser profile **before** any browser action, otherwise the automation will hit the wrong account.
 
 ## Source of truth
 
@@ -57,6 +57,6 @@ Re-resolve and re-switch **before each show** when iterating multiple shows in o
 
 ## When to skip
 
-- The skill has no seriesId/brand context (e.g., manual single-clip publish where pod isn't known) → use whatever browser is selected and note the assumption in the user-facing report.
+- The skill has no seriesId/brand context (e.g., manual single-clip publish where the series isn't known) → use whatever browser is selected and note the assumption in the user-facing report.
 - `chromeProfiles` block is absent from the config → use whatever browser is selected (legacy behavior).
 - The current browser already matches the resolved deviceId → no switch.

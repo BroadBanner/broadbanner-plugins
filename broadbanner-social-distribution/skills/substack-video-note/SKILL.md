@@ -9,6 +9,8 @@ description: >
   R2 in-page and injects it into the composer (no local file), posts via browser
   automation, and updates the tracker JSON in-place — does NOT create a new
   tracker or cross-post to Bluesky/Threads.
+metadata:
+  requiresTool: banner_blast
 ---
 
 # Substack Video Note
@@ -71,6 +73,12 @@ This skill expects either:
 > and marks release via the `mark_substack_posted` tool instead of editing a
 > tracker file. The tracker-file steps (0, 1, 8) apply to the interactive path only.
 
+> **Entitlement (`metadata.requiresTool: banner_blast`).** The interactive tracker path
+> is a local operation and is not gated here. When this skill's browser flow is driven by
+> the connector caller (`release-substack-clips`), that caller runs the `banner_blast`
+> entitlement preflight; the connector's `post_*` / release cap check is the server-side
+> backstop either way. No local preflight is performed in this file.
+
 When invoked interactively with a tracker path, fields read from the tracker:
 
 - `clip.r2_key` — the canonical R2 object key (shape:
@@ -82,7 +90,8 @@ When invoked interactively with a tracker path, fields read from the tracker:
 - `clip.caption` — note text. If `null`, fall back to `clip.title`.
 - `clip.hashtags` — appended to the note text, space-separated, prefixed
   with `#` if not already.
-- `clip.pod_id` — used for Chrome profile routing (Step 1.5).
+- `clip.pod_id` — the clip's series id (used for the tracker/media key, not for
+  browser routing — this skill runs on the single connected profile).
 - `platforms.substack.status` — must be `"pending"` (or `"queued"` if a caller
   set a soft lock before delegating). Anything else (`posted`/`skipped`/`failed`)
   → refuse and report.
@@ -97,12 +106,13 @@ target the existing JSON in the real host `Social-Distribution/` directory. If
 the mount is unavailable and cannot be requested non-interactively, stop and
 tell the user the tracker cannot be updated.
 
-Also load `broadbanner.config.json` from the project root and capture:
-- the `chromeProfiles` block — used in Step 1.5, and
-- `SUBSTACK_HANDLE` = `user.handle` — the Substack Notes profile to post from
-  (same resolution as `substack-note`). This is the user/personal Notes handle
-  that fronts the publication, which may differ from the publication subdomain.
-  If `user.handle` is absent, ask once for the handle.
+Also load `broadbanner.config.json` from the project root and capture
+`SUBSTACK_HANDLE` = `user.handle` — the Substack Notes profile to post from (same
+resolution as `substack-note`). This is the user/personal Notes handle that fronts
+the publication, which may differ from the publication subdomain. If `user.handle`
+is absent, ask once for the handle. (There is **no** `chromeProfiles` block to read —
+this skill runs on the single connected Chrome profile; see "Single browser profile"
+in Key technical notes.)
 
 ### Step 1: Validate inputs
 
@@ -121,30 +131,6 @@ ONLY when invoked interactively. When driven by `release-substack-clips`
 (the unattended scheduled flow), skip confirmation — that skill is the
 gating layer.
 
-### Step 1.5: Select the correct Chrome profile
-
-Before any browser action, switch to the profile that owns the Substack
-account for this clip's pod. See `references/chrome-profile-routing.md`.
-
-Quick version:
-
-1. `chromeProfiles.byPodId[tracker.clip.pod_id]` (highest priority; `bySeriesId` is an accepted alias).
-2. Else `chromeProfiles.byBrand[<brand for pod_id>]` (resolve brand via
-   `pod_id` prefix or pod-map).
-3. Else `chromeProfiles.default` (multi-brand contributor hubs that post every
-   hosted show to one personal account set just this).
-4. Else: skip the switch.
-
-If a target deviceId resolved:
-
-```
-list_connected_browsers → confirm <resolved deviceId> is in the connected list (ignore the `name` field — it's a volatile ordinal)
-select_browser({ deviceId: <resolved deviceId> })
-```
-
-Skip if already selected. If the resolved deviceId is not in the connected list, **stop** —
-posting under the wrong account is destructive.
-
 ### Step 2: Open the browser, resize, and capture baseline
 
 Identical to `substack-note` Step 2:
@@ -155,9 +141,12 @@ navigate: https://substack.com/@{SUBSTACK_HANDLE}
 wait 3s
 ```
 
-Confirm the profile is visible and the user is logged in. Capture the
-baseline top-note text (via `references/js-verification.md` or
-`get_page_text`) for comparison in Step 7.
+Use the **single connected** Chrome browser (no profile selection). Confirm the
+profile page shows `@{SUBSTACK_HANDLE}` and the user is logged in — if it shows a
+different account or a login screen, **stop and report** (posting under the wrong
+account is a public mistake; never switch to "another" browser). Capture the
+baseline top-note text (via `references/js-verification.md` or `get_page_text`) for
+comparison in Step 7.
 
 ### Step 3: Open the note composer
 
@@ -292,3 +281,8 @@ false "failure" reads is wide — be especially conservative.
   on this for idempotency.
 - **Single source of truth for success is the second-tab profile read**,
   not modal state.
+- **Single browser profile.** This skill runs on the one connected Chrome profile —
+  the operator's sole BroadBanner profile. There is no `chromeProfiles` config, no
+  profile enumeration, and no `select_browser` routing. Verify the connected browser
+  is logged into `@{SUBSTACK_HANDLE}` (Step 2); if it isn't, stop — never select a
+  different browser.

@@ -22,7 +22,7 @@ This skill produces the review as a markdown file. It does not write to the Page
 | Input                     | Required    | Example                                     | Notes                                           |
 | ------------------------- | ----------- | ------------------------------------------- | ----------------------------------------------- |
 | Corrected transcript path | Yes         | `Social-Distribution/transcripts/.../IM_s1e25_forrest-page.txt` | Output of transcript-correction skill           |
-| Pod ID                    | Yes         | `sotsp-im`                                  | Used to load show metadata and resolve all tags |
+| Series ID                 | Yes         | `sotsp-im`                                  | Used to load show metadata and resolve all tags |
 | Episode slug              | Yes         | `IM_s1e25_forrest-page`                     | Used for output filename                        |
 | Publish date              | Recommended | `2026-03-31`                                | For SEO title. If unknown, use today's date.    |
 

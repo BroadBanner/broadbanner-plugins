@@ -1,6 +1,8 @@
 ---
 name: restream-schedule-live
-description: "Schedule Restream Studio events from BroadBanner show data. Use when the user says 'schedule the restream events', 'schedule restream', or 'set up restream' for upcoming podcast episodes. Reads shows and writes scheduled-event state via the BroadBanner MCP connector's admin tools, and automates the Restream scheduling UI via browser to pair the correct Substack channel. Connector-only (OAuth); requires a brand-admin or super-admin role."
+description: "Schedule Restream Studio events from BroadBanner show data. Use when the user says 'schedule the restream events', 'schedule restream', or 'set up restream' for upcoming shows. Reads shows and writes scheduled-event state via the BroadBanner MCP connector's admin tools, and automates the Restream scheduling UI via browser to pair the correct Substack channel. Connector-only (OAuth); requires a brand-admin or super-admin role."
+metadata:
+  requiresTool: creator_workspace
 ---
 
 # Restream Schedule Live
@@ -120,9 +122,9 @@ Scheduling state lives in D1's `restream_events` table, reached through the conn
 
 **Row identity is `(show_id, restream_workspace)`** — a single show can have a row per workspace because each Restream workspace carries its own OAuth credential set (SOTSP's `sick-of-this-show` and `time-for-life` are the canonical example). When the user's Restream account has no workspace selector at all (e.g. LR / LevRemembers), the workspace is `null` and there's exactly one row per show.
 
-The account → workspace → pod-id catalog comes from `get_restream_workspaces` (no arguments). The response is account-oriented — `accounts[i]` is a Restream account (1:1 with networks), each with its `workspaces[]` and per-workspace `podIds[]`. Look up a pod by walking `accounts[].workspaces[].podIds[]` and using the matching workspace's `workspaceName`. When `isDefault` is true, **omit the `workspace` arg** on `upsert_restream_event`; Restream's API treats single-workspace accounts as not requiring it. For multi-workspace accounts, each workspace must be queried independently (one `list_restream_events({ workspace })` per workspace).
+The account → workspace → pod-id catalog comes from `get_restream_workspaces` (no arguments). The response is account-oriented — `accounts[i]` is a Restream account (1:1 with networks), each with its `workspaces[]` and per-workspace `podIds[]`. Look up a series by walking `accounts[].workspaces[].podIds[]` and using the matching workspace's `workspaceName`. When `isDefault` is true, **omit the `workspace` arg** on `upsert_restream_event`; Restream's API treats single-workspace accounts as not requiring it. For multi-workspace accounts, each workspace must be queried independently (one `list_restream_events({ workspace })` per workspace).
 
-> The catalog lives in D1's `restream_accounts` + `restream_workspaces` + `pods.restream_workspace_id` (D1 migs 0027 + 0028) — adding a new account, workspace, or pod assignment is a SQL change, no skill edit + redeploy. The legacy `references/restream-workspaces.json` is retained in-repo only as historical reference.
+> The catalog lives in D1's `restream_accounts` + `restream_workspaces` + `pods.restream_workspace_id` (D1 migs 0027 + 0028) — adding a new account, workspace, or series assignment is a SQL change, no skill edit + redeploy. The legacy `references/restream-workspaces.json` is retained in-repo only as historical reference.
 
 **Read path** — `list_restream_events({ workspace })` returns the workspace's rows; an optional `event_status` narrows by status. This is a read of the D1 cache, **not** an authoritative source for "is this event already scheduled" — Step 0 explicitly does not use this tool as a pre-flight filter (see the warning in Step 0). Treat any read here as informational. The response shape:
 
@@ -161,6 +163,21 @@ The account → workspace → pod-id catalog comes from `get_restream_workspaces
 The poller (`cli:restream-poller`) owns channel metadata (`show_title`, `show_date`, `channel_*`, `last_synced_at`) — this skill must not write those fields. The route's actor allowlist returns an error if it tries.
 
 ## Step-by-step workflow
+
+### Step 0 preflight: Entitlement/authority check (advisory)
+
+This skill is declared `metadata.requiresTool: creator_workspace` (Creator+ live
+scheduling). Before any browser work, call `get_creator_context` and, if it returns a
+capability summary (`caps` / `entitledTools` / `isAdmin` / `tier`), confirm the caller can
+schedule: either `isAdmin` (brand-admin/super-admin — today's gate) **or** the
+live-scheduling cap is present (`shows:write`, or `shows:self-write` once creator-scoped
+scheduling ships). If those fields are present and none holds, stop **before** any browser
+work with the CTA below. If the context omits the fields (older connector), proceed — the
+admin scheduling tools fail closed as the backstop.
+
+> ⚠️ Live scheduling needs the **Creator+** plan (`creator_workspace`) or a brand-admin
+> role. Your account isn't authorized yet — add it from your member portal →
+> https://app.broadbanner.com/pricing/membership. Nothing was scheduled.
 
 ### Step 0: Load show data and run the freshness gate
 
@@ -325,7 +342,7 @@ Read the status badge on the matching event row via `read_page: filter=interacti
 | Visible badge                                                        | Action                                                                                                                                                                                                                                                                                              |
 | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Draft**                                                            | Proceed to Step 3.                                                                                                                                                                                                                                                                                  |
-| **Scheduled**                                                        | Skip this show. Note it in the final report as "already Scheduled — no action." Optionally call `upsert_restream_event` in Step 6 to align `event_status: "scheduled"` with the UI (best-effort sync; do not block on failure). Do NOT click into the Schedule modal — that would clobber the existing pairing or date. |
+| **Scheduled**                                                        | Skip this show. Note it in the final report as "already Scheduled — no action." Optionally call `upsert_restream_event` in Step 6 to align `event_status: "scheduled"` with the UI (best-effort sync; do not block on failure). Do NOT click into the Schedule modal — that would clobber the existing pairing or date. **Exception — title drift:** if the Scheduled event's visible title no longer matches the show's current `showTitle` (the episode was renamed in BroadBanner *after* it was scheduled), don't just skip — fix it via ⋮ → **Update titles** (see "Re-titling a scheduled show" below). That changes only the title, never the schedule or channel pairing. |
 | **Live** / **In progress**                                           | Skip this show. Note it in the final report as "already Live — no action." Never attempt to reschedule an in-progress event.                                                                                                                                                                        |
 | **Finished** (rare — appears on stale rows the user hasn't archived) | Skip this show with a `finished` note in the report. Do NOT reschedule a finished event row — the user would create a fresh draft event instead.                                                                                                                                                    |
 | Missing badge / unrecognized text                                    | Surface to the user before acting. Take a screenshot or `read_page` excerpt and ask whether to proceed. Do not guess.                                                                                                                                                                               |
@@ -370,6 +387,21 @@ The Title field is **pre-filled with the draft's current (often previous-episode
 find: "Title input"
 form_input: ref=<title_ref>, value="<show.showTitle>"
 ```
+
+#### 4a-bis: Set the description
+
+If the show provides a non-empty `showSummary`, set the modal's **Description** text
+area to it so the scheduled Restream event carries the episode summary (it shows on the
+event page and social cards Restream generates). Skip this when `showSummary` is empty or
+absent — leave the field as-is.
+
+```
+find: "Description input"    # the text area directly below Title
+form_input: ref=<description_ref>, value="<show.showSummary>"
+```
+
+The Description is **not load-bearing** for scheduling. If the field can't be located, or
+`form_input` is blocked, log it and continue — never block the schedule on the description.
 
 #### 4b: Set the date
 
@@ -543,6 +575,49 @@ D1 written for workspace=<workspace> (or __none__).
 ```
 
 If any shows failed, list them separately with the failure reason.
+
+## Re-titling a scheduled show (title drift)
+
+When a show's title changes in BroadBanner **after** its Restream event was already
+scheduled, the scheduled event keeps the **old** title (Restream's API can't reschedule
+or rename a draft/scheduled event — only the browser UI can). Restream's public API also
+exposes no update-event endpoint, so this fix is browser-only.
+
+Trigger this flow when **either**:
+
+- Step 2's badge check finds a **Scheduled** event whose visible title no longer matches
+  the show's current `showTitle`, **or**
+- the user explicitly asks to fix a scheduled show's title (e.g. "the title changed —
+  update the Restream event for {show}").
+
+> Detection note: an already-`restream_scheduled` show is normally **excluded** from
+> `list_schedulable_shows` (it filters to `substack_scheduled` / `restream_paired`). So
+> the main loop won't surface a drifted-after-scheduling show on its own — this is an
+> operator-invoked fix, or one you catch when the show is in the list for another reason.
+
+### Steps
+
+1. Navigate to the correct workspace for the show (Step 1.5) and find the event row
+   (Step 2). Confirm the badge reads **Scheduled** (not Live/Finished — never touch those).
+2. Click the **⋮ menu** on the event row and select **Update titles** — NOT "Schedule".
+   "Update titles" changes only the title/description; it does **not** re-open the
+   date/time or channel-pairing flow, so the existing schedule and paired channel are
+   preserved.
+3. In the Update-titles modal, use `find` + `form_input` to overwrite the **Title** with
+   the show's current `showTitle`, and (if the modal exposes it) the **Description** with
+   the show's `showSummary`. Save/confirm.
+4. Verify via `read_page` that the event row now shows the new title and still reads
+   **Scheduled**.
+5. **State:** do not attempt to write `show_title` to D1 via `upsert_restream_event` — the
+   skill's actor may only write `event_id`/`event_status`/`scheduled_at` (the poller owns
+   `show_title`, and the Restream-Worker channel-sync already reconciles D1's recorded
+   `show_title` to the current BroadBanner title on its next `*/30` pass). The auto-title
+   Studio caption (if enabled for the series) also re-syncs to the new title
+   automatically. So no MCP write is required here — the browser title fix is the whole job.
+
+If **Update titles** isn't in the ⋮ menu (older Restream UI), fall back to ⋮ → **Edit
+event**, change only the Title/Description, and save without altering the date/time or
+channels.
 
 ## Error handling
 

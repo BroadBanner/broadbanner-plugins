@@ -1,18 +1,25 @@
 # BroadBanner Social Media Distribution Plugin
 
-Social media distribution toolkit for **Banner and Backbone Media**. Automates posting to social platforms and tracks cross-platform distribution status.
+Social **posting** toolkit for **Banner and Backbone Media** — Core tier, the
+`banner_blast` entitlement. Post text/image/video notes to Substack/Bluesky/Threads and
+release queued Substack notes and clips. Browser automation runs on the operator's
+**single connected Chrome profile** (no profile routing).
+
+> **Live-stream scheduling moved.** `substack-schedule-live` (and Restream scheduling)
+> now live in the **`broadbanner-live-production`** plugin (Creator+ / `creator_workspace`),
+> so this Core-tier plugin no longer ships an admin-only scheduling skill.
 
 ## Skills
 
 | Skill                      | Auth path                | What it does                                                                                                                   |
 | -------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `substack-note`            | Gateway-only             | Post a text Note to Substack via browser automation, or queue an image note for Bluesky/Threads. Worker KV is SoT.             |
-| `substack-schedule-live`   | Gateway-only             | Schedule upcoming live streams in the Substack publisher dashboard; PATCH stream credentials back to D1 via the Gateway.       |
+| `substack-note`            | MCP connector (+ browser) | Post a text Note to Substack via browser automation, or queue an image note for Bluesky/Threads. Worker KV is SoT.             |
 | `substack-video-note`      | Local-only / technique ref | Post a Substack Note with a video clip via browser automation (fetches the clip from R2 in-page). Interactively reads/updates a tracker JSON; also the **browser-technique reference** reused by `release-substack-clips`. |
 | `release-substack-text`    | MCP connector (+ browser) | **Consumer (text).** Scheduled poller for web-composed text posts: calls the **BroadBanner MCP connector** (`list_pending_substack` / `get_creator_context` / `mark_substack_posted`) — **no local creds or config** — and posts each as a Substack Note via browser automation (reuses substack-note). Substack-only; Bluesky/Threads go via the Worker queue. Single self-contained task. |
 | `release-substack-clips`   | MCP connector (+ browser) | **Consumer (clips).** Scheduled poller for video clips — the MCP successor to the old `refill-clip-queue` + `drain-clip-queue` pair. Calls the connector (`list_pending_clips` / `get_creator_context` / `mark_substack_posted`) — **no local creds, config, or local queue** — and posts each clip as a Substack video Note (reuses substack-video-note's in-page R2 fetch + inject). Substack-only; caps 2/run. |
 
-> Restream scheduling (`restream-schedule-live`) lives in the sibling plugin **`broadbanner-restream`**, not here. It's Gateway-only as of the 2026-05-21 cutover.
+> Live-stream scheduling (`substack-schedule-live`, `restream-schedule-live`) lives in the
+> sibling plugin **`broadbanner-live-production`** (Creator+ / `creator_workspace`), not here.
 
 ## How it works (substack-note)
 
@@ -24,11 +31,14 @@ Social media distribution toolkit for **Banner and Backbone Media**. Automates p
 ## Requirements
 
 - An authenticated Substack session in your browser (none of the skills automate login).
-- Claude in Chrome extension (for browser automation).
-- A BroadBanner workspace initialized with `banner-blast init` (or `banner-admin init`), which provisions:
-  - `<PROJECT_ROOT>/broadbanner.config.json`
-  - `<PROJECT_ROOT>/.creds/gateway.token` (mode 0700) — the capability token the skills use for all Gateway calls.
-- For `substack-schedule-live`: admin-tier cap-token (`is_admin === 1` in D1.contributors), which auto-claims `shows:read`, `shows:write`, `restream:read`, `restream:write` from `@broadbanner/core` 1.16.0+.
+- Claude in Chrome extension (for browser automation) — a **single** connected BroadBanner
+  Chrome profile. The skills do not enumerate or route among profiles; they verify the
+  connected browser is logged into the expected account and stop if it isn't.
+- The **BroadBanner MCP connector** (`mcp.broadbanner.com`) connected — the connector-based
+  skills (`substack-note`, `release-substack-text`, `release-substack-clips`) get identity,
+  the Substack handle, and authorized series from it; no local `broadbanner.config.json` or
+  `.creds/` is required for those. (The interactive `substack-video-note` tracker path still
+  reads a local tracker JSON.)
 
 ## Distribution tracker schema (substack-note request body)
 
@@ -66,7 +76,6 @@ The `substack-note` skill includes an eval suite in `skills/substack-note/evals/
 This plugin ships with all reference files it needs — no external source directories or CLI repos required (the legacy `BroadBanner/Skills/` and `BroadBanner/CLI-Assistant/` sources are retired):
 
 - **Skill instructions** — each skill under `skills/` includes its own SKILL.md, error-handling references, and JS verification snippets
-- **Gateway-auth reference** — `skills/substack-schedule-live/references/gateway-auth.md` covers cap-token usage for the shows endpoints
 
 Runtime working directories (`Social-Distribution/`) remain in the host BroadBanner tree. Live show data is fetched at runtime from the BroadBanner Gateway (`https://gateway.broadbanner.com/v1/shows`, D1-backed via Service Binding to the Data Worker); the deprecated local `wix-latest.json` written by `banner-admin wix-poller` is no longer the source of truth, and skills no longer hit `data.broadbanner.com` directly.
 

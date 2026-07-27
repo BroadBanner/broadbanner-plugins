@@ -23,7 +23,7 @@ The result is faster, cheaper, and more consistent.
 | Input                | Required    | Example                                                                                                  | Notes                                                     |
 | -------------------- | ----------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | Transcript file path | Yes         | `Social-Distribution/transcripts/sick-of-this-shit-publications/intelligent-masculinity/season-01/IM_s1e25_forrest-page.txt` | The raw .txt from Substack                                |
-| Pod ID               | Yes         | `sotsp-im`                                                                                               | Used to load series metadata                              |
+| Series ID            | Yes         | `sotsp-im`                                                                                               | Used to load series metadata                              |
 | Guest name(s)        | Recommended | `Forrest Page`                                                                                           | Helps with speaker attribution. If unknown, ask the user. |
 | Episode identifier   | Recommended | `S1E25`                                                                                                  | For the corrected transcript header                       |
 | Episode date         | Recommended | `2026-03-31`                                                                                             | For the corrected transcript header                       |

@@ -257,7 +257,7 @@ if len(original_title) > 100:
 ### Step 3.5: Select the correct Chrome profile
 
 Before any browser action, switch to the Claude-in-Chrome profile that owns
-the Restream account for this clip's pod. See `references/chrome-profile-routing.md`
+the Restream account for this clip's series. See `references/chrome-profile-routing.md`
 for the full algorithm.
 
 Quick version:

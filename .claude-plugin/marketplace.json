@@ -18,10 +18,10 @@
       }
     },
     {
-      "name": "broadbanner-restream",
-      "source": "./broadbanner-restream",
-      "version": "0.17.0",
-      "description": "Restream workflow automation for Banner and Backbone Media. Schedule live stream events in Restream Studio and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI.",
+      "name": "broadbanner-live-production",
+      "source": "./broadbanner-live-production",
+      "version": "0.1.0",
+      "description": "Creator+ live-production automation for Banner and Backbone Media. Schedule Substack and Restream live streams for the series you host, and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI. Maps to the creator_workspace entitlement (Creator+).",
       "author": {
         "name": "Banner and Backbone Media"
       }
@@ -29,7 +29,7 @@
     {
       "name": "broadbanner-scheduling",
       "source": "./broadbanner-scheduling",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "description": "Scheduled-task management for BroadBanner Cowork projects. Registers declarative scheduled-task specs (cron or one-time) into the Cowork scheduler from a project's .broadbanner/scheduled-tasks/ directory, filed under the project the skill is run from. Reusable across brands and expandable to any custom scheduled skill.",
       "author": {
         "name": "Banner and Backbone Media"
@@ -38,8 +38,8 @@
     {
       "name": "broadbanner-social-distribution",
       "source": "./broadbanner-social-distribution",
-      "version": "0.39.1",
-      "description": "Social media distribution toolkit for Banner and Backbone Media. Post text or image notes to Substack/Bluesky/Threads, schedule Substack and Restream live streams, track cross-platform distribution status, and manage social publishing workflows.",
+      "version": "0.41.0",
+      "description": "Social posting toolkit for Banner and Backbone Media (Core tier / banner_blast). Post text, image, and video notes to Substack/Bluesky/Threads and release queued Substack notes and clips. Runs on a single connected Chrome profile. Live-stream scheduling moved to the broadbanner-live-production plugin.",
       "author": {
         "name": "Banner and Backbone Media"
       }

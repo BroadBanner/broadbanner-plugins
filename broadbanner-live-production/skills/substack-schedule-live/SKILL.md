@@ -1,6 +1,8 @@
 ---
 name: substack-schedule-live
-description: "Schedule a Substack live stream from BroadBanner show data. Use when the user says 'schedule the lives', 'schedule substack streams', or 'set up the live streams' for upcoming podcast episodes. Reads show data via the BroadBanner MCP connector's admin tools, automates the Substack 'Go live with stream key' modal via browser, invites co-hosts, captures stream credentials, and writes them back to D1. Connector-only (OAuth); requires a brand-admin or super-admin role."
+description: "Schedule a Substack live stream from BroadBanner show data. Use when the user says 'schedule the lives', 'schedule substack streams', or 'set up the live streams' for upcoming shows. Reads show data via the BroadBanner MCP connector's admin tools, automates the Substack 'Go live with stream key' modal via browser, invites co-hosts, captures stream credentials, and writes them back to D1. Connector-only (OAuth); requires a brand-admin or super-admin role."
+metadata:
+  requiresTool: creator_workspace
 ---
 
 # Substack Schedule Live
@@ -102,6 +104,21 @@ Use `DATETIME_LOCAL` (the `BROWSER_TZ`-converted value) — **never `scheduledSt
 When you report the show list to the user (Step 0) and the final summary (Step 11), display both the machine-local time (what was actually scheduled) and, when it differs, the show's stored timezone wall-clock — so the user can sanity-check the conversion at a glance.
 
 ## Step-by-step workflow
+
+### Step 0 preflight: Entitlement/authority check (advisory)
+
+This skill is declared `metadata.requiresTool: creator_workspace` (Creator+ live
+scheduling). Before any browser work, call `get_creator_context` and, if it returns a
+capability summary (`caps` / `entitledTools` / `isAdmin` / `tier`), confirm the caller can
+schedule: either `isAdmin` (brand-admin/super-admin — today's gate) **or** the
+live-scheduling cap is present (`shows:write`, or `shows:self-write` once creator-scoped
+scheduling ships). If those fields are present and none holds, stop **before** any browser
+work with the CTA below. If the context omits the fields (older connector), proceed — the
+admin scheduling tools (`list_schedulable_shows` etc.) fail closed as the backstop.
+
+> ⚠️ Live scheduling needs the **Creator+** plan (`creator_workspace`) or a brand-admin
+> role. Your account isn't authorized yet — add it from your member portal →
+> https://app.broadbanner.com/pricing/membership. Nothing was scheduled.
 
 ### Step 0: Fetch show data and run the freshness gate
 
@@ -659,3 +676,25 @@ browser-automation failures (e.g. modal didn't open) and write failures (e.g. to
 - **Substack renders TWO dialog elements.** The first contains the main modal, the second contains the co-host / credentials modal. Always scope `read_page` to the correct dialog ref.
 - **Always create a new tab** for each show. Do not reuse tabs — modal state and extension interference can carry over.
 - **Single browser profile.** This is production-support scheduling run from whatever Chrome profile is connected; there is no per-show profile routing. The operator can schedule for themselves and for other primary hosts across publications in that one profile.
+
+## Re-titling a scheduled live after a title change (PLANNED — not yet automated)
+
+> **Status: documented, not implemented.** No code path below is wired yet — this
+> section records the intended flow so it's ready to build. Do not attempt to
+> auto-run it.
+
+When a show's title changes in BroadBanner **after** its Substack live was already
+scheduled, the scheduled live keeps the **old** title. The analogous fix to the Restream
+skill's "Re-titling a scheduled show" flow would be:
+
+1. Detect the drift the same way — the show's current `showTitle` differs from the title
+   captured when the live was scheduled (surface it, or act when the user asks).
+2. Re-open the show's already-scheduled Substack live (the "Go live with stream key"
+   surface / scheduled-event editor for that `substackLiveUrl`).
+3. Update **only** the title (and description) to the current `showTitle` / `showSummary`,
+   without regenerating the stream key or touching the schedule / co-host invites.
+4. Leave D1 state alone — the title lives in BroadBanner; nothing Substack-side needs a
+   writeback for a title-only edit.
+
+Until this is built, a title change after Substack scheduling must be fixed by hand in
+the Substack UI.

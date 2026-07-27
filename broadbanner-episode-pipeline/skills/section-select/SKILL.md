@@ -1,17 +1,17 @@
 ---
 name: section-select
-description: "Select the correct Substack section for a podcast episode before publishing. Use this skill when a Substack post needs to be assigned to a specific section (series/podcast) on a multi-section publication. Triggers when the user mentions selecting a section, assigning a section, or when the Substack editor is open and the post needs a section before transcript download. This is the first step in the episode pipeline for multi-section publications."
+description: "Select the correct Substack section for a show before publishing. Use this skill when a Substack post needs to be assigned to a specific section (series) on a multi-section publication. Triggers when the user mentions selecting a section, assigning a section, or when the Substack editor is open and the post needs a section before transcript download. This is the first step in the episode pipeline for multi-section publications."
 ---
 
 # Section Select
 
-Assign a Substack post to the correct publication section based on the podcast's pod-id. This ensures the post is filed under the right series before any downstream pipeline steps (transcript download, correction, review, publish).
+Assign a Substack post to the correct publication section based on the series's pod-id. This ensures the post is filed under the right series before any downstream pipeline steps (transcript download, correction, review, publish).
 
 ## Why this skill exists
 
-Substack publications that host multiple podcasts or series use "sections" to organize content. When a new episode post is created (usually auto-generated from a live video recording), it lands in the publication root with no section assigned. The section must be selected manually in the Substack editor before the post is finalized.
+Substack publications that host multiple series use "sections" to organize content. When a new episode post is created (usually auto-generated from a live video recording), it lands in the publication root with no section assigned. The section must be selected manually in the Substack editor before the post is finalized.
 
-This skill automates that selection by reading the podcast name from show metadata and clicking the matching section in the Substack editor's dropdown.
+This skill automates that selection by reading the series name from show metadata and clicking the matching section in the Substack editor's dropdown.
 
 ## When to use this skill
 
@@ -31,7 +31,7 @@ This skill automates that selection by reading the podcast name from show metada
 | Input             | Required | Example                                                  | Notes                                               |
 | ----------------- | -------- | -------------------------------------------------------- | --------------------------------------------------- |
 | Substack post URL | Yes      | `https://sickofthis.substack.com/publish/post/192891809` | The editor URL for the post                         |
-| Pod ID            | Yes      | `sotsp-tfl`                                              | Used to look up the podcast name from show metadata |
+| Series ID         | Yes      | `sotsp-tfl`                                              | Used to look up the series name from show metadata  |
 
 If the user provides a URL, the pod-id can often be inferred from the subdomain using `<workspace-root>/pod-map.json` (the workspace root is the directory containing `broadbanner.config.json` — walk up from CWD if needed). However, publications with multiple shows on the same subdomain (like `sickofthis.substack.com`) require an explicit pod-id to determine which section to select.
 
@@ -51,7 +51,7 @@ Look up `shows[<pod-id>].displayName` — this is the human-readable name that m
 
 ### Step 1.5: Select the correct Chrome profile
 
-Before navigating, switch to the Claude-in-Chrome profile that owns the Substack publication for this pod. See `../../references/chrome-profile-routing.md` for the full algorithm.
+Before navigating, switch to the Claude-in-Chrome profile that owns the Substack publication for this series. See `../../references/chrome-profile-routing.md` for the full algorithm.
 
 1. Load `broadbanner.config.json` from the brand workspace root and read `chromeProfiles`.
 2. Look up `chromeProfiles.bySeriesId[pod_id]` first.
@@ -78,7 +78,7 @@ Confirm the page has loaded by checking for the presence of the section selector
 Look at the section selector button text:
 
 - **If it reads "Choose a section"** → no section is assigned yet. Proceed to Step 4.
-- **If it already shows the correct podcast name** → report "Section already set to [name]. No action needed." and stop.
+- **If it already shows the correct series name** → report "Section already set to [name]. No action needed." and stop.
 - **If it shows a different section name** → proceed to Step 4 to change it. Report what it was previously set to.
 
 ### Step 4: Open the section dropdown
@@ -88,7 +88,7 @@ Click the "Choose a section" button (or the currently-assigned section button) i
 Wait for the dropdown to appear. The dropdown contains:
 
 - The publication name (brand-level section, always first)
-- Individual series/podcast sections
+- Individual series sections
 
 ### Step 5: Select the matching section
 

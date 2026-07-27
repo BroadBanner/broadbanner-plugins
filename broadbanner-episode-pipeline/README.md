@@ -10,7 +10,7 @@ End-to-end episode processing for **Banner and Backbone Media**. Takes a Substac
 
 ## How it works
 
-1. Provide a Substack post URL, pod ID, and episode identifier
+1. Provide a Substack post URL, series ID, and episode identifier
 2. The pipeline loads show metadata and runs each step in sequence
 3. You can resume from any step if something needs to be re-run
 
@@ -38,4 +38,4 @@ This plugin ships the sub-skill logic; per-show data lives in the user's workspa
 
 ## For the production team
 
-This plugin is installed via Cowork. Updates publish automatically when changes are pushed to `main`. To process an episode, just say "run the pipeline" and provide the Substack URL and pod ID.
+This plugin is installed via Cowork. Updates publish automatically when changes are pushed to `main`. To process an episode, just say "run the pipeline" and provide the Substack URL and series ID.

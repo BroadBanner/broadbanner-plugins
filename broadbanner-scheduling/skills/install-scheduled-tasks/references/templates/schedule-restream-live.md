@@ -4,7 +4,7 @@ description: Run the restream-schedule-live skill daily for {{BRAND_DISPLAY}} â€
 cronExpression: 0 4 * * *
 enabled: true
 ---
-You are running on a daily ~4:00am schedule, AFTER the substack-live task has already captured stream keys and scheduled shows on Substack. Invoke the `restream-schedule-live` skill from the `broadbanner-restream` plugin.
+You are running on a daily ~4:00am schedule, AFTER the substack-live task has already captured stream keys and scheduled shows on Substack. Invoke the `restream-schedule-live` skill from the `broadbanner-live-production` plugin.
 
 ## Workspace pin
 
@@ -16,7 +16,7 @@ Invoke the skill; it handles the snapshot fetch, restream-event state check, and
 
 1. Fetches the current show snapshot from the BroadBanner Gateway/Data Worker (credentials in `{{CREDS_DIR}}/.env.json`).
 2. Filters shows already scheduled on Substack with a non-null stream key.
-   - **Brand isolation:** ALSO require the show's `podId` starts with `{{POD_PREFIX}}` ({{BRAND_DISPLAY}} pods: {{POD_IDS}}). Never process shows from other brands.
+   - **Brand isolation:** ALSO require the show's `podId` starts with `{{POD_PREFIX}}` ({{BRAND_DISPLAY}} series: {{POD_IDS}}). Never process shows from other brands.
 3. Applies the default 7-day scheduling horizon and excludes shows already scheduled in Restream (`GET /restream-events`).
 4. If no eligible shows remain, exit quietly ("No shows ready for Restream scheduling"). This is the common case â€” not an error.
 5. Otherwise automate Restream Studio (find the draft event by title, set date/time, pair the Substack channel, click Schedule) and PATCH the result back to the Data Worker.

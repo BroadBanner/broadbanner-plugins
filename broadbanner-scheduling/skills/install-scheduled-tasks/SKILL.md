@@ -39,7 +39,7 @@ Translate that to its bash-sandbox mount path for running the collector.
 - **It's absent** (a creator on the connector / no-CLI path): the brand-scoped
   vars come from the **MCP connector** instead. Call `get_creator_context` (the
   BroadBanner connector tool) and note the creator's **brand slug**, **Substack
-  username**, and any **pod ids** — you'll pass them to the collector in Step 2.
+  username**, and any **series ids** — you'll pass them to the collector in Step 2.
   If the connector isn't connected, stop and tell the user to add it first
   (Settings → Connectors → `https://mcp.broadbanner.com/mcp`).
 

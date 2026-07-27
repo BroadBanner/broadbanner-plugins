@@ -1,6 +1,8 @@
 ---
 name: release-substack-text
 description: "Release queued Notes to Substack — text OR text+image. Uses the BroadBanner MCP connector to list the creator's pending posts (from the BannerBlast web composer or substack-note), posts each to Substack via browser automation (attaching the image in-page from R2 when the post carries one), and marks it released — no local credentials or config. Runs unattended on a schedule. Triggers on 'release my Substack posts' / 'post my pending notes', or the scheduled release task. Reuses substack-note's browser posting; the existing tracker is marked posted, not re-ingested."
+metadata:
+  requiresTool: banner_blast
 ---
 
 # Release Substack Text Posts
@@ -59,22 +61,28 @@ posting; `altText` (if present) is its accessibility description. Text-only post
 Call **`get_creator_context`** → `{ substackHandle, brand, brands, pods, ... }`. You need
 `substackHandle` (e.g. `nickparo`) — that's the Substack account these notes post to.
 
-Substack posting is browser automation (Option A — a local logged-in browser). There is
-**no brand→profile config**; the account is identified by `substackHandle`:
+**Entitlement preflight (advisory).** This skill is declared
+`metadata.requiresTool: banner_blast`. If the context returns a capability summary
+(`entitledTools` / `caps`), and `banner_blast` is **present-and-absent** (the field
+exists but the entitlement isn't there), **do not open a browser** — exit quietly with
+a one-line "skipped: account not entitled for `banner_blast`" report (this is unattended;
+never prompt). If the fields are omitted (older connector), proceed — the server-side cap
+check is the backstop.
 
-1. `list_connected_browsers`. If none are connected → **stop and report** (no browser to drive).
-2. Select a connected browser. Open a **dedicated MCP working tab** with `tabs_create_mcp`
-   and **record its tabId in a running `OPENED_TABS` list** — do not hijack the user's
-   current tab, and track every tab you open so Step 4 can close exactly the skill's own
-   tabs. In that tab, `navigate` to `https://substack.com/@{substackHandle}` and
-   `resize_window` to **1200×900**.
+Substack posting is browser automation (a local logged-in browser). This skill runs on
+the operator's **single connected Chrome profile** — no profile map, no enumeration, no
+`select_browser` routing:
+
+1. If **no** browser is connected → **stop and report** (no browser to drive).
+2. Use the single connected browser. Open a **dedicated MCP working tab** with
+   `tabs_create_mcp` and **record its tabId in a running `OPENED_TABS` list** — do not
+   hijack the user's current tab, and track every tab you open so Step 4 can close exactly
+   the skill's own tabs. In that tab, `navigate` to `https://substack.com/@{substackHandle}`
+   and `resize_window` to **1200×900**.
 3. **Verify you are logged in as `{substackHandle}`** (the profile page shows that account).
    - Wrong account, or a login screen → **clean up (Step 4) and stop**, telling the user to
      log into `{substackHandle}`'s Substack in the browser Cowork drives. Posting under the
-     wrong identity is a public mistake — never guess across profiles.
-   - (Multiple connected browsers? Pick the one logged into `{substackHandle}`. A creator
-     with several distinct Substack accounts is an edge case — handle the one matching
-     `substackHandle` and flag the rest.)
+     wrong identity is a public mistake — never switch to "another" browser.
 
 Reuse this one working tab for every post in the run — the verification in Step 3a reloads
 it in place rather than opening new tabs, so the run stays at a single tab.
