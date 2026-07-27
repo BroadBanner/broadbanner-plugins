@@ -34,7 +34,6 @@
  *     --brand-slug <s>         BRAND_SLUG / BRAND_ID / POD_PREFIX
  *     --brand-display <s>      BRAND_DISPLAY
  *     --substack-username <s>  SUBSTACK_USERNAME
- *     --chrome-profile <s>     CHROME_PROFILE
  *     --pod-ids <a,b,c>        POD_IDS (comma-separated)
  *   Flags win over config when both are present.
  *
@@ -74,7 +73,6 @@ const STRING_FLAGS = {
   "--brand-slug": "brandSlug",
   "--brand-display": "brandDisplay",
   "--substack-username": "substackUsername",
-  "--chrome-profile": "chromeProfile",
   "--pod-ids": "podIds",
   "--cadence": "cadence",
   "--text-cron": "textCron",
@@ -90,7 +88,6 @@ function parseArgs(argv) {
     brandSlug: null,
     brandDisplay: null,
     substackUsername: null,
-    chromeProfile: null,
     podIds: null,
     cadence: null,
     textCron: null,
@@ -188,13 +185,6 @@ function deriveVars(root, cfg, opts = {}, warnings = []) {
     "";
   const brandDisplay =
     opts.brandDisplay || (cfg.brands && cfg.brands[0] && cfg.brands[0].displayName) || "";
-  const chromeProfile =
-    opts.chromeProfile ||
-    (cfg.chromeProfiles &&
-      cfg.chromeProfiles.byBrand &&
-      cfg.chromeProfiles.byBrand[brandSlug]) ||
-    brandDisplay ||
-    "";
   const podIds =
     opts.podIds != null
       ? opts.podIds.split(",").map((s) => s.trim()).filter(Boolean)
@@ -208,7 +198,6 @@ function deriveVars(root, cfg, opts = {}, warnings = []) {
     BRAND_DISPLAY: brandDisplay,
     POD_PREFIX: brandSlug ? `${brandSlug}-` : "",
     POD_IDS: podIds.join(", "),
-    CHROME_PROFILE: chromeProfile,
     SUBSTACK_USERNAME: opts.substackUsername || (cfg.user && cfg.user.substackUsername) || "",
     ...resolveReleaseCrons(cfg, opts, warnings),
   };

@@ -50,7 +50,6 @@ across brands.
 | `{{BRAND_DISPLAY}}` | `brands[0].displayName` | `Lev Remembers` |
 | `{{POD_PREFIX}}` | `{{BRAND_SLUG}}` + `-` | `lr-` |
 | `{{POD_IDS}}` | `user.effectivePodIds` joined | `lr-lr, lr-vfu, lr-ctwld` |
-| `{{CHROME_PROFILE}}` | `chromeProfiles.byBrand[slug]` ?? display | `Lev Remembers` |
 | `{{SUBSTACK_USERNAME}}` | `user.substackUsername` | `levparnas` |
 | `{{TEXT_RELEASE_CRON}}` | cadence preset (text) | `*/30 * * * *` |
 | `{{CLIP_RELEASE_CRON}}` | cadence preset (clips) | `0 8-22 * * *` |

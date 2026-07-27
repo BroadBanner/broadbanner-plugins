@@ -51,10 +51,14 @@ that is the prompt executed on each run. Bodies may use `{{VARS}}`
 [`skills/install-scheduled-tasks/references/spec-format.md`](skills/install-scheduled-tasks/references/spec-format.md)
 for the full schema and variable list.
 
-Ready-made templates for the live-scheduling pair ship in
-[`skills/install-scheduled-tasks/references/templates/`](skills/install-scheduled-tasks/references/templates/).
-The skill can scaffold them into a project that has none yet
-(`collect-tasks.mjs --scaffold`).
+Ready-made templates ship in
+[`skills/install-scheduled-tasks/references/templates/`](skills/install-scheduled-tasks/references/templates/)
+for both the release pair (`release-substack-text`, `release-substack-clips` — from
+`broadbanner-social-distribution`) and the live-scheduling pair
+(`schedule-substack-live`, `restream-schedule-live` — from
+`broadbanner-live-production`). All four are **connector-only** (BroadBanner MCP
+connector — no `broadbanner.config.json`, no gateway token). The skill can scaffold
+them into a project that has none yet (`collect-tasks.mjs --scaffold`).
 
 ## Expanding it
 
@@ -65,7 +69,16 @@ template for all brands, add it under `references/templates/`.
 
 ## Requirements
 
+- **Desktop Cowork on a local machine.** The BroadBanner scheduled skills drive a
+  **local Chrome browser** via the Claude-in-Chrome connection (Substack/Restream
+  have no API), so these tasks **cannot run on a cloud/headless agent** — install
+  and run them where the single BroadBanner Chrome profile stays open and logged in.
 - Cowork with the `scheduled-tasks` MCP (`create_scheduled_task`,
   `update_scheduled_task`, `list_scheduled_tasks`).
-- A BroadBanner project with `broadbanner.config.json` at its root.
+- The **BroadBanner MCP connector** connected (`https://mcp.broadbanner.com/mcp`) —
+  provides identity, context, and hosted data for the connector-only skills.
+- A Cowork project to host the tasks. `broadbanner.config.json` at its root is
+  **optional** — with it the collector derives brand-scoped vars automatically;
+  without it (connector/no-CLI path) the skill supplies them from
+  `get_creator_context`.
 - `node` on PATH for the collector script (zero external dependencies).

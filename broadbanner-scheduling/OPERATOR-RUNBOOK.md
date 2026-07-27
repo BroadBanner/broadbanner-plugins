@@ -12,23 +12,33 @@ exactly the failure mode this plugin exists to prevent.
 > files a task under whichever project created it — there is no project
 > parameter. Run the skill from the right project, every time.
 
+> **⚠️ Local machine only.** Every task here drives a **local Chrome browser** via
+> the Claude-in-Chrome connection (Substack/Restream have no API). They **cannot
+> run on a cloud/headless agent** — install and run them from **desktop Cowork on
+> the machine where the single BroadBanner Chrome profile stays open and logged in**
+> at fire time. A run with no connected browser stops and reports; nothing goes out.
+
 ---
 
 ## 0. Prerequisites (once per machine / workspace)
 
 1. **Plugins installed in Cowork** — `broadbanner-social-distribution` (the
-   `release-substack-clips` / `release-substack-text` skills) and
-   `broadbanner-scheduling` (this plugin). Install from the public marketplace
-   via the **Cowork UI** — no local credentials. (The `/plugin …` slash commands
-   are **Claude Code only** and do **not** work in Cowork.) In the Cowork section:
+   `release-substack-clips` / `release-substack-text` skills),
+   `broadbanner-live-production` (the `schedule-substack-live` /
+   `restream-schedule-live` skills), and `broadbanner-scheduling` (this plugin).
+   Install from the public marketplace via the **Cowork UI** — no local
+   credentials. (The `/plugin …` slash commands are **Claude Code only** and do
+   **not** work in Cowork.) In the Cowork section:
 
    > **Customize → the `+` next to "Personalize Plugins" → Create plugin → Add
    > marketplace → Add from a repository**
 
    When prompted for the repository, enter `BroadBanner/broadbanner-plugins`,
-   then install `broadbanner-social-distribution` and `broadbanner-scheduling`
-   from that marketplace. Manage/update them later from the same "Personalize
-   Plugins" panel. (First-time machine setup for the CLIs and per-service auth:
+   then install `broadbanner-social-distribution`, `broadbanner-live-production`,
+   and `broadbanner-scheduling` from that marketplace. Manage/update them later
+   from the same "Personalize Plugins" panel. (`broadbanner-live-production` was
+   renamed from `broadbanner-restream`; if you have the old one, install the new
+   name and remove it. First-time machine setup for the CLIs and per-service auth:
    see `Documentation/guides/broadbanner-cli-setup-guide.docx` and the numbered
    per-service guides.)
 2. **BroadBanner MCP connector connected** — Cowork → Settings → Connectors → Add
@@ -44,12 +54,16 @@ exactly the failure mode this plugin exists to prevent.
    - **Connector-only / no-CLI** (no config): the `install-scheduled-tasks` skill
      pulls the brand slug + Substack handle from the MCP connector
      (`get_creator_context`) and passes them to the collector — no config file
-     needed for the `release-substack-text` / `release-substack-clips` pair. (The
-     `schedule-substack-live` / `schedule-restream-live` pair still needs a full
-     config + gateway token, so those remain CLI-initialized only.)
+     needed. **All four templates are now connector-only** (the
+     `schedule-substack-live` / `restream-schedule-live` pair no longer needs a
+     `broadbanner.config.json` or a gateway token — the old CLI-initialized
+     requirement is retired).
 
-The browser Cowork drives must be logged into the Substack account the task posts
-to (the `substackHandle` the connector resolves for that workspace/brand).
+The browser Cowork drives must be logged into the Substack account (and, for the
+Restream task, Restream Studio) the task acts on — the single connected BroadBanner
+Chrome profile, logged into the `substackHandle` the connector resolves for that
+workspace/brand. There is no per-brand profile routing; the skills use the one
+connected browser and verify the account.
 
 ---
 

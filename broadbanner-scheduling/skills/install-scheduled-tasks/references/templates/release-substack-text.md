@@ -23,7 +23,7 @@ These are the text posts created from the BannerBlast web composer (`#blastItBut
 ## Prerequisites
 
 - **The BroadBanner connector must be added and connected in Cowork** (Settings → Connectors → Add custom connector → `https://mcp.broadbanner.com/mcp` → sign in via WorkOS with the creator email). It provides identity, context, and the hosted data — there are no local credentials. If the `list_pending_substack` / `get_creator_context` / `mark_substack_posted` tools aren't available, the connector isn't connected and the skill stops.
-- The browser Cowork drives must be **logged into the creator's Substack** (the account = `substackHandle` from `get_creator_context`), or the post stops rather than go out under the wrong identity. This is the one inherently-local piece (Substack has no API).
+- **Local machine only — cannot run in the cloud.** Substack has no API, so release is browser automation: this task drives a local Chrome browser via the Claude-in-Chrome connection. Schedule it on a machine where the single BroadBanner Chrome profile is open and logged into the creator's Substack (the account = `substackHandle` from `get_creator_context`) at fire time. A cloud/headless run has no connected browser and stops. There is no profile routing — the skill uses whatever browser is connected and verifies the account (it stops rather than post under the wrong identity).
 
 ## Notes
 

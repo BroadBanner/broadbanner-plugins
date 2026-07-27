@@ -4,27 +4,27 @@ description: Run the substack-schedule-live skill daily for {{BRAND_DISPLAY}} �
 cronExpression: 10 3 * * *
 enabled: true
 ---
-You are running on a daily ~3:10am schedule. Invoke the `substack-schedule-live` skill from the `broadbanner-live-production` plugin. This run is pre-approved to run autonomously — do NOT pause for per-show confirmation.
+You are running on a daily ~3:10am schedule on the operator's **local machine**. Invoke the `substack-schedule-live` skill from the `broadbanner-live-production` plugin. This run is pre-approved to run autonomously — do NOT pause for per-show confirmation.
 
-## Workspace pin
+## ⚠️ Local machine only — cannot run in the cloud
 
-Before invoking the skill, verify `{{PROJECT_ROOT}}` is the active Cowork project root. If it is not, call `request_cowork_directory` with `{{PROJECT_ROOT}}` and wait for confirmation. The skill resolves `<PROJECT_ROOT>/.creds/gateway.token` and `{{CREDS_DIR}}/.env.json` against the active project — without this pin it inherits whatever project is focused and uses the wrong cap token.
-
-## What to do
-
-Invoke the skill; it handles the snapshot fetch, filtering, and Substack automation internally.
-
-1. Fetches the current show snapshot from the BroadBanner Gateway/Data Worker (credentials in `{{CREDS_DIR}}/.env.json`).
-2. Filters shows that are titled, host-resolved, and waiting to be scheduled on Substack.
-   - **Brand isolation:** ALSO require the show's `podId` starts with `{{POD_PREFIX}}` ({{BRAND_DISPLAY}} series: {{POD_IDS}}). Never process shows from other brands.
-3. Applies the default 7-day scheduling horizon.
-4. If no eligible shows remain, exit quietly ("No shows ready to schedule"). This is the common case — not an error.
-5. Otherwise schedule each on Substack and PATCH the Data Worker with the scheduled state plus captured stream credentials.
+This task drives a **local Chrome browser** through the Claude-in-Chrome connection (there is no Substack scheduling API). It **cannot** run on a cloud/headless agent — schedule it on a machine where the single BroadBanner Chrome profile is open and logged in to the {{BRAND_DISPLAY}} Substack publication at fire time. If no browser is connected, the skill stops and reports; nothing is scheduled.
 
 ## Prerequisites
 
-- The "{{CHROME_PROFILE}}" Chrome profile must be logged in to the {{BRAND_DISPLAY}} Substack publication.
-- `BROADBANNER_ENC_PASSPHRASE` present in `{{CREDS_DIR}}/.env.json`.
+- The **BroadBanner MCP connector** (`https://mcp.broadbanner.com/mcp`) connected, on a session authorized to schedule (brand-admin / super-admin today; host-of-series once creator-scoped scheduling ships). The skill is **connector-only** — no `broadbanner.config.json`, no `.creds/gateway.token`, no `BROADBANNER_ENC_PASSPHRASE`, no mount.
+- The **single connected** BroadBanner Chrome profile logged in to the {{BRAND_DISPLAY}} Substack publication. There is no profile routing — the skill uses whatever browser is connected and verifies the account.
+
+## What to do
+
+Invoke the skill; it fetches show data via the connector's admin tools and handles the Substack automation internally.
+
+1. Calls `list_schedulable_shows({ states: ["title_customized"] })` via the connector (served fresh each call).
+2. Filters to shows ready to schedule.
+   - **Brand isolation:** ALSO require the show's `podId` starts with `{{POD_PREFIX}}` ({{BRAND_DISPLAY}} series: {{POD_IDS}}). Never process shows from other brands.
+3. Applies the default 7-day scheduling horizon.
+4. If no eligible shows remain, exit quietly ("No shows ready to schedule"). This is the common case — not an error.
+5. Otherwise schedule each on Substack and write the scheduled state + captured stream credentials back to D1 via the connector tools (`set_show_schedule`, `set_show_cohost_invite`).
 
 ## Notes
 

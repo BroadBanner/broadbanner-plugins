@@ -14,6 +14,18 @@ files — the current Cowork scheduler does not auto-discover dropped files. Onl
 call to `create_scheduled_task` actually registers a task. This skill makes that
 call for every spec.
 
+## ⚠️ Browser tasks are LOCAL-machine only — read first
+
+The BroadBanner scheduled skills (`substack-schedule-live`, `restream-schedule-live`,
+`release-substack-text`, `release-substack-clips`) all drive a **local Chrome
+browser** through the Claude-in-Chrome connection — Substack and Restream Studio
+have no posting/scheduling API, so the browser is load-bearing. These tasks
+**cannot run on a cloud/headless agent**: register and run them from **desktop
+Cowork on the machine where the single BroadBanner Chrome profile stays open and
+logged in** at fire time. A scheduled run with no connected browser stops and
+reports (nothing posted/scheduled). Install these tasks on that machine's Cowork,
+not a cloud scheduler.
+
 ## ⚠️ Project filing — read first
 
 A scheduled task is filed under the Cowork **project of the session that runs
@@ -151,11 +163,14 @@ from `broadbanner.config.json` when it exists, otherwise from the collector's
 override flags (`--brand-slug`, `--substack-username`, `--basename`, …) — which
 this skill fills from the connector's `get_creator_context` on the no-CLI path.
 Ready-made templates for the release pair (`release-substack-text`,
-`release-substack-clips`) and the live-scheduling pair are in
-`references/templates/`. The release pair needs only the connector; the
-live-scheduling pair (`schedule-substack-live`, `schedule-restream-live`) still
-expects a full `broadbanner.config.json` + gateway token, so skip those on a
-connector-only setup unless the project is CLI-initialized.
+`release-substack-clips`) and the live-scheduling pair (`schedule-substack-live`,
+`schedule-restream-live`) are in `references/templates/`. **All four are now
+connector-only** — they run on the **BroadBanner MCP connector** with no
+`broadbanner.config.json`, no `.creds/gateway.token`, and no mount. (The release
+pair lives in `broadbanner-social-distribution`; the live-scheduling pair lives in
+`broadbanner-live-production` — install both plugins for a full set.) The collector
+resolves brand-scoped vars from `broadbanner.config.json` when present, otherwise
+from the connector-derived override flags.
 
 ## Expanding
 
