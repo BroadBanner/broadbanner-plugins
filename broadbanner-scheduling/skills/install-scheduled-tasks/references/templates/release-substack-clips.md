@@ -5,7 +5,13 @@ cronExpression: "{{CLIP_RELEASE_CRON}}"
 enabled: true
 ---
 
-You are a recurring background poller that releases this workspace's queued video clips to Substack. Invoke the `release-substack-clips` skill from the `broadbanner-social-distribution` plugin **for the `{{BRAND_SLUG}}` brand** — pass `brand: {{BRAND_SLUG}}` so it handles only this brand's clips and posts them to this brand's Substack account. This run is pre-approved to run autonomously — do NOT pause for per-clip confirmation.
+You are a recurring background poller that releases this workspace's queued video clips to Substack. Invoke the `release-substack-clips` skill from the `broadbanner-social-distribution` plugin **brandless** — do **NOT** pass a `brand` argument. Brandless resolves your default Substack handle (`@{{SUBSTACK_USERNAME}}`) and releases **all** of your pending clips (every series/brand you host) to it. This run is pre-approved to run autonomously — do NOT pause for per-clip confirmation.
+
+> **Do not hard-code a brand here.** This is a personal/creator hub task: one identity, one default Substack account, all your clips. Baking in a single `brand:` would silently drain only that brand's clips and skip the rest. Multi-account routing (each brand's clips to *its own* Substack account) is a separate **opt-in** setup — run a brand-scoped clip task from each brand's own workspace instead. See OPERATOR-RUNBOOK.md → "clip routing".
+
+## ⚠️ Local machine only — cannot run in the cloud
+
+Posting is browser automation (Substack has no API), so this task drives a local Chrome browser via the Claude-in-Chrome connection. Schedule it on a machine where the single BroadBanner Chrome profile is open and logged into your Substack (`@{{SUBSTACK_USERNAME}}`) at fire time. A cloud/headless run has no connected browser and stops. There is no profile routing — the skill uses whatever browser is connected and verifies the account.
 
 Cadence note: video posts are slow and heavy, so this paces deliberately — the skill posts at most 2 clips per run and the cron drips the rest out over the day rather than blast-posting. The schedule comes from the **release cadence preset** (`high` / `medium` / `low`) chosen at install: `high` ≈ `*/15 8-22 * * *`, `medium` (default) ≈ `0 8-22 * * *` (hourly, 8am–10pm), `low` ≈ `0 10,14,18 * * *` (three passes a day). The common case (nothing pending) fast-exits cheaply without opening a browser — pick `low` for a low-frequency publication, `high` for a busy one.
 
@@ -13,19 +19,19 @@ This **replaces the old `refill-clip-queue` + `drain-clip-queue` producer/consum
 
 ## What to do
 
-Invoke `release-substack-clips`. It uses the **BroadBanner MCP connector** (the CLI path is retired):
+Invoke `release-substack-clips` (brandless — no `brand` argument). It uses the **BroadBanner MCP connector** (the CLI path is retired):
 
-1. Calls `list_pending_clips` with `brand: {{BRAND_SLUG}}` → only `{{BRAND_SLUG}}`'s pending clips. **If nothing is pending, it exits immediately** with a one-line "nothing pending" report — the common case, not an error. It does not open Substack.
-2. Otherwise (oldest first, up to 2 per run): calls `get_creator_context` with `brand: {{BRAND_SLUG}}` for **this brand's** Substack handle, uses the single connected Chrome profile (verifying it's logged into that handle), fetches each clip in-page from `media.broadbanner.com` and injects it into the Substack Notes composer (the `substack-video-note` technique — no download-to-disk, no 10 MB cap), posts it, then calls `mark_substack_posted` to flip that tracker's substack slot `pending → posted` (or `failed`). Any remainder goes out on the next run.
+1. Calls `list_pending_clips` (no `brand`) → **all** of your pending clips. **If nothing is pending, it exits immediately** with a one-line "nothing pending" report — the common case, not an error. It does not open Substack.
+2. Otherwise (oldest first, up to 2 per run): calls `get_creator_context` for your default Substack handle, uses the single connected Chrome profile (verifying it's logged into that handle), fetches each clip in-page from `media.broadbanner.com` and injects it into the Substack Notes composer (the `substack-video-note` technique — no download-to-disk, no 10 MB cap), posts it, then calls `mark_substack_posted` to flip that tracker's substack slot `pending → posted` (or `failed`). Any remainder goes out on the next run.
 
-Because the queue and the account are both scoped to `{{BRAND_SLUG}}`, multiple brand workspaces can each run their own clip task with no double-drain — each sees only its own brand's clips.
+Run only **one** brandless clip task per identity so the same clip pool isn't double-drained.
 
 These are the video clips from the restream-clip pipeline. **Bluesky and Threads for the same clips are handled separately — this task only touches Substack**, the one platform with no API.
 
 ## Prerequisites
 
 - **The BroadBanner connector must be added and connected in Cowork** (Settings → Connectors → Add custom connector → `https://mcp.broadbanner.com/mcp` → sign in via WorkOS with the creator email). It provides identity, context, and the clip list — there are no local credentials. If the `list_pending_clips` / `get_creator_context` / `mark_substack_posted` tools aren't available, the connector isn't connected and the skill stops.
-- **Local machine only — cannot run in the cloud.** Posting is browser automation (Substack has no API), so this task drives a local Chrome browser via the Claude-in-Chrome connection. Schedule it on a machine where the single BroadBanner Chrome profile is open and logged into the creator's Substack (the account = `substackHandle` from `get_creator_context`) at fire time. A cloud/headless run has no connected browser and stops. There is no profile routing — the skill uses whatever browser is connected and verifies the account (it stops rather than post under the wrong identity).
+- The single connected BroadBanner Chrome profile logged into your Substack (`@{{SUBSTACK_USERNAME}}`) — see the local-machine note above.
 - **CORS must be configured on the media endpoint.** The skill fetches the clip from `media.broadbanner.com` inside the Substack composer, which requires `Access-Control-Allow-Origin: https://substack.com` on that endpoint. If missing, the skill marks the clip `failed` with `error: "media CORS not configured"` and moves on.
 
 ## Notes

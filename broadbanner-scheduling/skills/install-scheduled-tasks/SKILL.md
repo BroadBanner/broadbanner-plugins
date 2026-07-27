@@ -70,14 +70,22 @@ node "<SKILL_DIR>/scripts/collect-tasks.mjs" --project "<PROJECT_MOUNT_PATH>"
 ```
 
 When there is **no `broadbanner.config.json`**, pass the connector-derived values
-as flags so the brand-scoped templates (notably the clip task's `{{BRAND_SLUG}}`)
-resolve correctly:
+as flags. `--substack-username` is always useful (it's shown in the release tasks).
+`--brand-slug` is **only** for the schedule-live pair's brand-isolation filter on a
+**single-brand** workspace — the release tasks (text **and** clips) are **brandless**
+and do not need it:
 
 ```bash
 node "<SKILL_DIR>/scripts/collect-tasks.mjs" --project "<PROJECT_MOUNT_PATH>" \
-  --brand-slug "<slug from get_creator_context>" \
-  --substack-username "<handle from get_creator_context>"
+  --substack-username "<handle from get_creator_context>" \
+  # --brand-slug "<slug>"   # only if installing schedule-live for a single-brand workspace
 ```
+
+**Do NOT pass a `--brand-slug` you merely guessed for a multi-brand / personal-hub
+creator** (someone who hosts more than one brand, e.g. hosts series across BABM +
+SOTSP + LR). The clip task is brandless by design — it releases *all* of that
+creator's pending clips to their one default Substack handle. Baking in a single
+brand would silently drain only that brand's clips.
 
 To set how often the release pollers run, pass a cadence preset (the release
 templates read their cron from it — `medium` is the default if you omit it):
@@ -100,13 +108,29 @@ full table.
   the outputs dir and run it from there — it has no dependencies.
 - Add `--list` instead of bare invocation for a human-readable preview (it prints
   the resolved release cadence so you can confirm before installing).
-- The collector emits a warning when running without a config and another if
-  `BRAND_SLUG` is still empty — surface both; an empty brand slug means the clip
-  task won't be brand-scoped.
+- The collector emits a warning when running without a config; an empty
+  `BRAND_SLUG` only affects the schedule-live brand-isolation filter (the release
+  tasks are brandless), so it's harmless for a personal hub.
 
 Parse the JSON. **Confirm `projectBasename` is the project you intend to install
 into.** If it is not, stop (see the filing warning above). Surface any
 `warnings[]` to the user.
+
+**Stale specs — use `--refresh`.** Spec files live in the *project*
+(`.broadbanner/scheduled-tasks/`), and the collector **never overwrites** an
+existing spec on a normal run. So after a plugin update, a project scaffolded from
+older templates keeps running the **old** prompt text (e.g. stale profile wording,
+a hard-coded brand, or a task the new version no longer skips). If the user reports
+the installed task text looks out of date, or you've just upgraded the plugin,
+re-scaffold from the current templates with **`--refresh`** (it overwrites the
+shipped specs and lists what it replaced in `refreshed[]`; it does not touch specs
+that aren't shipped templates):
+
+```bash
+node "<SKILL_DIR>/scripts/collect-tasks.mjs" --project "<PROJECT_MOUNT_PATH>" --refresh
+```
+
+Warn the user that `--refresh` replaces any local edits to the four shipped specs.
 
 If `tasks[]` is empty because there is no spec directory yet, offer to scaffold
 the shipped templates:

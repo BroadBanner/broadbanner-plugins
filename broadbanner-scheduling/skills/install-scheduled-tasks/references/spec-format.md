@@ -56,6 +56,12 @@ across brands.
 
 Unknown `{{VARS}}` are left untouched and reported as warnings.
 
+> **Brandless release tasks.** The shipped `release-substack-text` and
+> `release-substack-clips` templates are **brandless** — they don't use
+> `{{BRAND_SLUG}}` and release everything to the creator's one default handle.
+> `{{BRAND_SLUG}}` / `{{POD_PREFIX}}` now drive **only** the schedule-live pair's
+> brand-isolation filter, and matter only for a single-brand workspace.
+
 ### Release cadence
 
 `{{TEXT_RELEASE_CRON}}` / `{{CLIP_RELEASE_CRON}}` let the release-substack pair

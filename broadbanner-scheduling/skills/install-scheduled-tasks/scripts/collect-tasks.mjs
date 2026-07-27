@@ -24,6 +24,10 @@
  *                     broadbanner.config.json).
  *   --scaffold        Copy any shipped templates that the project is missing
  *                     into <root>/.broadbanner/scheduled-tasks/, then continue.
+ *   --refresh         Like --scaffold, but ALSO overwrite existing specs from the
+ *                     shipped templates (picks up template updates after a plugin
+ *                     upgrade). Replaces local edits to those specs — reported in
+ *                     `refreshed`.
  *   --list            Human-readable table instead of JSON.
  *
  *   Connector/no-CLI mode — broadbanner.config.json is OPTIONAL. When it is
@@ -83,6 +87,7 @@ function parseArgs(argv) {
   const opts = {
     project: null,
     scaffold: false,
+    refresh: false,
     list: false,
     basename: null,
     brandSlug: null,
@@ -110,6 +115,7 @@ function parseArgs(argv) {
     }
     if (matched) continue;
     if (a === "--scaffold") opts.scaffold = true;
+    else if (a === "--refresh") opts.refresh = true;
     else if (a === "--list") opts.list = true;
     else if (a === "--help" || a === "-h") opts.help = true;
     else process.stderr.write(`warning: unknown option ${a}\n`);
@@ -262,21 +268,33 @@ function coerceBool(v, dflt) {
 }
 
 // ── scaffold ─────────────────────────────────────────────────────────────────
-function scaffold(specDir, warnings) {
+// Default: copy only MISSING templates (never clobber a project's own specs).
+// With `refresh`, OVERWRITE existing specs from the shipped templates too — the
+// escape hatch for when a plugin update ships new template content but the
+// project's already-scaffolded specs are stale. Refreshed files are reported
+// separately so the skill can tell the user what was overwritten.
+function scaffold(specDir, warnings, refresh = false) {
   const copied = [];
+  const refreshed = [];
   if (!fs.existsSync(TEMPLATES_DIR)) {
     warnings.push(`no templates dir at ${TEMPLATES_DIR}`);
-    return copied;
+    return { copied, refreshed };
   }
   fs.mkdirSync(specDir, { recursive: true });
   for (const f of fs.readdirSync(TEMPLATES_DIR)) {
     if (!f.endsWith(".md")) continue;
     const dest = path.join(specDir, f);
-    if (fs.existsSync(dest)) continue; // never clobber project specs
+    const exists = fs.existsSync(dest);
+    if (exists && !refresh) continue; // default: never clobber project specs
     fs.copyFileSync(path.join(TEMPLATES_DIR, f), dest);
-    copied.push(f);
+    (exists ? refreshed : copied).push(f);
   }
-  return copied;
+  if (refreshed.length) {
+    warnings.push(
+      `--refresh overwrote ${refreshed.length} existing spec(s) from the shipped templates: ${refreshed.join(", ")}. Any local edits to those specs were replaced.`,
+    );
+  }
+  return { copied, refreshed };
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -284,7 +302,7 @@ function main() {
   const opts = parseArgs(process.argv);
   if (opts.help) {
     process.stdout.write(
-      "Usage: node collect-tasks.mjs [--project <path>] [--scaffold] [--list]\n" +
+      "Usage: node collect-tasks.mjs [--project <path>] [--scaffold] [--refresh] [--list]\n" +
         "                              [--cadence high|medium|low] [--text-cron <expr>] [--clip-cron <expr>]\n",
     );
     return;
@@ -311,17 +329,20 @@ function main() {
   const specDir = path.join(root, SPEC_SUBPATH);
   if (!hasConfig) {
     warnings.push(
-      "no broadbanner.config.json — connector/no-CLI mode; brand-scoped vars come from override flags (the skill supplies them from get_creator_context). Pass --brand-slug for clip scoping.",
+      "no broadbanner.config.json — connector/no-CLI mode; brand-scoped vars come from override flags (the skill supplies them from get_creator_context).",
     );
     if (!vars.BRAND_SLUG) {
       warnings.push(
-        "BRAND_SLUG is empty — clip release ({{BRAND_SLUG}}) won't be brand-scoped. Pass --brand-slug <slug> from get_creator_context.",
+        "BRAND_SLUG is empty — the schedule-live brand-isolation filter ({{POD_PREFIX}}) won't be set. The release tasks (text + clips) are brandless and don't need it; pass --brand-slug <slug> only if you're installing the schedule-live pair for a single-brand workspace.",
       );
     }
   }
 
   let scaffolded = [];
-  if (opts.scaffold) scaffolded = scaffold(specDir, warnings);
+  let refreshed = [];
+  if (opts.scaffold || opts.refresh) {
+    ({ copied: scaffolded, refreshed } = scaffold(specDir, warnings, opts.refresh));
+  }
 
   const tasks = [];
   const seenIds = new Set();
@@ -382,7 +403,7 @@ function main() {
       tasks.push(task);
       seenIds.add(id);
     }
-  } else if (!opts.scaffold) {
+  } else if (!opts.scaffold && !opts.refresh) {
     warnings.push(
       `no spec dir at ${path.relative(root, specDir)} — run with --scaffold to create it from templates`,
     );
@@ -396,6 +417,9 @@ function main() {
     );
     if (scaffolded.length) {
       process.stdout.write(`Scaffolded: ${scaffolded.join(", ")}\n`);
+    }
+    if (refreshed.length) {
+      process.stdout.write(`Refreshed (overwritten from templates): ${refreshed.join(", ")}\n`);
     }
     process.stdout.write(`\nResolved tasks (${tasks.length}):\n`);
     for (const t of tasks) {
@@ -421,6 +445,7 @@ function main() {
     projectBasename: vars.PROJECT_BASENAME,
     specDir: path.relative(root, specDir),
     scaffolded,
+    refreshed,
     vars,
     tasks,
     warnings,

@@ -115,31 +115,44 @@ whose schedule/enabled/prompt changed. Safe to run anytime.
 
 ---
 
-## 4. Worked example — clip release to BOTH the brand account and your personal Substack
+## 4. Worked example — clip release (brandless default) and optional per-account routing
 
-**How clip routing works.** `release-substack-clips` is brand-scoped. Each clip
-fans out to **every enrolled host's workspace**, so the same clip exists once per
-workspace, each copy with its **own** Substack status slot. A task posts *its
-workspace's copy* to *one* account and marks only that copy released. So you route
-each copy independently — that is how one clip reaches two accounts with no
-double-post.
+**How clip routing works.** Each clip fans out to **every enrolled host's
+workspace**, so the same clip exists once per workspace, each copy with its **own**
+Substack status slot. A task posts *its workspace's copy* to *one* account and marks
+only that copy released. So you route each copy independently — that is how one clip
+can reach two accounts with no double-post.
+
+**The shipped `release-substack-clips` template is now BRANDLESS by default** — it
+passes no `brand`, so it releases *all* of that identity's pending clips to their one
+default Substack handle. That is the right default for a personal/creator hub (one
+person, one account). Brand-scoping is an **opt-in** for the multi-account case
+below.
 
 Goal: put `babm-afbc` (Banner & Backbone) clips on **both** `@bannerandbackbone`
 (the show account) **and** `@nickparo` (the personal account).
 
-### 4a. BannerAndBackboneMedia project → `@bannerandbackbone`
+### 4a. NickParo project → `@nickparo` (brandless — the default)
 
-This workspace's identity owns the `@bannerandbackbone` handle for the `babm`
-brand. Scaffold the shipped `release-substack-clips` template here — its
-`{{BRAND_SLUG}}` resolves to `babm` from this project's `broadbanner.config.json`,
-so it lists only `babm` clips and posts them to `@bannerandbackbone`. Spec file:
-`<BannerAndBackboneMedia>/.broadbanner/scheduled-tasks/release-substack-clips.md`.
+`@nickparo` is your **default** handle, reached by a **brandless** run (the shipped
+template). Just scaffold `release-substack-clips` in the NickParo project — no brand,
+no config needed — and it releases *all* of your pending clips (every brand you host)
+to `@nickparo`. Spec file:
+`<NickParo>/.broadbanner/scheduled-tasks/release-substack-clips.md`.
 
-### 4b. NickParo project → `@nickparo` (brandless cross-post)
+### 4b. BannerAndBackboneMedia project → `@bannerandbackbone` (brand-scoped — opt-in)
 
-`@nickparo` is your **default** handle, reachable only by a **brandless** run (no
-`brand:` argument), which also pulls *all* of this identity's pending clips. Add a
-custom spec — `<NickParo>/.broadbanner/scheduled-tasks/release-substack-clips-personal.md`:
+To also land `babm` clips on the *separate* `@bannerandbackbone` account, run a
+**brand-scoped** clip task from that brand's own workspace. The shipped template is
+brandless, so add a **custom** spec that passes `brand: babm` —
+`<BannerAndBackboneMedia>/.broadbanner/scheduled-tasks/release-substack-clips-babm.md`
+with a body like the personal one below but invoking the skill **`for the babm
+brand` — pass `brand: babm`**. It then lists only `babm` clips and posts them to
+`@bannerandbackbone`. (Only do this if you genuinely run a separate account per
+brand; otherwise the brandless default already covers you.)
+
+Custom brandless spec (for reference — same as the shipped default, shown so you can
+copy/customize):
 
 ```markdown
 ---
