@@ -111,7 +111,7 @@ whose schedule/enabled/prompt changed. Safe to run anytime.
 | **Pause** | Set `enabled: false` in the spec, re-run the skill (or toggle in the Cowork sidebar). |
 | **List** | The skill calls `list_scheduled_tasks`; or view them in the Cowork scheduled-tasks sidebar. |
 | **Add a new task** | Drop a new `<name>.md` spec in the project's `.broadbanner/scheduled-tasks/`, re-run the skill. No plugin change. |
-| **Remove** | Delete the task in the Cowork sidebar, and delete its spec so a future install doesn't recreate it. |
+| **Remove / uninstall** | Say **"uninstall the scheduled tasks"** (or "remove/delete task X") from that project's Cowork chat — `install-scheduled-tasks` runs its uninstall flow: it lists this project's tasks, confirms, deletes each via the scheduler, and asks whether to also delete the spec (leaving the spec recreates the task on the next install). You can still delete manually via the Cowork sidebar trash icon. |
 
 ---
 

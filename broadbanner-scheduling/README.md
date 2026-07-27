@@ -29,7 +29,7 @@ is filed under the project the skill is run from.
 
 | Skill | Description |
 |---|---|
-| `install-scheduled-tasks` | Read declarative scheduled-task specs from `<PROJECT_ROOT>/.broadbanner/scheduled-tasks/*.md`, resolve per-project template variables, and create/update them in the Cowork scheduler. Idempotent: existing tasks are updated only when they differ. Run from the target project. |
+| `install-scheduled-tasks` | Read declarative scheduled-task specs from `<PROJECT_ROOT>/.broadbanner/scheduled-tasks/*.md`, resolve per-project template variables, and create/update them in the Cowork scheduler. Idempotent: existing tasks are updated only when they differ, and a live task's prompt is never overwritten without explicit confirmation. Also **uninstalls** — say "remove/uninstall the scheduled tasks" to delete this project's registered tasks (and optionally their specs). Run from the target project. |
 
 ## Task specs
 

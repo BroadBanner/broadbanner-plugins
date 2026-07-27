@@ -1,6 +1,6 @@
 ---
 name: install-scheduled-tasks
-description: "Install or update Cowork scheduled tasks for a BroadBanner project from declarative spec files. Use when the user says 'install the scheduled tasks', 'register scheduled tasks', 'set up scheduling', 'sync scheduled tasks', or after editing a spec in .broadbanner/scheduled-tasks/. Reads each spec, resolves per-project template variables, and registers it via the Cowork scheduler so it files under the project the skill is run from. Idempotent and expandable to any custom scheduled skill."
+description: "Install, update, or uninstall Cowork scheduled tasks for a BroadBanner project from declarative spec files. Use when the user says 'install/register/sync the scheduled tasks', 'set up scheduling', or 'uninstall/remove/delete the scheduled tasks', or after editing a spec in .broadbanner/scheduled-tasks/. Resolves per-project template vars and registers each via the Cowork scheduler, filed under the project it's run from; the uninstall flow deletes this project's tasks (and optionally their specs). Idempotent."
 ---
 
 # Install Scheduled Tasks
@@ -131,6 +131,10 @@ node "<SKILL_DIR>/scripts/collect-tasks.mjs" --project "<PROJECT_MOUNT_PATH>" --
 ```
 
 Warn the user that `--refresh` replaces any local edits to the four shipped specs.
+`--refresh` only touches **spec files on disk** — it does **not** re-push to any
+already-registered task. A live task's prompt is still only replaced later through
+the Step 3 confirm-first regression guard, so refreshing a stale spec can't silently
+revert a running task on its own.
 
 If `tasks[]` is empty because there is no spec directory yet, offer to scaffold
 the shipped templates:
@@ -149,41 +153,48 @@ Call `list_scheduled_tasks`. Build a map by `taskId`. For each collected task,
 decide:
 
 - **create** — `id` not in the installed list.
-- **update** — `id` exists but `cronExpression`/`fireAt` differs from the
-  installed schedule, or the user explicitly asked to refresh/reinstall.
-- **enable/disable** — `id` exists but its `enabled` state differs from the spec.
+- **update (schedule/enabled only)** — `id` exists but `cronExpression`/`fireAt`
+  or `enabled` differs. Safe to apply — these don't touch the prompt.
 - **unchanged** — `id` exists, schedule matches, enabled matches → skip.
 
-(The installed list does not expose the stored prompt. On an explicit
-"refresh"/"reinstall", update the prompt too; otherwise leave existing prompts
-alone to avoid churn.)
+> **⚠️ Never silently overwrite a live task's PROMPT — regression guard.**
+> `list_scheduled_tasks` does **not** expose the stored prompt, so you **cannot see**
+> whether the live task was hand-customized (brandless rewrite, tuned cadence, added
+> notes). **By default, leave the prompt of an already-registered task ALONE.** Only
+> replace a live prompt when the user *explicitly* asks to "refresh"/"reinstall the
+> prompt" for that task — and even then, **warn first**: "I can't read the current
+> task text, so this will blindly replace any manual edits on `<id>` with the spec
+> version. Confirm?" Get a per-task (or explicit all-tasks) yes before pushing.
+> This is the exact regression the operator hit — a reinstall reverting a
+> deliberately-brandless clip task back to the template default. Default to
+> preserving the live prompt; make replacing it a deliberate, confirmed act.
 
 Present the plan to the user before mutating anything.
 
 ## Step 4 — Apply
 
-> **⚠️ Create every task to run ON THIS COMPUTER (local), never in the cloud.**
-> These are browser-automation tasks that drive local Chrome — a cloud-run task
-> can never reach the browser and fails every fire. Run location is a **per-task
-> setting on the create call**, NOT a property of the session you install from:
-> installing from an "on your computer" session is necessary but **not sufficient**;
-> the create call still defaults to cloud unless you set it. **Inspect the
-> `create_scheduled_task` tool's own parameter schema and set the run-location
-> argument to the local / "this computer" option** (the field that drives the
-> "Runs on this computer" vs "Runs in cloud" pill in the Cowork sidebar — e.g. a
-> `runOn` / `location` / `runsLocally` / `device`-style parameter; use whatever
-> your environment's schema actually names it). Do NOT accept the cloud default.
+> **⚠️ These tasks must run ON THIS COMPUTER (local), never in the cloud.**
+> They drive local Chrome — a cloud-run task can never reach the browser and fails
+> every fire. **Run location is governed by the Cowork _Home run-mode_ setting, not
+> a per-task argument.** If Cowork Home is set to the beta **"run in cloud"** mode,
+> **every** task you create runs in the cloud regardless of which session you
+> installed from. **Before installing, set Cowork Home to run on your computer**
+> (turn the beta "run in cloud" mode OFF); then every task files as a local
+> ("Runs on this computer") task. There is no reliable per-task override — the Home
+> run-mode is the control. (If a future build *does* expose a run-location argument
+> on `create_scheduled_task`, set it to the local option too, but don't rely on it.)
 
 For each task in the plan:
 
 - **create:** call `create_scheduled_task` with `taskId` = `id`, `description`,
-  `prompt`, **the run-location argument set to local / "this computer"** (see the
-  warning above), and **either** `cronExpression` **or** `fireAt` (never both; omit
-  both for an ad-hoc task). If the spec's `enabled` is `false`, immediately follow
-  with `update_scheduled_task` `{ taskId, enabled: false }`.
-- **update:** call `update_scheduled_task` with only the changed fields
-  (`cronExpression`/`fireAt`, `description`, `prompt`, `enabled`, **and the
-  run-location if an existing task is filed as cloud** — see the verification below).
+  `prompt`, and **either** `cronExpression` **or** `fireAt` (never both; omit both
+  for an ad-hoc task). If the spec's `enabled` is `false`, immediately follow with
+  `update_scheduled_task` `{ taskId, enabled: false }`.
+- **update:** call `update_scheduled_task` with only the changed **schedule/state**
+  fields (`cronExpression`/`fireAt`, `enabled`, and `description`). **Do NOT include
+  `prompt`** unless the user explicitly confirmed a prompt-refresh for that task per
+  the Step 3 regression guard — replacing a live prompt blindly can revert a
+  hand-customized task.
 - **enable/disable:** `update_scheduled_task` with `{ taskId, enabled }`.
 
 Recurring tasks apply a few minutes of dispatch jitter — the resulting run time
@@ -191,12 +202,12 @@ may differ slightly from the cron minute. That's expected.
 
 ### Verify run location (do NOT skip)
 
-After creating/updating, confirm via `list_scheduled_tasks` (or the Cowork
-scheduled-tasks sidebar) that **every** task reports **"Runs on this computer"**.
-If any task is filed as **"Runs in cloud"**, it is broken — a cloud task cannot
-reach local Chrome. Fix it: set the run-location to local via
-`update_scheduled_task` if the tool supports it, otherwise **delete and recreate**
-the task with the run-location argument set (per the warning above). Report the
+After creating, confirm via `list_scheduled_tasks` (or the Cowork scheduled-tasks
+sidebar) that **every** task reports **"Runs on this computer"**. If any task is
+filed as **"Runs in cloud"**, it is broken — a cloud task cannot reach local Chrome.
+The cause is almost always the **Cowork Home run-mode set to the beta "run in cloud"
+mode**: tell the user to switch Home to run on their computer, then **delete and
+recreate** the affected tasks (a cloud-created task keeps its location). Report the
 final run location for each task in Step 5.
 
 ## Step 5 — Report
@@ -210,6 +221,66 @@ it cannot reach the local browser.
 For any task that drives a browser or remote connector, recommend the user click
 **Run now** once so tool approvals are captured and future scheduled runs don't
 pause on permission prompts.
+
+## Uninstall / remove tasks
+
+When the user asks to **"uninstall / remove / delete / clean up the scheduled
+tasks"** (rather than install), run this flow instead of Steps 2–5. Same
+**project-filing rule** applies: you can only remove tasks filed under the **active
+project's** session, so run this from that project's Cowork chat.
+
+### U1 — Determine which tasks to remove
+
+Call `list_scheduled_tasks`. Select this project's tasks — they're the ones whose
+`taskId` ends with the project's basename suffix (the templates mint ids like
+`release-substack-clips-<PROJECT_BASENAME>`, `schedule-substack-live-<PROJECT_BASENAME>`,
+etc.). Optionally run the collector (`collect-tasks.mjs --list`) to get the exact
+ids the project's current specs would produce — but **match on the live list**, not
+only the specs, so you also catch tasks whose spec was already deleted (e.g. the
+retired `drain-clip-queue-*` / `refill-clip-queue-*` pair).
+
+Scope options, in order of what the user asked:
+
+- **A specific task** they named → just that `taskId`.
+- **"the retired/old ones"** → the disabled/legacy tasks (e.g. `drain-clip-queue-*`,
+  `refill-clip-queue-*`).
+- **"all the scheduled tasks" for this project** → every task with this project's
+  basename suffix. **Never** remove tasks belonging to another project.
+
+### U2 — Confirm before deleting (always)
+
+Deletion is destructive and not undoable from here. **List the exact tasks you're
+about to delete** (id + description + schedule) and get an explicit **yes**. Do not
+proceed on ambiguity — if the scope is unclear, ask.
+
+### U3 — Delete each task
+
+For each confirmed task, call the Cowork scheduler's **delete tool**
+(`delete_scheduled_task { taskId }` — use whatever the scheduled-tasks MCP names it;
+it's the inverse of `create_scheduled_task`). If no delete tool is available in this
+environment, **stop and tell the user to remove the task from the Cowork
+scheduled-tasks sidebar manually** (the trash icon), and list exactly which ids.
+Do not try to "disable" as a substitute for delete unless the user asked to pause
+rather than remove.
+
+### U4 — Offer to remove the spec file(s)
+
+A registered task and its **spec file** (`<PROJECT_ROOT>/.broadbanner/scheduled-tasks/<name>.md`)
+are separate. Deleting the task does NOT delete the spec — and if the spec remains, a
+future `install-scheduled-tasks` run will **recreate** the task. So after deleting,
+**ask** whether to also delete the matching spec file(s):
+
+- **Yes** → remove the spec file so it won't be reinstalled.
+- **No / keep** (default when unsure) → leave the spec; warn that re-running install
+  will recreate the task. Specs are versioned project files the user may want to keep.
+
+Never delete a spec the user didn't confirm.
+
+### U5 — Report
+
+Summarize: each `taskId` deleted (or "manual removal needed" if no delete tool),
+and for each, whether its spec file was removed or kept. Note any leftover specs
+that would recreate a task on the next install.
 
 ## Spec format & variables
 
