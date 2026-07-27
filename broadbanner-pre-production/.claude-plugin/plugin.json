@@ -1,6 +1,6 @@
 {
   "name": "broadbanner-pre-production",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pre-Production Assistant (Production+ add-on) for Banner and Backbone Media. Auto-schedules your shows on Substack and Restream on a recurring basis — the unattended automation of the manual schedule-live skills. Maps to the pre_production_assistant entitlement (cap scheduling:auto). Installs its recurring tasks through the broadbanner-scheduled-tasks engine.",
   "author": {
     "name": "Banner and Backbone Media"

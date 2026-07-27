@@ -3,11 +3,11 @@
 A repeatable, machine-independent procedure for standing up and managing the
 recurring BroadBanner tasks (clip release, text release, live scheduling) in
 Cowork. Everything here goes through the **canonical install path** — committed
-spec files registered by the `manage` skill. You never hand-edit
+spec files registered by the `bb-scheduled-manager` skill. You never hand-edit
 the Cowork scheduler or drop files into a project from a one-off session; that is
 exactly the failure mode this plugin exists to prevent.
 
-> **Golden rule:** a task only becomes real when `manage install` runs
+> **Golden rule:** a task only becomes real when `/bb-scheduled-manager install` runs
 > **from the Cowork session of the project the task belongs to**. The scheduler
 > files a task under whichever project created it — there is no project
 > parameter. Run the skill from the right project, every time.
@@ -51,7 +51,7 @@ exactly the failure mode this plugin exists to prevent.
    - **CLI-initialized** (`banner-admin init` wrote the config): template vars
      (`{{PROJECT_BASENAME}}`, `{{BRAND_SLUG}}`, `{{POD_PREFIX}}`, …) resolve from
      it automatically.
-   - **Connector-only / no-CLI** (no config): the `manage` skill
+   - **Connector-only / no-CLI** (no config): the `bb-scheduled-manager` skill
      pulls the brand slug + Substack handle from the MCP connector
      (`get_creator_context`) and passes them to the collector — no config file
      needed. **All four templates are now connector-only** (the
@@ -75,9 +75,9 @@ connected browser and verify the account.
   machine and the specs come with it.
 - A spec is YAML frontmatter (`id`, `description`, `cronExpression` **or**
   `fireAt`, `enabled`) plus a Markdown body that is the prompt run on each fire.
-  See [`skills/manage/references/spec-format.md`](skills/manage/references/spec-format.md).
+  See [`skills/bb-scheduled-manager/references/spec-format.md`](skills/bb-scheduled-manager/references/spec-format.md).
 - **`banner-admin install-schedules` only writes files; it does not register
-  anything.** Registration is the `manage` skill calling Cowork's
+  anything.** Registration is the `bb-scheduled-manager` skill calling Cowork's
   `create_scheduled_task`. The CLI cannot call that tool.
 
 ---
@@ -92,7 +92,7 @@ project):
    templates (`release-substack-clips`, `release-substack-text`,
    `schedule-substack-live`, `schedule-restream-live`) — accept, then review each
    scaffolded spec (especially `cronExpression` and the brand scoping).
-2. Say **"install the scheduled tasks"** to run `manage install`.
+2. Say **"install the scheduled tasks"** to run `/bb-scheduled-manager install`.
 3. It collects the specs, resolves `{{VARS}}` from `broadbanner.config.json`,
    diffs against what's already registered (`list_scheduled_tasks`), and shows a
    create/update/unchanged plan. Approve it.
@@ -107,11 +107,11 @@ whose schedule/enabled/prompt changed. Safe to run anytime.
 
 | Action | How |
 | --- | --- |
-| **Change schedule / prompt** | Edit the spec `.md`, commit, re-run `manage install` (or `manage update`) from that project. |
+| **Change schedule / prompt** | Edit the spec `.md`, commit, re-run `/bb-scheduled-manager install` (or `/bb-scheduled-manager update`) from that project. |
 | **Pause** | Set `enabled: false` in the spec, re-run the skill (or toggle in the Cowork sidebar). |
 | **List** | The skill calls `list_scheduled_tasks`; or view them in the Cowork scheduled-tasks sidebar. |
 | **Add a new task** | Drop a new `<name>.md` spec in the project's `.broadbanner/scheduled-tasks/`, re-run the skill. No plugin change. |
-| **Remove / uninstall** | Say **"uninstall the scheduled tasks"** (or "remove/delete task X") from that project's Cowork chat — `manage uninstall` runs the uninstall flow: it lists this project's tasks, confirms, deletes each via the scheduler, and asks whether to also delete the spec (leaving the spec recreates the task on the next install). You can still delete manually via the Cowork sidebar trash icon. |
+| **Remove / uninstall** | Say **"uninstall the scheduled tasks"** (or "remove/delete task X") from that project's Cowork chat — `/bb-scheduled-manager uninstall` runs the uninstall flow: it lists this project's tasks, confirms, deletes each via the scheduler, and asks whether to also delete the spec (leaving the spec recreates the task on the next install). You can still delete manually via the Cowork sidebar trash icon. |
 
 ---
 
@@ -178,7 +178,7 @@ account from that brand's own workspace task (e.g. BannerAndBackboneMedia →
 double-post on either account.
 ```
 
-Then, **in each project's Cowork chat**, run `manage install`. Result:
+Then, **in each project's Cowork chat**, run `/bb-scheduled-manager install`. Result:
 the BannerAndBackboneMedia copy → `@bannerandbackbone`, the NickParo copy →
 `@nickparo`. Same clips, both accounts.
 
@@ -191,7 +191,7 @@ the BannerAndBackboneMedia copy → `@bannerandbackbone`, the NickParo copy →
 ### Cadence reference (don't conflate them)
 
 The release pair's schedule comes from a **cadence preset** chosen at install
-(`manage` → `collect-tasks.mjs --cadence high|medium|low`,
+(`bb-scheduled-manager` → `collect-tasks.mjs --cadence high|medium|low`,
 default `medium`). The templates carry `{{TEXT_RELEASE_CRON}}` /
 `{{CLIP_RELEASE_CRON}}` rather than a fixed cron, so the same spec serves a busy
 publication and a light one — reinstall with a different `--cadence` to change the

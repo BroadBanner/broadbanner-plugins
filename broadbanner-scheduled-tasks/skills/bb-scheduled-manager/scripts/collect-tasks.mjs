@@ -2,7 +2,7 @@
 /**
  * collect-tasks.mjs
  *
- * Deterministic enumerator for the `manage` skill (broadbanner-scheduled-tasks).
+ * Deterministic enumerator for the `bb-scheduled-manager` skill (broadbanner-scheduled-tasks).
  *
  * It does the parts that should NOT be left to a language model: find the
  * project root, derive per-project template variables from

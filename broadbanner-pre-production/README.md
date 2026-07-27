@@ -18,7 +18,7 @@ The billing catalog splits "scheduling" in two:
 
 | Skill | Description |
 |---|---|
-| `auto-schedule-lives` | Gated front door for the add-on. Preflights the `pre_production_assistant` entitlement, then delegates to the `broadbanner-scheduled-tasks` engine (`manage install`) to scaffold + register the two auto-scheduling tasks from this plugin's templates. |
+| `auto-schedule-lives` | Gated front door for the add-on. Preflights the `pre_production_assistant` entitlement, then delegates to the `broadbanner-scheduled-tasks` engine (`/bb-scheduled-manager install`) to scaffold + register the two auto-scheduling tasks from this plugin's templates. |
 
 ## How it works
 

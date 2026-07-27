@@ -14,7 +14,7 @@ hand**. This is the **Pre-Production Assistant** add-on (Production+ / entitleme
 `pre_production_assistant`, cap `scheduling:auto`).
 
 This skill is a thin gated front door: it confirms the entitlement, then hands off to
-the **`broadbanner-scheduled-tasks`** engine (its `manage` skill) to scaffold and
+the **`broadbanner-scheduled-tasks`** engine (its `bb-scheduled-manager` skill) to scaffold and
 register the two auto-scheduling tasks. The manual scheduling skills themselves
 (`substack-schedule-live` / `restream-schedule-live`, in `broadbanner-live-production`,
 Creator+) are unchanged — this add-on just runs them on a schedule.
@@ -39,7 +39,7 @@ API). They **cannot run on a cloud/headless agent**. Two requirements: (1) insta
 run from **desktop Cowork on the machine** where the single BroadBanner Chrome profile
 stays logged in; (2) set **Cowork Home to run on your computer** (not the beta "run in
 cloud" mode) so the tasks file as **"Runs on this computer."** See the
-`broadbanner-scheduled-tasks` `manage` skill for the full run-location detail.
+`broadbanner-scheduled-tasks` `bb-scheduled-manager` skill for the full run-location detail.
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ cloud" mode) so the tasks file as **"Runs on this computer."** See the
   session authorized to schedule (brand-admin/super-admin today; host-of-series once
   creator-scoped scheduling ships). Connector-only — no config, no gateway token.
 - The **`broadbanner-scheduled-tasks`** plugin installed (this skill delegates to its
-  `manage` skill). If it isn't installed, tell the user to add it from the marketplace.
+  `bb-scheduled-manager` skill). If it isn't installed, tell the user to add it from the marketplace.
 - The single connected BroadBanner Chrome profile logged into Substack (and Restream
   Studio, for the restream task).
 
@@ -62,17 +62,17 @@ do **not** reimplement it here.
 1. Resolve this plugin's templates directory: it is `references/templates/` at this
    plugin's root — i.e. `../../references/templates` relative to this skill's directory.
    Capture its absolute path as `PP_TEMPLATES`.
-2. Invoke the **`manage`** skill (plugin `broadbanner-scheduled-tasks`) with the
+2. Invoke the **`bb-scheduled-manager`** skill (plugin `broadbanner-scheduled-tasks`) with the
    **`install`** action, telling it to scaffold from `PP_TEMPLATES`: it runs its
    collector as
-   `node <manage>/scripts/collect-tasks.mjs --project <PROJECT> --templates-dir "$PP_TEMPLATES" --substack-username <handle> --scaffold` (plus `--brand-slug <slug>` only for
+   `node <bb-scheduled-manager>/scripts/collect-tasks.mjs --project <PROJECT> --templates-dir "$PP_TEMPLATES" --substack-username <handle> --scaffold` (plus `--brand-slug <slug>` only for
    a single-brand workspace's brand-isolation filter), then proceeds through its normal
    diff → create/update → verify-run-location → report flow.
    - Pass a cadence if the user asked (`--cadence high|medium|low`, default medium).
-   - The manage skill's regression guard still applies (it won't overwrite a live task's
+   - The `bb-scheduled-manager` regression guard still applies (it won't overwrite a live task's
      prompt without explicit confirmation).
 
-If you prefer, you can just tell the user to run `manage install` themselves after
+If you prefer, you can just tell the user to run `/bb-scheduled-manager install` themselves after
 scaffolding these templates — but the point of this skill is to gate on the add-on and
 drive that install for them.
 
@@ -83,12 +83,12 @@ After the engine finishes, confirm both tasks (`schedule-substack-live-*`,
 the two task ids, their cron, and run location. Remind the user to click **Run now**
 once on each to capture browser/connector approvals.
 
-To later change cadence, re-run this skill (or `manage update`); to remove, use
-`manage uninstall`.
+To later change cadence, re-run this skill (or `/bb-scheduled-manager update`); to remove, use
+`/bb-scheduled-manager uninstall`.
 
 ## See also
 
-- `broadbanner-scheduled-tasks` → `manage` skill — the engine that installs/updates/
+- `broadbanner-scheduled-tasks` → `bb-scheduled-manager` skill — the engine that installs/updates/
   uninstalls scheduled tasks (the mechanics, run-location, regression guard).
 - `broadbanner-live-production` → `substack-schedule-live` / `restream-schedule-live` —
   the manual (Creator+) scheduling skills these tasks automate.

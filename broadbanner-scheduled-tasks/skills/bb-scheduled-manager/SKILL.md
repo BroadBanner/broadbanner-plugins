@@ -1,5 +1,5 @@
 ---
-name: manage
+name: bb-scheduled-manager
 description: "Install, update, or uninstall Cowork scheduled tasks for a BroadBanner project. REQUIRES an action — install (register/sync specs), update (re-sync or --refresh existing), or uninstall (remove tasks, optionally their specs). Use when the user says 'install/register/sync the scheduled tasks', 'update/refresh the scheduled tasks', 'uninstall/remove/delete/clean up the scheduled tasks', or 'set up scheduling'. Resolves per-project template vars and registers each via the Cowork scheduler, filed under the project it's run from."
 ---
 
@@ -46,8 +46,8 @@ anything — installing into the wrong project is the exact bug this plugin fixe
 
 This skill **requires an action**. Resolve it in order:
 
-1. An explicit action in the invocation/args — `manage install`, `manage update`,
-   `manage uninstall`.
+1. An explicit action in the invocation/args — `/bb-scheduled-manager install`,
+   `/bb-scheduled-manager update`, `/bb-scheduled-manager uninstall`.
 2. Else infer from the user's phrasing: "install / register / sync / set up" →
    **install**; "update / refresh / re-sync" → **update**; "uninstall / remove /
    delete / clean up" → **uninstall**.
@@ -292,7 +292,7 @@ rather than remove.
 
 A registered task and its **spec file** (`<PROJECT_ROOT>/.broadbanner/scheduled-tasks/<name>.md`)
 are separate. Deleting the task does NOT delete the spec — and if the spec remains, a
-future `manage install` run will **recreate** the task. So after deleting,
+future `bb-scheduled-manager install` run will **recreate** the task. So after deleting,
 **ask** whether to also delete the matching spec file(s):
 
 - **Yes** → remove the spec file so it won't be reinstalled.
