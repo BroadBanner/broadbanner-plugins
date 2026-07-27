@@ -23,8 +23,14 @@ have no posting/scheduling API, so the browser is load-bearing. These tasks
 **cannot run on a cloud/headless agent**: register and run them from **desktop
 Cowork on the machine where the single BroadBanner Chrome profile stays open and
 logged in** at fire time. A scheduled run with no connected browser stops and
-reports (nothing posted/scheduled). Install these tasks on that machine's Cowork,
-not a cloud scheduler.
+reports (nothing posted/scheduled).
+
+**Two separate requirements — do both:** (1) run this install skill from an "on
+your computer" desktop Cowork session, AND (2) create each task with its
+**run-location set to "this computer"** (Step 4). Requirement (1) alone is NOT
+enough — `create_scheduled_task` defaults to **cloud**, so a task installed from a
+local session still lands as "Runs in cloud" unless you explicitly set the
+run-location. Every task must show **"Runs on this computer"** when done.
 
 ## ⚠️ Project filing — read first
 
@@ -132,24 +138,50 @@ Present the plan to the user before mutating anything.
 
 ## Step 4 — Apply
 
+> **⚠️ Create every task to run ON THIS COMPUTER (local), never in the cloud.**
+> These are browser-automation tasks that drive local Chrome — a cloud-run task
+> can never reach the browser and fails every fire. Run location is a **per-task
+> setting on the create call**, NOT a property of the session you install from:
+> installing from an "on your computer" session is necessary but **not sufficient**;
+> the create call still defaults to cloud unless you set it. **Inspect the
+> `create_scheduled_task` tool's own parameter schema and set the run-location
+> argument to the local / "this computer" option** (the field that drives the
+> "Runs on this computer" vs "Runs in cloud" pill in the Cowork sidebar — e.g. a
+> `runOn` / `location` / `runsLocally` / `device`-style parameter; use whatever
+> your environment's schema actually names it). Do NOT accept the cloud default.
+
 For each task in the plan:
 
 - **create:** call `create_scheduled_task` with `taskId` = `id`, `description`,
-  `prompt`, and **either** `cronExpression` **or** `fireAt` (never both; omit both
-  for an ad-hoc task). If the spec's `enabled` is `false`, immediately follow with
-  `update_scheduled_task` `{ taskId, enabled: false }`.
+  `prompt`, **the run-location argument set to local / "this computer"** (see the
+  warning above), and **either** `cronExpression` **or** `fireAt` (never both; omit
+  both for an ad-hoc task). If the spec's `enabled` is `false`, immediately follow
+  with `update_scheduled_task` `{ taskId, enabled: false }`.
 - **update:** call `update_scheduled_task` with only the changed fields
-  (`cronExpression`/`fireAt`, `description`, `prompt`, `enabled`).
+  (`cronExpression`/`fireAt`, `description`, `prompt`, `enabled`, **and the
+  run-location if an existing task is filed as cloud** — see the verification below).
 - **enable/disable:** `update_scheduled_task` with `{ taskId, enabled }`.
 
 Recurring tasks apply a few minutes of dispatch jitter — the resulting run time
 may differ slightly from the cron minute. That's expected.
 
+### Verify run location (do NOT skip)
+
+After creating/updating, confirm via `list_scheduled_tasks` (or the Cowork
+scheduled-tasks sidebar) that **every** task reports **"Runs on this computer"**.
+If any task is filed as **"Runs in cloud"**, it is broken — a cloud task cannot
+reach local Chrome. Fix it: set the run-location to local via
+`update_scheduled_task` if the tool supports it, otherwise **delete and recreate**
+the task with the run-location argument set (per the warning above). Report the
+final run location for each task in Step 5.
+
 ## Step 5 — Report
 
-Print a summary table: each `taskId`, its schedule, and the action taken
-(created / updated / enabled / disabled / unchanged). Echo any collector
-warnings.
+Print a summary table: each `taskId`, its schedule, the action taken
+(created / updated / enabled / disabled / unchanged), and its **run location**
+(must be "on this computer"). Echo any collector warnings. If any task still
+reports "Runs in cloud" after the Step 4 verification, flag it loudly as broken —
+it cannot reach the local browser.
 
 For any task that drives a browser or remote connector, recommend the user click
 **Run now** once so tool approvals are captured and future scheduled runs don't
