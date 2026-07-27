@@ -1,6 +1,6 @@
 ---
 name: restream-schedule-live
-description: "Schedule Restream Studio events from BroadBanner show data. Use when the user says 'schedule the restream events', 'schedule restream', or 'set up restream' for upcoming shows. Reads shows and writes scheduled-event state via the BroadBanner MCP connector's admin tools, and automates the Restream scheduling UI via browser to pair the correct Substack channel. Connector-only (OAuth); requires a brand-admin or super-admin role."
+description: "Schedule Restream Studio events from BroadBanner show data. Use when the user says 'schedule the restream events', 'schedule restream', or 'set up restream' for upcoming shows. Reads shows and writes scheduled-event state via the BroadBanner MCP connector's admin tools, and automates the Restream scheduling UI via browser to pair the correct Substack channel. Connector-only (OAuth); authorized for a creator who hosts the series (Creator Workspace) or a brand/super admin."
 metadata:
   requiresTool: creator_workspace
 ---
@@ -9,7 +9,7 @@ metadata:
 
 Schedule upcoming podcast live streams as Restream events using show data served by the **BroadBanner MCP connector** (server `broadbanner`). This skill automates the Restream Studio event scheduling flow — finding the draft event by show title, updating the title and date/time, pairing the correct Substack streaming channel, and clicking Schedule. After scheduling, it writes the event state back to D1 via the `upsert_restream_event` connector tool.
 
-This skill authenticates **only through the MCP connector**, which the creator has authorized via OAuth — there is no token file, no config file, no mount, and no request signing. The connector's admin tools fail closed: a session without a brand-admin or super-admin role gets an authorization error. If a tool call fails that way, stop and report — there is no direct-API fallback to route around it.
+This skill authenticates **only through the MCP connector**, which the creator has authorized via OAuth — there is no token file, no config file, no mount, and no request signing. The connector's scheduling tools fail closed: a session that neither **hosts the series** (a creator with the Creator Workspace → `shows:self-write`) nor holds a **brand-admin/super-admin** role gets an authorization error. If a tool call fails that way, stop and report — there is no direct-API fallback to route around it.
 
 ## Admin scheduling tools (MCP connector `broadbanner`)
 
@@ -32,7 +32,7 @@ All data access goes through these tools — there is no `curl`, no `API_BASE`, 
 ## Prerequisites
 
 - The user must be logged in to Restream Studio at `app.restream.io` in Chrome before running.
-- The BroadBanner MCP connector (server `broadbanner`) must be connected and the creator's session must carry a **brand-admin or super-admin** role — the admin scheduling tools fail closed otherwise (you'll get an authorization error). No token file, config, or workspace mount is required.
+- The BroadBanner MCP connector (server `broadbanner`) must be connected and the caller must be authorized to schedule these shows: either a **host of the series** (a creator with the Creator Workspace entitlement → `shows:self-write`) or a **brand-admin/super-admin**. The scheduling tools fail closed otherwise (you'll get an authorization error). No token file, config, or workspace mount is required.
 - D1 must contain shows whose `hasLiveScheduled` is either `"substack_scheduled"` (Substack creds present, Restream channel not yet paired) OR `"restream_paired"` (channel_id present in `restream_events`, but no event_status='scheduled' write yet), AND with a non-null `restreamKey`. Both states are reachable from the substack-schedule-live skill plus Restream-Worker's channel-sync; this skill takes them the rest of the way to `restream_scheduled` by creating the Restream event and writing `restream_events.event_status='scheduled'`. The derive pass then promotes the show to `restream_scheduled` on the next reconcile tick. Shows already at `restream_scheduled` are excluded — they're done.
 - The matching Substack channel must already exist in Restream — provisioned by the **Restream-Worker** channel-sync pass (`broadbanner-restream` Worker, every _/30 cron tick under the `'poll'` kind, plus on-demand via the HMAC-authed `POST /sync-channels` route). Channel names follow the format `"{showTitle} - {showDate}"` and the Worker writes `channel_id` back to D1's `restream_events` row, so this skill can rely on it being present. The legacy local `banner-blast restream-poller --wix-latest` and `banner-admin schedule-live` channel-sync paths are retired — see `Restream-Worker/README.md` for the current flow. If a channel is missing for a show whose Substack live is already scheduled, the Worker will create it on the next _/30 tick; trigger the sync immediately by hitting `/sync-channels` if you need it before then.
 
@@ -169,15 +169,15 @@ The poller (`cli:restream-poller`) owns channel metadata (`show_title`, `show_da
 This skill is declared `metadata.requiresTool: creator_workspace` (Creator+ live
 scheduling). Before any browser work, call `get_creator_context` and, if it returns a
 capability summary (`caps` / `entitledTools` / `isAdmin` / `tier`), confirm the caller can
-schedule: either `isAdmin` (brand-admin/super-admin — today's gate) **or** the
-live-scheduling cap is present (`shows:write`, or `shows:self-write` once creator-scoped
-scheduling ships). If those fields are present and none holds, stop **before** any browser
+schedule: either the live-scheduling cap is present (`shows:self-write` — a creator with the
+**Creator Workspace** who hosts the series — or admin `shows:write`) **or** `isAdmin`
+(brand/super admin). If those fields are present and none holds, stop **before** any browser
 work with the CTA below. If the context omits the fields (older connector), proceed — the
-admin scheduling tools fail closed as the backstop.
+scheduling tools fail closed as the backstop.
 
-> ⚠️ Live scheduling needs the **Creator+** plan (`creator_workspace`) or a brand-admin
-> role. Your account isn't authorized yet — add it from your member portal →
-> https://app.broadbanner.com/pricing/membership. Nothing was scheduled.
+> ⚠️ Live scheduling needs the **Creator Workspace** (`creator_workspace`, Creator+) and you
+> must host the series — or a brand/super-admin role. Your account isn't authorized yet — add
+> it from your member portal → https://app.broadbanner.com/pricing/membership. Nothing was scheduled.
 
 ### Step 0: Load show data and run the freshness gate
 
@@ -630,7 +630,7 @@ channels.
 - **Multiple draft events match:** When the same `defaultShowTitle` matches more than one draft event (e.g., two "Intelligent Masculinity" episodes from different weeks), prefer the one whose title is most similar to the show's `showTitle`, or the one with the most recent "Last edited" date. If ambiguous, present both to the user and ask them to choose.
 - **Extension blocks tools:** Use `read_page` for verification and `form_input` for data entry. If `left_click` is blocked, ask the user to click the element.
 - **`upsert_restream_event` errors transiently (`5xx`/network):** Retry the tool call (up to 3×, brief backoff — 500 ms → 1 s → 2 s). The tool handles upsert semantics atomically; there is no read-then-write race. After retries exhaust, report the failure for this show and continue.
-- **A tool returns an authorization error:** The connector session isn't authorized for admin scheduling — you need a brand-admin or super-admin role on your BroadBanner account. Stop the run and tell the user; there is no fallback path.
+- **A tool returns an authorization error:** The connector session isn't authorized to schedule this show — you must **host the series** (a creator with the Creator Workspace entitlement) or hold a brand-admin/super-admin role. Stop the run and tell the user; there is no fallback path.
 - **A tool returns a request-shape error (`invalid_field`, `field_not_allowed_for_actor`, missing publication, `not_found` on the show):** Fail loud with the message. Do NOT retry — a 4xx-class error indicates a bad request or a missing show in D1. For `not_found`, suggest a reconcile or manual add.
 
 ## Key technical notes

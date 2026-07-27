@@ -1,6 +1,6 @@
 ---
 name: substack-schedule-live
-description: "Schedule a Substack live stream from BroadBanner show data. Use when the user says 'schedule the lives', 'schedule substack streams', or 'set up the live streams' for upcoming shows. Reads show data via the BroadBanner MCP connector's admin tools, automates the Substack 'Go live with stream key' modal via browser, invites co-hosts, captures stream credentials, and writes them back to D1. Connector-only (OAuth); requires a brand-admin or super-admin role."
+description: "Schedule a Substack live stream from BroadBanner show data. Use when the user says 'schedule the lives', 'schedule substack streams', or 'set up the live streams' for upcoming shows. Reads show data via the BroadBanner MCP connector's admin tools, automates the Substack 'Go live with stream key' modal via browser, invites co-hosts, captures stream credentials, and writes them back to D1. Connector-only (OAuth); authorized for a creator who hosts the series (Creator Workspace) or a brand/super admin."
 metadata:
   requiresTool: creator_workspace
 ---
@@ -9,7 +9,7 @@ metadata:
 
 Schedule upcoming podcast live streams on Substack using show data from the **BroadBanner MCP connector** (server `broadbanner`). The connector's admin scheduling tools serve fresh show data and accept managed-field writes, proxying to the data plane server-side — this skill never talks to `gateway.broadbanner.com` or `data.broadbanner.com` directly, and holds no credentials of its own. It automates the "Go live with stream key" modal in the Substack publisher dashboard, fills in the title and schedule, invites co-hosts, captures the generated stream URL and stream key, and writes the results back to D1 via the connector tools.
 
-This skill authenticates **only through the MCP connector**, which the creator has authorized via OAuth — there is no token file, no config file, no mount, and no request signing. The connector's admin tools fail closed: a session without a brand-admin or super-admin role gets an authorization error. If a tool call fails that way, stop and report — there is no direct-API fallback to route around it.
+This skill authenticates **only through the MCP connector**, which the creator has authorized via OAuth — there is no token file, no config file, no mount, and no request signing. The connector's scheduling tools fail closed: a session that neither **hosts the series** (a creator with the Creator Workspace → `shows:self-write`) nor holds a **brand-admin/super-admin** role gets an authorization error. If a tool call fails that way, stop and report — there is no direct-API fallback to route around it.
 
 ## Admin scheduling tools (MCP connector `broadbanner`)
 
@@ -26,7 +26,7 @@ All data access goes through these tools — there is no `curl`, no `API_BASE`, 
 ## Prerequisites
 
 - The user must be logged in to the correct Substack publication in Chrome before running.
-- The BroadBanner MCP connector (server `broadbanner`) must be connected and the creator's session must carry a **brand-admin or super-admin** role — the admin scheduling tools fail closed otherwise (you'll get an authorization error). No token file, config, or workspace mount is required.
+- The BroadBanner MCP connector (server `broadbanner`) must be connected and the caller must be authorized to schedule these shows: either a **host of the series** (a creator with the Creator Workspace entitlement → `shows:self-write`) or a **brand-admin/super-admin**. The scheduling tools fail closed otherwise (you'll get an authorization error). No token file, config, or workspace mount is required.
 - D1 must contain shows with `hasLiveScheduled === "title_customized"` — surfaced by `list_schedulable_shows` in Step 0.
 
 ## Tool reliability guide
@@ -110,15 +110,15 @@ When you report the show list to the user (Step 0) and the final summary (Step 1
 This skill is declared `metadata.requiresTool: creator_workspace` (Creator+ live
 scheduling). Before any browser work, call `get_creator_context` and, if it returns a
 capability summary (`caps` / `entitledTools` / `isAdmin` / `tier`), confirm the caller can
-schedule: either `isAdmin` (brand-admin/super-admin — today's gate) **or** the
-live-scheduling cap is present (`shows:write`, or `shows:self-write` once creator-scoped
-scheduling ships). If those fields are present and none holds, stop **before** any browser
+schedule: either the live-scheduling cap is present (`shows:self-write` — a creator with the
+**Creator Workspace** who hosts the series — or admin `shows:write`) **or** `isAdmin`
+(brand/super admin). If those fields are present and none holds, stop **before** any browser
 work with the CTA below. If the context omits the fields (older connector), proceed — the
-admin scheduling tools (`list_schedulable_shows` etc.) fail closed as the backstop.
+scheduling tools (`list_schedulable_shows` etc.) fail closed as the backstop.
 
-> ⚠️ Live scheduling needs the **Creator+** plan (`creator_workspace`) or a brand-admin
-> role. Your account isn't authorized yet — add it from your member portal →
-> https://app.broadbanner.com/pricing/membership. Nothing was scheduled.
+> ⚠️ Live scheduling needs the **Creator Workspace** (`creator_workspace`, Creator+) and you
+> must host the series — or a brand/super-admin role. Your account isn't authorized yet — add
+> it from your member portal → https://app.broadbanner.com/pricing/membership. Nothing was scheduled.
 
 ### Step 0: Fetch show data and run the freshness gate
 
@@ -657,7 +657,7 @@ browser-automation failures (e.g. modal didn't open) and write failures (e.g. to
 - **`substackUsername` is null on a cohost:** Fall back to case-insensitive name matching against `invitedUser.name` from the API. If still no match, skip the write for this cohost.
 - **Multiple shows on same publication:** Process sequentially. Create a new tab for each show — the URL triggers a fresh modal each time.
 - **A `set_show_schedule` / `set_show_cohost_invite` call errors transiently (`5xx`/network):** Retry the tool call (up to 3×, brief backoff — 500 ms → 1 s → 2 s). After retries exhaust, report the failure for this show and continue to the next show — don't abort the whole run.
-- **A tool returns an authorization error:** The connector session isn't authorized for admin scheduling — you need a brand-admin or super-admin role on your BroadBanner account. Stop the run and tell the user; there is no fallback path.
+- **A tool returns an authorization error:** The connector session isn't authorized to schedule this show — you must **host the series** (a creator with the Creator Workspace entitlement) or hold a brand-admin/super-admin role. A `forbidden_not_host` on a cohost-invite write means you don't host that show. Stop the run and tell the user; there is no fallback path.
 - **A tool returns a request-shape error (`invalid_field`, or `not_found` on the show):** Fail loud for this show with the message. Do NOT retry — a 4xx-class error indicates a bad request or a missing show in D1, neither of which retry can fix. Continue to the next show.
 - **`set_show_cohost_invite` reports the junction row missing (`not_found`):** The junction doesn't exist in D1 yet — likely a contributor just added to Wix's `hosts[]`/`guests[]` that the reconcile cron hasn't picked up. Log a warning, skip this cohost's invite write, and continue. The next reconcile cycle creates the junction; a re-run of this skill will then succeed.
 - **The connector or its data plane is unreachable:** Stop the run and tell the user. There is no direct-API bypass — this skill talks only to the connector tools.
