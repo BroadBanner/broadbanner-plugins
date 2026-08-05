@@ -193,26 +193,47 @@ function resolveReleaseCrons(cfg, opts, warnings) {
 // passes the brand-scoped vars in from the MCP connector's get_creator_context.
 function deriveVars(root, cfg, opts = {}, warnings = []) {
   const basename = opts.basename || path.basename(root);
-  const brandSlug =
-    opts.brandSlug ||
-    (cfg.user && cfg.user.brandSlugs && cfg.user.brandSlugs[0]) ||
-    (cfg.brands && cfg.brands[0] && cfg.brands[0].id) ||
-    "";
-  const brandDisplay =
-    opts.brandDisplay || (cfg.brands && cfg.brands[0] && cfg.brands[0].displayName) || "";
+  // Brand isolation is OPT-IN. Only an explicit --brand-slug/--brand-display sets
+  // it — we intentionally do NOT fall back to the first configured/onboarded brand.
+  // A multi-brand creator installs BRANDLESS by default, so the schedule-live tasks
+  // process ready shows across ALL series they host instead of being silently pinned
+  // to whichever brand happened to sort first (which mis-scoped installs to BABM).
+  const brandSlug = opts.brandSlug || "";
+  const brandDisplay = opts.brandDisplay || "";
   const podIds =
     opts.podIds != null
       ? opts.podIds.split(",").map((s) => s.trim()).filter(Boolean)
       : (cfg.user && cfg.user.effectivePodIds) || [];
+  const podIdsStr = podIds.join(", ");
+  // Adaptive phrasing so the schedule-live templates read correctly whether the
+  // install is brandless (default) or scoped to one brand via --brand-slug.
+  const brandIsolation = brandSlug
+    ? "**Brand isolation:** ALSO require the show's `podId` to start with `" +
+      brandSlug +
+      "-` (" +
+      (brandDisplay || brandSlug) +
+      " series" +
+      (podIdsStr ? ": " + podIdsStr : "") +
+      "). Never process shows from other brands."
+    : "**All your brands:** do NOT restrict by brand — process every ready show across all series you host" +
+      (podIdsStr ? " (" + podIdsStr + ")" : "") +
+      ". Make sure the connected browser is logged into the Substack publication that matches each show's brand before it runs.";
+  const publicationTarget = brandDisplay
+    ? "the " + brandDisplay + " Substack publication"
+    : "the Substack publication that matches each show's brand";
+  const brandLabel = brandDisplay || "your onboarded brands";
   return {
     PROJECT_BASENAME: basename,
     PROJECT_ROOT: `~/${basename}`,
     CREDS_DIR: `~/.broadbanner/${basename}`,
     BRAND_SLUG: brandSlug,
-    BRAND_ID: opts.brandSlug || (cfg.brands && cfg.brands[0] && cfg.brands[0].id) || brandSlug,
+    BRAND_ID: opts.brandSlug || "",
     BRAND_DISPLAY: brandDisplay,
+    BRAND_LABEL: brandLabel,
     POD_PREFIX: brandSlug ? `${brandSlug}-` : "",
-    POD_IDS: podIds.join(", "),
+    POD_IDS: podIdsStr,
+    BRAND_ISOLATION: brandIsolation,
+    PUBLICATION_TARGET: publicationTarget,
     SUBSTACK_USERNAME: opts.substackUsername || (cfg.user && cfg.user.substackUsername) || "",
     ...resolveReleaseCrons(cfg, opts, warnings),
   };
@@ -342,7 +363,7 @@ function main() {
     );
     if (!vars.BRAND_SLUG) {
       warnings.push(
-        "BRAND_SLUG is empty — the schedule-live brand-isolation filter ({{POD_PREFIX}}) won't be set. The release tasks (text + clips) are brandless and don't need it; pass --brand-slug <slug> only if you're installing the schedule-live pair for a single-brand workspace.",
+        "Brandless install (the default): the schedule-live tasks will process ready shows across ALL brands you host — not pinned to one brand. The release tasks (text + clips) are brandless too. Pass --brand-slug <slug> ONLY to restrict a single-brand workspace to that one brand.",
       );
     }
   }

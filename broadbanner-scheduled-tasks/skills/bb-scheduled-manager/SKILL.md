@@ -134,8 +134,10 @@ full table.
 - Add `--list` instead of bare invocation for a human-readable preview (it prints
   the resolved release cadence so you can confirm before installing).
 - The collector emits a warning when running without a config; an empty
-  `BRAND_SLUG` only affects the schedule-live brand-isolation filter (the release
-  tasks are brandless), so it's harmless for a personal hub.
+  `BRAND_SLUG` is the **default** — the schedule-live tasks then process shows
+  across **all** brands you host (the release tasks are brandless too), which is
+  the correct behavior for a multi-brand / personal-hub creator. Pass
+  `--brand-slug` only to intentionally restrict a single-brand workspace.
 
 Parse the JSON. **Confirm `projectBasename` is the project you intend to install
 into.** If it is not, stop (see the filing warning above). Surface any

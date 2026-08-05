@@ -45,22 +45,28 @@ across brands.
 | `{{PROJECT_BASENAME}}` | basename of project root | `LevRemembers` |
 | `{{PROJECT_ROOT}}` | `~/<basename>` | `~/LevRemembers` |
 | `{{CREDS_DIR}}` | `~/.broadbanner/<basename>` | `~/.broadbanner/LevRemembers` |
-| `{{BRAND_SLUG}}` | `user.brandSlugs[0]` ?? `brands[0].id` | `lr` |
-| `{{BRAND_ID}}` | `brands[0].id` | `lr` |
-| `{{BRAND_DISPLAY}}` | `brands[0].displayName` | `Lev Remembers` |
-| `{{POD_PREFIX}}` | `{{BRAND_SLUG}}` + `-` | `lr-` |
+| `{{BRAND_SLUG}}` | `--brand-slug` only (empty ⇒ brandless) | `lr` |
+| `{{BRAND_ID}}` | `--brand-slug` only | `lr` |
+| `{{BRAND_DISPLAY}}` | `--brand-display` only | `Lev Remembers` |
+| `{{BRAND_LABEL}}` | `{{BRAND_DISPLAY}}` else `your onboarded brands` | `Lev Remembers` |
+| `{{POD_PREFIX}}` | `{{BRAND_SLUG}}` + `-` (empty ⇒ brandless) | `lr-` |
 | `{{POD_IDS}}` | `user.effectivePodIds` joined | `lr-lr, lr-vfu, lr-ctwld` |
+| `{{BRAND_ISOLATION}}` | computed: single-brand `podId` filter, else "process all brands you host" | — |
+| `{{PUBLICATION_TARGET}}` | `the <brand> Substack publication`, else "…that matches each show's brand" | — |
 | `{{SUBSTACK_USERNAME}}` | `user.substackUsername` | `levparnas` |
 | `{{TEXT_RELEASE_CRON}}` | cadence preset (text) | `*/30 * * * *` |
 | `{{CLIP_RELEASE_CRON}}` | cadence preset (clips) | `0 8-22 * * *` |
 
 Unknown `{{VARS}}` are left untouched and reported as warnings.
 
-> **Brandless release tasks.** The shipped `release-substack-text` and
-> `release-substack-clips` templates are **brandless** — they don't use
-> `{{BRAND_SLUG}}` and release everything to the creator's one default handle.
-> `{{BRAND_SLUG}}` / `{{POD_PREFIX}}` now drive **only** the schedule-live pair's
-> brand-isolation filter, and matter only for a single-brand workspace.
+> **Brandless by default.** The `release-substack-text` / `release-substack-clips`
+> templates are **brandless** (no `{{BRAND_SLUG}}`) and always were. The
+> **schedule-live** pair is now **also brandless by default** — with no
+> `--brand-slug`, `{{BRAND_ISOLATION}}` renders "process every ready show across all
+> series you host", so a multi-brand creator's install covers ALL their brands.
+> Pass `--brand-slug` (and optionally `--brand-display`) ONLY to restrict a
+> single-brand workspace to that one brand; the collector no longer falls back to
+> the first configured brand.
 
 ### Release cadence
 

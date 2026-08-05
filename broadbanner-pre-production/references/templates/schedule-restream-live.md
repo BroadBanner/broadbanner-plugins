@@ -1,6 +1,6 @@
 ---
 id: schedule-restream-live-{{PROJECT_BASENAME}}
-description: Run the restream-schedule-live skill daily for {{BRAND_DISPLAY}} — pairs Substack channels and schedules draft Restream events.
+description: Run the restream-schedule-live skill daily for {{BRAND_LABEL}} — pairs Substack channels and schedules draft Restream events.
 cronExpression: 0 4 * * *
 enabled: true
 ---
@@ -23,7 +23,7 @@ Invoke the skill; it fetches show data via the connector and handles the Restrea
 
 1. Calls `list_schedulable_shows({ states: ["substack_scheduled", "restream_paired"] })` via the connector.
 2. Filters shows already scheduled on Substack with a non-null stream key.
-   - **Brand isolation:** ALSO require the show's `podId` starts with `{{POD_PREFIX}}` ({{BRAND_DISPLAY}} series: {{POD_IDS}}). Never process shows from other brands.
+   - {{BRAND_ISOLATION}}
 3. Applies the default 7-day scheduling horizon and excludes shows already scheduled in Restream (`list_restream_events`).
 4. If no eligible shows remain, exit quietly ("No shows ready for Restream scheduling"). This is the common case — not an error.
 5. Otherwise automate Restream Studio (find the draft event by title, set date/time, pair the Substack channel, click Schedule) and write the result back via `upsert_restream_event`.
