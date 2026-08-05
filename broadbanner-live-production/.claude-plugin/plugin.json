@@ -1,7 +1,7 @@
 {
   "name": "broadbanner-live-production",
-  "version": "0.2.0",
-  "description": "Creator+ live-production automation for Banner and Backbone Media. Schedule Substack and Restream live streams for the series you host, and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI. Maps to the creator_workspace entitlement (Creator+).",
+  "version": "0.2.1",
+  "description": "Creator+ live-production automation for BroadBanner creators. Schedule Substack and Restream live streams for the series you host, and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI. Maps to the creator_workspace entitlement (Creator+).",
   "author": {
     "name": "Banner and Backbone Media"
   },
