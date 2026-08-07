@@ -16,8 +16,8 @@ Some series belong to shared/co-owned Substack and Restream accounts that live i
     "sotsp-tfl": "16e73433-2637-4119-a919-a8f27f3f2644"
   },
   "byBrand": {
-    "sick-of-this-shit-publications": "16e73433-2637-4119-a919-a8f27f3f2644",
-    "banner-and-backbone-media": "29945170-9e83-45c0-a920-75da56721c91"
+    "sotsp": "16e73433-2637-4119-a919-a8f27f3f2644",
+    "babm": "29945170-9e83-45c0-a920-75da56721c91"
   }
 }
 ```
@@ -29,7 +29,7 @@ Some series belong to shared/co-owned Substack and Restream accounts that live i
 For each show or clip you're about to act on:
 
 1. If `chromeProfiles.bySeriesId[show.seriesId]` (or `chromeProfiles.byPodId[clip.pod_id]`) is set → use that **deviceId**.
-2. Else if `chromeProfiles.byBrand[show.brand]` is set → use that **deviceId**.
+2. Else if `chromeProfiles.byBrand[<brandId>]` is set → use that **deviceId**. Derive `<brandId>` as the **short brand id** — the `seriesId`/`pod_id` prefix before the first hyphen (`sotsp-tfl` → `sotsp`), **not** the show's long `brand` field (a publication slug). `byBrand` is keyed by the short brand id.
 3. Else → make no change; keep whatever browser is currently selected.
 
 If the resolved deviceId is the **same** as the currently-selected browser, skip the switch — `select_browser` is idempotent but the round-trip wastes time.

@@ -11,7 +11,7 @@
     {
       "name": "broadbanner-episode-pipeline",
       "source": "./broadbanner-episode-pipeline",
-      "version": "0.6.2",
+      "version": "0.6.3",
       "description": "End-to-end episode processing for Banner and Backbone Media. Orchestrates section selection, transcript download, transcript correction, episode review generation, and Pages publishing from a single Substack post URL.",
       "author": {
         "name": "Banner and Backbone Media"
@@ -20,7 +20,7 @@
     {
       "name": "broadbanner-live-production",
       "source": "./broadbanner-live-production",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "description": "Creator+ live-production automation for BroadBanner creators. Schedule Substack and Restream live streams for the series you host, and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI. Maps to the creator_workspace entitlement (Creator+).",
       "author": {
         "name": "Banner and Backbone Media"
