@@ -47,7 +47,7 @@
     {
       "name": "broadbanner-social-distribution",
       "source": "./broadbanner-social-distribution",
-      "version": "0.41.1",
+      "version": "0.42.0",
       "description": "Social posting toolkit for BroadBanner creators (Core tier / banner_blast). Post text, image, and video notes to Substack/Bluesky/Threads and release queued Substack notes and clips. Runs on a single connected Chrome profile. Live-stream scheduling moved to the broadbanner-live-production plugin.",
       "author": {
         "name": "Banner and Backbone Media"

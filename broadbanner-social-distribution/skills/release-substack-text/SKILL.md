@@ -54,6 +54,13 @@ oldest 5 and note any remainder goes out next run.
 posting; `altText` (if present) is its accessibility description. Text-only posts have no
 `imageUrl` and skip the injection step entirely.
 
+**Pre-show notes are already resolved — post `text` verbatim.** Some posts are automated
+"going live" pre-show notes. Their live-status wording (e.g. "live soon" / "live now") is
+resolved **server-side at list time**, and any note whose air window has already passed is
+**dropped from this list automatically**. So `text` is final: post it as-is. Do **not**
+look for or substitute a `{live_status}` placeholder, and do **not** special-case these —
+if a post is in the list, it is due to go out now.
+
 ---
 
 ## Step 2: Resolve the Substack account + select the browser
