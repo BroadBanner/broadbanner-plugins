@@ -1,6 +1,6 @@
 ---
 name: post-production
-description: "Turn a finished Substack live draft into an editable review DRAFT in the member portal — from just two inputs. Use when the user says 'run post-production', 'process this show', 'write the review for this live', or provides a Substack draft URL plus a series name. Resolves the series, brand, roster, and editorial config LIVE via the BroadBanner MCP connector, then chains transcript download → correction → review generation → portal publish. The operator supplies ONLY the draft URL and series name; everything else is derived. Production+ add-on (post_production_distribution)."
+description: "Turn a finished Substack live draft into an editable article DRAFT in the member portal — from just two inputs. Use when the user says 'run post-production', 'process this show', 'write the review for this live', or provides a Substack draft URL plus a series name. Resolves the series, brand, roster, and editorial config LIVE via the BroadBanner MCP connector, then chains transcript download → correction → review generation → portal publish. The operator supplies ONLY the draft URL and series name; everything else is derived. Production+ add-on (post_production_distribution)."
 metadata:
   requiresTool: post_production_distribution
 ---
@@ -8,7 +8,7 @@ metadata:
 # Post-Production (orchestrator)
 
 Run the complete post-production chain from a finished Substack **live draft** to an
-**editable review DRAFT** in the member portal (`app.broadbanner.com/app/reviews/<slug>`).
+**editable article DRAFT** in the member portal (`app.broadbanner.com/app/articles/<slug>`).
 This skill orchestrates four standalone skills in sequence, carrying context forward.
 
 This is the successor to the retired `episode-pipeline` orchestrator. The critical
@@ -41,8 +41,8 @@ instructions when you reach its step.
 Step 0  Resolve the series (get_creator_context + get_show_roster)
 Step 1  transcript-download   → derive slug/title/date from the draft, download the .txt
 Step 2  transcript-correction → correct against the LIVE roster (get_show_roster)
-Step 3  episode-review        → generate review + social copy using effectiveReviewConfig
-Step 4  review-publish        → create_review → editable DRAFT in the portal
+Step 3  episode-review        → generate review + social copy using effectiveArticleConfig
+Step 4  article-publish        → create_article → editable DRAFT in the portal
 ```
 
 ## Step 0 — Entitlement preflight + series resolution
@@ -57,7 +57,7 @@ Call `get_creator_context`. If it returns a capability summary
 `post_production_distribution` ∈ `entitledTools` (or the equivalent
 `post_production:*` cap ∈ `caps`), or `isAdmin`. If those fields are present and none
 holds, **stop** with the CTA below before any browser work. If the context omits the
-fields (older connector), proceed — the connector's `get_show_roster` / `create_review`
+fields (older connector), proceed — the connector's `get_show_roster` / `create_article`
 tools fail closed as the backstop.
 
 > ⚠️ Post-production publishing is the **Production+** add-on
@@ -73,13 +73,13 @@ typed `seriesName` to a single series **by matching against each series' live ti
 
 1. For **each** series id in `pods`, call `get_show_roster({ seriesId })`. Collect the
    returned `roster` objects — each carries `seriesId`, `seriesTitle`, `brandId`,
-   `primaryHost`, `hosts[]`, `guests[]`, and `effectiveReviewConfig`.
+   `primaryHost`, `hosts[]`, `guests[]`, and `effectiveArticleConfig`.
 2. Match `seriesName` against `roster.seriesTitle` **case-insensitively** (trim
    whitespace; ignore surrounding punctuation). Prefer an exact case-insensitive equality;
    fall back to a unique containment match only if no exact match exists.
 3. **Resolution outcomes:**
    - **Exactly one match** → that roster is the resolved series. Capture
-     `{ seriesId, seriesTitle, showId, brandId, primaryHost, hosts, guests, effectiveReviewConfig }`
+     `{ seriesId, seriesTitle, showId, brandId, primaryHost, hosts, guests, effectiveArticleConfig }`
      and carry all of it forward. This is the single source of truth for the rest of the run.
    - **No match** → **stop.** List the candidate series titles the creator hosts and ask
      the operator to re-type the series name (or fix the spelling):
@@ -94,7 +94,7 @@ typed `seriesName` to a single series **by matching against each series' live ti
      operator to disambiguate. Never guess.
 
 > The resolved roster's `showId` is the specific show instance for this review — pass it
-> through to `get_show_roster` re-calls (via `showId`) and to `create_review`
+> through to `get_show_roster` re-calls (via `showId`) and to `create_article`
 > (`showId`, so the portal ties the review to the correct show). If the roster carries no
 > `showId` (series-level only), fall back to `seriesId` everywhere and omit `showId` on
 > publish.
@@ -137,27 +137,27 @@ names, any flagged sections.
 **Skill:** `../episode-review/SKILL.md`
 
 **Purpose:** Generate the publication-ready review markdown + social copy using the
-**server-sourced** `effectiveReviewConfig` from the resolved roster — `reviewFormat`
-(structural template), `editorialVoice` (tone), `reviewLength`, `takeawayCountRange`,
-`seasonBookMode`, and `reviewLabel` — instead of any local `broadbanner.config.json`.
+**server-sourced** `effectiveArticleConfig` from the resolved roster — `articleFormat`
+(structural template), `editorialVoice` (tone), `articleLength`, `takeawayCountRange`,
+`seasonBookMode`, and `articleLabel` — instead of any local `broadbanner.config.json`.
 
 **Carry in:** corrected `transcriptPath`, resolved `{ seriesId, seriesTitle, primaryHost,
-hosts, guests, effectiveReviewConfig }`, `episodeSlug`, `episodeTitle`, `episodeDate`.
+hosts, guests, effectiveArticleConfig }`, `episodeSlug`, `episodeTitle`, `episodeDate`.
 
 **Carries forward:** `reviewPath` (markdown), `seoTitle`, `subtitle`, `bodyMd`,
-`socialCopy`, `reviewLabel`, `authorNames` (from `primaryHost` / `hosts`).
+`socialCopy`, `articleLabel`, `authorNames` (from `primaryHost` / `hosts`).
 
 ## Step 4 — Review Publish
 
-**Skill:** `../review-publish/SKILL.md`
+**Skill:** `../article-publish/SKILL.md`
 
 **Purpose:** Push the generated markdown as an **editable DRAFT** into the member portal
-via the `create_review` connector tool, and return the portal URL. **No git, no Pages.**
+via the `create_article` connector tool, and return the portal URL. **No git, no Pages.**
 
 **Carry in:** everything from Step 3 plus `seriesId`, `showId`, `episodeDate`.
 
-**Carries forward:** `{ ok, id, slug, url }` from `create_review` — the
-`https://app.broadbanner.com/app/reviews/<slug>` URL for the member to review/edit/publish.
+**Carries forward:** `{ ok, id, slug, url }` from `create_article` — the
+`https://app.broadbanner.com/app/articles/<slug>` URL for the member to review/edit/publish.
 
 ## After the chain completes
 
@@ -167,7 +167,7 @@ Report the full summary:
 Post-production complete for <seriesTitle> — <episodeTitle>
 
 Resolved:    seriesId=<seriesId>, brand=<brandId>, show=<showId or series-level>
-Config:      format=<reviewFormat>, voice=<editorialVoice>, label=<reviewLabel>
+Config:      format=<articleFormat>, voice=<editorialVoice>, label=<articleLabel>
 Transcript:  <transcriptPath> (<line count> lines) — corrected against live roster
              (primary host <name>; hosts <…>; guests <…>)
 Review:      <reviewPath>

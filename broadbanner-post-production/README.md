@@ -4,7 +4,7 @@ Production+ post-production automation for **Banner and Backbone Media** — the
 `post_production_distribution` add-on. Turn a finished Substack **live draft** into a
 publication-ready **review article**, corrected against the **live roster** of who was
 actually in the room, and pushed as an **editable DRAFT** into the member portal
-(`app.broadbanner.com/app/reviews/…`) for the creator to review, edit, and publish.
+(`app.broadbanner.com/app/articles/…`) for the creator to review, edit, and publish.
 
 > Successor to the `broadbanner-episode-pipeline` Pages flow. The old pipeline slugged
 > everything from a local `broadbanner.config.json` / `pod-map.json` and published by
@@ -29,11 +29,11 @@ guest list, format, or voice.
 
 | Skill                  | Description                                                                                                                                                                                                                       |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `post-production`      | **Orchestrator.** Inputs = `{ draftUrl, seriesName }` only. Resolves the series via `get_creator_context` + `get_show_roster`, then chains transcript-download → transcript-correction → episode-review → review-publish. Everything after the two inputs is automatic. |
+| `post-production`      | **Orchestrator.** Inputs = `{ draftUrl, seriesName }` only. Resolves the series via `get_creator_context` + `get_show_roster`, then chains transcript-download → transcript-correction → episode-review → article-publish. Everything after the two inputs is automatic. |
 | `transcript-download`  | Downloads the transcript `.txt` from the Substack editor via browser automation, deriving the episode slug/title/date **from the draft's own post title** (no local naming config).                                                |
 | `transcript-correction`| Two-phase correction (deterministic dictionary + AI). Merges the **live** primary-host/host/guest names from `get_show_roster` into BOTH the name-normalization pass and the AI speaker-attribution pass. Self-learning dictionary append preserved. |
-| `episode-review`       | Generates the review markdown + social copy using the **server-sourced** `effectiveReviewConfig` (`reviewFormat` / `editorialVoice` / `reviewLength` / `reviewLabel` / `seasonBookMode` / `takeawayCountRange`) from `get_show_roster`. |
-| `review-publish`       | Pushes the generated markdown as a **DRAFT review** into the portal via the `create_review` connector tool, and returns the `https://app.broadbanner.com/app/reviews/<slug>` URL for the member to review/edit/publish. **No git, no Pages.** |
+| `episode-review`       | Generates the article markdown + social copy using the **server-sourced** `effectiveArticleConfig` (`articleFormat` / `editorialVoice` / `articleLength` / `articleLabel` / `seasonBookMode` / `takeawayCountRange`) from `get_show_roster`. |
+| `article-publish`       | Pushes the generated markdown as a **DRAFT review** into the portal via the `create_article` connector tool, and returns the `https://app.broadbanner.com/app/articles/<slug>` URL for the member to review/edit/publish. **No git, no Pages.** |
 
 ## MCP connector tools
 
@@ -44,10 +44,10 @@ signing. Three tools carry this plugin:
 | Tool                  | Shape                                                                                                                                                                                                                                                                                                             |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `get_creator_context` | → `{ contributorId, substackHandle, brand, brands?, pods: string[] }`. `pods` are the creator's authorized series ids.                                                                                                                                                                                             |
-| `get_show_roster`     | `({ showId?, seriesId? })` → `{ roster: { seriesId, seriesTitle, showId, brandId, primaryHost, hosts[], guests[], effectiveReviewConfig: { reviewFormat, editorialVoice, reviewLength, takeawayCountRange, seasonBookMode, reviewLabel } } }`. People are `{ id, name, displayName }`.                              |
-| `create_review`       | `({ seriesId, title, bodyMd, showId?, slug?, subtitle?, reviewLabel?, authorNames?, episodeDate?, coverImageUrl?, socialCopy? })` → `{ ok, id, slug, url }` where `url = https://app.broadbanner.com/app/reviews/<slug>`.                                                                                          |
+| `get_show_roster`     | `({ showId?, seriesId? })` → `{ roster: { seriesId, seriesTitle, showId, brandId, primaryHost, hosts[], guests[], effectiveArticleConfig: { articleFormat, editorialVoice, articleLength, takeawayCountRange, seasonBookMode, articleLabel } } }`. People are `{ id, name, displayName }`.                              |
+| `create_article`       | `({ seriesId, title, bodyMd, showId?, slug?, subtitle?, articleLabel?, authorNames?, episodeDate?, coverImageUrl?, socialCopy? })` → `{ ok, id, slug, url }` where `url = https://app.broadbanner.com/app/articles/<slug>`.                                                                                          |
 
-`get_show_roster` and `create_review` are **gated on the `post_production_distribution`
+`get_show_roster` and `create_article` are **gated on the `post_production_distribution`
 add-on** and fail closed for a session without it.
 
 ## Entitlement / authority
@@ -56,7 +56,7 @@ add-on** and fail closed for a session without it.
   with an advisory **Step-0 entitlement preflight** (via `get_creator_context`). If the
   connector returns a capability summary and the add-on is absent, the skill stops with a
   CTA to the membership page. If the context omits the capability fields (older connector),
-  the skill proceeds — the connector's `get_show_roster` / `create_review` gate is the
+  the skill proceeds — the connector's `get_show_roster` / `create_article` gate is the
   server-side backstop.
 - This mirrors how `broadbanner-live-production` skills preflight `creator_workspace`.
 
