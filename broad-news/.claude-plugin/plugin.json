@@ -1,0 +1,8 @@
+{
+  "name": "broad-news",
+  "version": "0.1.0",
+  "description": "RATBAC-gated news aggregation, weighted source scoring, and script/blurb generation for BroadBanner creators. Aggregates stories by keyword from RSS (primary), web search, and scraping fallbacks. Self-managing source scores in D1 via the BroadBanner gateway. Generates 30-90 sec video scripts and platform-specific social blurbs. Integrates with BannerBlast for review/edit/approve workflows and article draft generation.",
+  "author": { "name": "Banner and Backbone Media" },
+  "repository": "https://github.com/BannerAndBackbone/BroadBanner",
+  "keywords": ["news", "aggregation", "rss", "scripts", "social-blurbs", "source-scoring", "broad-news", "banner-and-backbone"]
+}
