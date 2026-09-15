@@ -1,6 +1,6 @@
 ---
 name: transcript-download
-description: "Download a Substack live/podcast transcript via browser automation and derive the episode slug, title, and date FROM THE DRAFT ITSELF. Use when the user provides a Substack draft URL for post-production, says 'download the transcript', 'grab the .txt', or 'process this live'. Automates the four clicks in the Substack post editor to download the transcript .txt, then slugs the episode from the post title — no local config, no manually-supplied episode id/date. First step of the post-production chain. Production+ add-on (post_production_distribution)."
+description: "Download a Substack live/podcast transcript via browser automation and derive the episode slug, title, and date FROM THE DRAFT ITSELF. Use when the user provides a Substack draft URL for post-production, says 'download the transcript', 'grab the .txt', or 'process this live'. Automates the four clicks in the Substack post editor to download the transcript .txt, then slugs the episode from the post title — no local config, no manually-supplied episode id/date. Second step of the post-production chain (after section-select). Production+ add-on (post_production_distribution)."
 metadata:
   requiresTool: post_production_distribution
 ---
@@ -15,6 +15,11 @@ title and publish/schedule date. There is no local `broadbanner.config.json` or
 This automates the same four clicks a human makes in the Substack editor (it does not hit
 Substack's fragile API endpoints). It only acquires and stages the `.txt` — it does not
 correct the transcript, generate a review, or publish anything.
+
+> **Section first.** On multi-section publications the draft should already be filed under
+> its series section (`section-select`, the orchestrator's Step 1) before you download.
+> If you land on the editor standalone and the toolbar reads `Choose a section`, run
+> `../section-select/SKILL.md` first — it needs the same resolved `seriesTitle`.
 
 ## Step 0 — Entitlement preflight (advisory)
 

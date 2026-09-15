@@ -9,7 +9,7 @@ metadata:
 
 Run the complete post-production chain from a finished Substack **live draft** to an
 **editable article DRAFT** in the member portal (`app.broadbanner.com/app/articles/<slug>`).
-This skill orchestrates four standalone skills in sequence, carrying context forward.
+This skill orchestrates five standalone skills in sequence, carrying context forward.
 
 This is the successor to the retired `episode-pipeline` orchestrator. The critical
 difference is the **trigger contract**: the old pipeline read a local
@@ -33,16 +33,17 @@ them — the roster and editorial config are authoritative.
 
 ## What this skill does
 
-It contains no processing logic itself. It coordinates four skills in order, passing
+It contains no processing logic itself. It coordinates five skills in order, passing
 outputs forward as inputs. Each skill has its own `SKILL.md` — read that skill's
 instructions when you reach its step.
 
 ```
 Step 0  Resolve the series (get_creator_context + get_show_roster)
-Step 1  transcript-download   → derive slug/title/date from the draft, download the .txt
-Step 2  transcript-correction → correct against the LIVE roster (get_show_roster)
-Step 3  episode-review        → generate review + social copy using effectiveArticleConfig
-Step 4  article-publish        → create_article → editable DRAFT in the portal
+Step 1  section-select        → file the draft under the section named seriesTitle
+Step 2  transcript-download   → derive slug/title/date from the draft, download the .txt
+Step 3  transcript-correction → correct against the LIVE roster (get_show_roster)
+Step 4  episode-review        → generate review + social copy using effectiveArticleConfig
+Step 5  article-publish        → create_article → editable DRAFT in the portal
 ```
 
 ## Step 0 — Entitlement preflight + series resolution
@@ -102,7 +103,22 @@ typed `seriesName` to a single series **by matching against each series' live ti
 Announce the resolved series before proceeding, e.g. `Resolved "Palantalk" →
 seriesId=babm-palan, brand=babm, format=summary, voice=data-fact.`
 
-## Step 1 — Transcript Download
+## Step 1 — Section Select
+
+**Skill:** `../section-select/SKILL.md`
+
+**Purpose:** A live-recording draft lands in the publication root with the toolbar reading
+**`Choose a section`**. Before touching the transcript, open the section dropdown and pick
+the section whose name matches the resolved **`seriesTitle`** (case-insensitive) — the
+Substack section is named after the series. Skip cleanly when the publication has no
+section selector (single-section publications) or the correct section is already set.
+Never pick the publication-root entry; on no match, list the sections and stop.
+
+**Carry in:** `draftUrl`, resolved `{ seriesId, seriesTitle, brandId }`.
+
+**Carries forward:** nothing new (the browser is now on the draft, which Step 2 reuses).
+
+## Step 2 — Transcript Download
 
 **Skill:** `../transcript-download/SKILL.md`
 
@@ -114,7 +130,7 @@ episode slug/title/date from the draft's own post title** — not from any local
 **Carries forward:** `transcriptPath` (local `.txt`), `episodeSlug`, `episodeTitle`,
 `episodeDate` (all derived from the post), raw line count.
 
-## Step 2 — Transcript Correction
+## Step 3 — Transcript Correction
 
 **Skill:** `../transcript-correction/SKILL.md`
 
@@ -132,7 +148,7 @@ refresh.
 **Carries forward:** corrected `transcriptPath` (overwrites in place), confirmed speaker
 names, any flagged sections.
 
-## Step 3 — Episode Review
+## Step 4 — Episode Review
 
 **Skill:** `../episode-review/SKILL.md`
 
@@ -147,14 +163,14 @@ hosts, guests, effectiveArticleConfig }`, `episodeSlug`, `episodeTitle`, `episod
 **Carries forward:** `reviewPath` (markdown), `seoTitle`, `subtitle`, `bodyMd`,
 `socialCopy`, `articleLabel`, `authorNames` (from `primaryHost` / `hosts`).
 
-## Step 4 — Review Publish
+## Step 5 — Review Publish
 
 **Skill:** `../article-publish/SKILL.md`
 
 **Purpose:** Push the generated markdown as an **editable DRAFT** into the member portal
 via the `create_article` connector tool, and return the portal URL. **No git, no Pages.**
 
-**Carry in:** everything from Step 3 plus `seriesId`, `showId`, `episodeDate`.
+**Carry in:** everything from Step 4 plus `seriesId`, `showId`, `episodeDate`.
 
 **Carries forward:** `{ ok, id, slug, url }` from `create_article` — the
 `https://app.broadbanner.com/app/articles/<slug>` URL for the member to review/edit/publish.
@@ -167,6 +183,7 @@ Report the full summary:
 Post-production complete for <seriesTitle> — <episodeTitle>
 
 Resolved:    seriesId=<seriesId>, brand=<brandId>, show=<showId or series-level>
+Section:     <seriesTitle> (set | already set | n/a — single-section publication)
 Config:      format=<articleFormat>, voice=<editorialVoice>, label=<articleLabel>
 Transcript:  <transcriptPath> (<line count> lines) — corrected against live roster
              (primary host <name>; hosts <…>; guests <…>)
@@ -186,10 +203,11 @@ later step depends on. Then:
 
 | Resume from            | What you need                                                     |
 | ---------------------- | ---------------------------------------------------------------- |
-| Step 1 (download)      | `draftUrl` + browser logged into Substack                        |
-| Step 2 (correction)    | `transcriptPath` (the raw `.txt`)                                 |
-| Step 3 (review)        | the corrected `transcriptPath`                                    |
-| Step 4 (publish)       | `reviewPath` (the generated markdown) + `seriesId` / `showId`    |
+| Step 1 (section)       | `draftUrl` + browser logged into Substack                        |
+| Step 2 (download)      | `draftUrl` + browser logged into Substack                        |
+| Step 3 (correction)    | `transcriptPath` (the raw `.txt`)                                 |
+| Step 4 (review)        | the corrected `transcriptPath`                                    |
+| Step 5 (publish)       | `reviewPath` (the generated markdown) + `seriesId` / `showId`    |
 
 ## Error handling
 
@@ -201,8 +219,11 @@ later step depends on. Then:
   Stop and report — there is no direct-API fallback.
 - **Step failure:** report which step failed and why. The user can fix and resume with
   "start from step N" — Step 0's resolution re-runs cheaply each time.
-- **Browser not available:** Step 1 needs browser access to the Substack editor. If the
-  browser isn't connected, report: "Step 1 needs browser access to the Substack draft.
+- **Section not matched:** Step 1 lists the publication's sections and stops — never
+  guess a section and never file the post under the publication root. Fix the series
+  title / section name so they agree, then resume from Step 1.
+- **Browser not available:** Steps 1–2 need browser access to the Substack editor. If the
+  browser isn't connected, report: "Steps 1–2 need browser access to the Substack draft.
   Connect Chrome (logged into Substack) and re-run."
 - **Transcript too short:** if the downloaded transcript is under ~100 lines, warn — the
   download may have failed or the recording is very short.

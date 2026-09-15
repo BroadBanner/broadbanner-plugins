@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "broadbanner": {
-      "type": "http",
-      "url": "https://mcp.broadbanner.com/mcp"
-    }
-  }
-}
