@@ -43,13 +43,21 @@ connector), proceed — the connector gate is the backstop. When invoked by the
 
 | Input             | Required | Example                                             | Notes                                                            |
 | ----------------- | -------- | --------------------------------------------------- | --------------------------------------------------------------- |
-| `transcriptPath`  | Yes      | `/tmp/post-production/babm-palan_e12-….txt`         | The raw `.txt` from transcript-download                          |
+| `transcriptId`    | Yes      | `3f2c…` (or `seriesId` + `episodeSlug`)             | The D1 transcript transcript-download stored (`get_transcript`)  |
 | Resolved series   | Yes      | `{ seriesId, showId, seriesTitle }`                 | From the orchestrator's Step 0 (or pass `seriesName` to resolve) |
 | Roster (optional) | No       | `{ primaryHost, hosts[], guests[] }`                | If the orchestrator already fetched it, reuse it — else Phase 0 fetches |
 | `episodeTitle`    | Rec.     | `Palantalk | E12 - Surveillance Capitalism and You` | For the corrected-transcript header                              |
 | `episodeDate`     | Rec.     | `2026-03-31`                                        | For the header                                                   |
 
 If the user just ran transcript-download, carry these forward — nothing needs re-asking.
+The raw text may already be in context from the download step; if not (a resumed run, a
+new session), read it back with `get_transcript({ transcriptId, version: "raw" })`,
+calling again with `offset: nextOffset` until `nextOffset` is null.
+
+> **D1 is the source of truth, not a file.** Local paths below (`/tmp/post-production/…`)
+> are scratch working copies for the script — they need not survive the session, and a
+> remote Cowork environment starts without them. Write one from the D1 text whenever you
+> need it.
 
 ## Step-by-step workflow
 
@@ -78,6 +86,9 @@ recorded), fall back to dictionary-only correction and flag it in the report.
 
 This phase is instant and costs nothing. Run it first, always.
 
+0. **Write a scratch working copy** of the raw text (from context or `get_transcript`) to
+   `/tmp/post-production/<seriesId>_<episodeSlug>.txt` — this is `<transcriptPath>` below.
+
 1. **Build an ephemeral roster overlay dictionary.** For each roster person, generate the
    common auto-transcription misspelling variants of their `name` and map them to the
    correct `name`. At minimum, cover: dropped/added trailing vowels, common homophones of
@@ -102,20 +113,30 @@ This phase is instant and costs nothing. Run it first, always.
    merge both dictionaries first and run once. Using `--out` keeps the raw file intact:
 
    ```bash
-   # base dictionary
-   npx tsx skills/transcript-correction/scripts/apply-corrections.ts \
+   # base dictionary  (RUN = see "Running the script" below)
+   $RUN skills/transcript-correction/scripts/apply-corrections.ts \
      "<transcriptPath>" \
      --dictionary skills/transcript-correction/references/corrections-dictionary.json \
      --out "<transcriptPath>.corrected" --report
 
    # roster overlay (feed the just-written .corrected back in)
-   npx tsx skills/transcript-correction/scripts/apply-corrections.ts \
+   $RUN skills/transcript-correction/scripts/apply-corrections.ts \
      "<transcriptPath>.corrected" \
      --dictionary /tmp/post-production/roster-overlay.json \
      --out "<transcriptPath>.corrected" --report
    ```
 
-   (Run `bash boolgic.sh enable` / install deps first if `npx tsx` isn't available.)
+   **Running the script.** It has no dependencies beyond Node's standard library, so it
+   needs no install (a remote sandbox often has no network for `npx`). Pick the first
+   that works:
+   - `RUN="node --experimental-strip-types"` — Node ≥ 22.6 runs the `.ts` file directly
+     (Node ≥ 23.6 doesn't even need the flag).
+   - `RUN="npx tsx"` — if `tsx` is already available.
+   - **Neither works?** Skip the script: read `references/corrections-dictionary.json` +
+     the roster overlay and apply those substitutions yourself as the first part of Phase
+     2. Note it in the report.
+
+   Resolve `skills/transcript-correction/…` against this skill's install directory.
 
 3. **Show the merged report** (base + roster substitutions, with counts) to the user so
    they can confirm the corrections — especially the roster-name normalizations — look
@@ -175,13 +196,28 @@ Date: [episodeDate]
 commentary; don't fix natural-speech grammar; don't remove profanity (intentional in
 these shows); don't over-polish.
 
-4. **Save the corrected transcript** in place (overwrite the raw `.txt` at
-   `transcriptPath`). The intermediate `.corrected` file can be deleted.
+4. **Store the corrected transcript in D1** with `save_transcript`, same key as the raw:
+
+   ```
+   save_transcript({ seriesId, episodeSlug, correctedText: "<part 1>" })          // replaces
+   save_transcript({ seriesId, episodeSlug, correctedText: "<part 2>", append: true })
+   …
+   ```
+
+   Send it in parts of ≤ 30,000 characters (split on a line break), in order; `append`
+   concatenates exactly, so make sure each part ends with its trailing newline. **Verify**
+   the last result's `transcript.correctedChars` equals the corrected text's length; if
+   not, re-send from part 1 without `append`. The raw text stays stored alongside — never
+   overwrite `rawText` here. Scratch files can be deleted.
 
 ### Phase 3: Dictionary update (self-learning)
 
 After the AI pass, add genuinely new recurring misspellings to the **base** dictionary
-(not the ephemeral roster overlay — that's disposable):
+(not the ephemeral roster overlay — that's disposable). The dictionary ships inside the
+plugin, so an edit only sticks where the plugin directory is writable and persistent (a
+local install). In a remote environment — or if the write fails — skip the write and
+list the suggested additions in the report instead, so they can be committed to the
+plugin repo:
 
 1. Scan the corrections you made for new name/org/term misspellings not already in
    `references/corrections-dictionary.json`. A one-off guest is usually NOT worth
@@ -194,7 +230,8 @@ After the AI pass, add genuinely new recurring misspellings to the **base** dict
 
 ## Output
 
-The corrected transcript, saved in-place at `transcriptPath`:
+The corrected transcript, stored in D1 as the transcript's `correctedText` (the raw
+version is kept alongside):
 
 - Readable as a standalone document
 - Attributed to speakers by first name, anchored to the live roster
@@ -204,15 +241,15 @@ The corrected transcript, saved in-place at `transcriptPath`:
 
 Report:
 
-- The corrected `transcriptPath`
+- The `transcriptId` and the stored `correctedChars`
 - Roster used (primary host, hosts, guests) and how many speaker labels were resolved
 - A summary of what changed (roster normalizations, filler removals, flagged unclear
   sections)
 - Any new base-dictionary entries added
 - Next: "Transcript corrected. Next: episode-review (using the show's editorial config)."
 
-**Carries forward:** corrected `transcriptPath`, confirmed roster/speaker names, flagged
-sections.
+**Carries forward:** `transcriptId`, the corrected text (in context), confirmed
+roster/speaker names, flagged sections.
 
 ## Error handling
 
@@ -225,6 +262,9 @@ sections.
 - **Transcript too short or empty:** report and stop — the download may have failed.
 - **Dictionary file missing:** the script errors clearly. The base dictionary lives at
   `references/corrections-dictionary.json` relative to this skill.
+- **`save_transcript` fails:** transient/5xx → retry that part up to 3×; `413` → over the
+  ~900 KB cap (report); `403` → the creator doesn't host the series. The corrected text is
+  still in context, so episode-review can proceed — but report that it isn't stored.
 
 ## Efficiency notes
 

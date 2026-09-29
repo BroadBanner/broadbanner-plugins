@@ -39,13 +39,17 @@ step in this plugin).
 
 | Input                    | Required | Example                                             | Notes                                                            |
 | ------------------------ | -------- | --------------------------------------------------- | --------------------------------------------------------------- |
-| Corrected transcript path| Yes      | `/tmp/post-production/babm-palan_e12-….txt`         | Output of transcript-correction                                  |
+| Corrected transcript     | Yes      | `transcriptId` (or the text already in context)     | Stored in D1 by transcript-correction; read with `get_transcript` |
 | Resolved series + roster | Yes      | `{ seriesId, seriesTitle, primaryHost, hosts[], guests[], effectiveArticleConfig }` | From the orchestrator's Step 0 (`get_show_roster`) |
 | `episodeSlug`            | Yes      | `e12-surveillance-capitalism-and-you`               | For the output filename                                          |
 | `episodeTitle`           | Rec.     | `Palantalk | E12 - Surveillance Capitalism and You` | The draft's title (SEO title source)                            |
 | `episodeDate`            | Rec.     | `2026-03-31`                                        | For the SEO title / date suffix; default today if unknown        |
 
-If the user just ran transcript-correction, carry these forward.
+If the user just ran transcript-correction, carry these forward. If the corrected text
+isn't in context (a resumed run or new session), read it back with
+`get_transcript({ transcriptId, version: "corrected" })` — or by `seriesId` +
+`episodeSlug` — following `nextOffset` until it's null. Never depend on a local
+transcript file.
 
 ## Step-by-step workflow
 
@@ -130,22 +134,20 @@ post ≤300 chars, YouTube description) per the format reference's Social Distri
 section. Keep the social copy as a distinct block — `article-publish` passes it to
 `create_article` as `socialCopy`.
 
-### Step 5: Save the output
+### Step 5: Hold the output
 
-Save the article markdown to:
-
-```
-/tmp/post-production/<seriesId>_review_<episodeSlug>.md
-```
-
-The markdown is the intermediate deliverable that `article-publish` reads and pushes to the
-portal — there is no Pages directory or git write in this plugin.
+Keep the article markdown in context — `article-publish` pushes it straight to the portal
+via `create_article`. Optionally also write a scratch copy to
+`/tmp/post-production/<seriesId>_review_<episodeSlug>.md` (handy for a long review in a
+local session), but nothing downstream may require that file: in a remote Cowork
+environment it won't outlive the session. There is no Pages directory or git write in
+this plugin.
 
 ### Step 6: Report to the user
 
 Present:
 
-- Path to the saved review file
+- The review markdown (or the scratch path, if you wrote one)
 - The SEO title and subtitle for quick confirmation
 - The block quote (narrative/book-review) or the takeaway bullets (summary) for a quality
   check
@@ -153,7 +155,7 @@ Present:
 - `authorNames` derived from the roster (primary host + hosts)
 - Next: "Review ready. Next: article-publish (push as a portal DRAFT)."
 
-**Carries forward:** `reviewPath`, `seoTitle`, `subtitle`, `bodyMd` (the review body
+**Carries forward:** the review markdown (+ `reviewPath` if written), `transcriptId`, `seoTitle`, `subtitle`, `bodyMd` (the review body
 markdown), `socialCopy`, `articleLabel`, `authorNames`.
 
 ## Output quality checks

@@ -1,20 +1,29 @@
 ---
 name: transcript-download
-description: "Download a Substack live/podcast transcript via browser automation and derive the episode slug, title, and date FROM THE DRAFT ITSELF. Use when the user provides a Substack draft URL for post-production, says 'download the transcript', 'grab the .txt', or 'process this live'. Automates the four clicks in the Substack post editor to download the transcript .txt, then slugs the episode from the post title — no local config, no manually-supplied episode id/date. Second step of the post-production chain (after section-select). Production+ add-on (post_production_distribution)."
+description: "Capture a Substack live/podcast transcript via browser automation, store it in BroadBanner (D1) via the connector's save_transcript tool, and derive the episode slug, title, and date FROM THE DRAFT ITSELF. Use when the user provides a Substack draft URL for post-production, says 'download the transcript', 'grab the .txt', or 'process this live'. Drives the Substack editor's transcript panel and captures the .txt text IN-PAGE — no ~/Downloads, no local files — so it works identically in local and remote Cowork environments. Second step of the post-production chain (after section-select). Production+ add-on (post_production_distribution)."
 metadata:
   requiresTool: post_production_distribution
 ---
 
 # Transcript Download
 
-Download a Substack video/podcast transcript via browser automation and stage it locally,
-**deriving the episode slug, title, and date from the draft itself** — the post's own
-title and publish/schedule date. There is no local `broadbanner.config.json` or
-`pod-map.json` naming lookup; the draft is the source of truth for identity.
+Capture a Substack video/podcast transcript via browser automation and **store it in
+BroadBanner (D1)** with the connector's `save_transcript` tool, **deriving the episode
+slug, title, and date from the draft itself** — the post's own title and publish/schedule
+date. There is no local `broadbanner.config.json` or `pod-map.json` naming lookup; the
+draft is the source of truth for identity.
 
-This automates the same four clicks a human makes in the Substack editor (it does not hit
-Substack's fragile API endpoints). It only acquires and stages the `.txt` — it does not
-correct the transcript, generate a review, or publish anything.
+This automates the same clicks a human makes in the Substack editor (it does not hit
+Substack's fragile API endpoints). It only acquires and stores the raw transcript — it
+does not correct it, generate a review, or publish anything.
+
+> **No local files — works local or remote.** The old flow clicked **Download .txt** and
+> then looked for the file in `~/Downloads`. In a **remote (cloud) Cowork environment** the
+> browser's download never lands anywhere the agent can read, and `/tmp` doesn't survive
+> into the next session — the most common post-production failure. This skill instead
+> captures the `.txt` **text in-page** (the browser hands it to the agent directly) and
+> stores it in D1. Every later step — and any resumed run in a new session — reads it back
+> with `get_transcript`. The member can download it from the article page in the portal.
 
 > **Section first.** On multi-section publications the draft should already be filed under
 > its series section (`section-select`, the orchestrator's Step 1) before you download.
@@ -76,15 +85,81 @@ Before touching the transcript panel, `read_page` the editor and capture:
 
 Hold both — Step 4 derives the episode identity from them.
 
-### Step 3: Download the transcript .txt
+### Step 3: Capture the transcript text in-page
+
+Open the transcript panel:
 
 1. Find and click the scissors / media-editing icon in the editor toolbar (near the video
    player controls). The **Media settings** panel opens on the right.
 2. In that panel, click the **Transcript** tab (in the `Settings | Transcript | Clips`
    tab bar). Wait for the timestamped speaker segments to load.
-3. Click the **…** (overflow) button in the transcript toolbar row (alongside
-   `Regenerate` / `Upload transcript`).
-4. Click **Download .txt**. Wait for the download to complete.
+
+**3a. Arm the capture hook** — run this with `javascript_tool` in the editor tab **before**
+clicking Download. It intercepts the file Substack builds for the download (a `Blob` via
+`URL.createObjectURL`, or a `data:` / same-origin URL on an `<a download>` click) and keeps
+the text on `window.__bbTranscript` instead of relying on the saved file:
+
+```js
+(() => {
+  window.__bbTranscript = null;
+  const keep = (t) => { if (typeof t === "string" && t.trim() && !window.__bbTranscript) window.__bbTranscript = t; };
+  const fromUrl = (href) => {
+    if (!href) return;
+    if (href.startsWith("data:")) {
+      const [meta, body] = href.split(",", 2);
+      keep(meta.includes(";base64") ? new TextDecoder().decode(Uint8Array.from(atob(body), c => c.charCodeAt(0))) : decodeURIComponent(body));
+    } else if (!href.startsWith("blob:")) {
+      fetch(href, { credentials: "include" }).then(r => r.ok ? r.text() : null).then(keep).catch(() => {});
+    }
+  };
+  if (!window.__bbHooked) {
+    window.__bbHooked = true;
+    const origCreate = URL.createObjectURL;
+    URL.createObjectURL = function (obj) {
+      if (obj instanceof Blob) obj.text().then(keep).catch(() => {});
+      return origCreate.apply(this, arguments);
+    };
+    const origClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () {
+      if (this.hasAttribute("download")) fromUrl(this.href);
+      return origClick.apply(this, arguments);
+    };
+  }
+  return "armed";
+})()
+```
+
+**3b. Trigger the download.** Click the **…** (overflow) button in the transcript toolbar
+row (alongside `Regenerate` / `Upload transcript`), then click **Download .txt**.
+
+**3c. Confirm the capture.** Poll (every 1s, up to ~15s):
+
+```js
+JSON.stringify({ chars: window.__bbTranscript ? window.__bbTranscript.length : 0,
+                 head: window.__bbTranscript ? window.__bbTranscript.slice(0, 300) : null })
+```
+
+Ready when `chars > 0` and `head` looks like timestamped speaker text. If it never fills,
+use the **DOM fallback** below. (If the browser also saved the file to Downloads, ignore
+it — nothing reads it.)
+
+**DOM fallback (only if the hook captured nothing).** Read the segments straight out of the
+open Transcript tab: scroll the segment list to the bottom (it may render lazily), then
+collect each segment's timestamp, speaker label, and text in order into
+`window.__bbTranscript`, one segment per line (`<timestamp> <speaker>: <text>`). Confirm
+the line count looks like a full show (hundreds of lines for an hour), not just the
+visible screen. If neither path yields text, stop and report — do **not** fabricate a
+transcript.
+
+**3d. Pull the text into the conversation in chunks.** A single tool result can't carry a
+whole transcript reliably, so read it in 30,000-character slices:
+
+```js
+window.__bbTranscript.slice(OFFSET, OFFSET + 30000)
+```
+
+starting at `OFFSET = 0` and advancing by 30,000 until you've read `chars` characters.
+Keep the slices exactly as returned — they're concatenated verbatim in Step 5.
 
 ### Step 4: Derive episode identity from the draft
 
@@ -108,28 +183,50 @@ From the captured post title and date, derive:
 > local naming template. If the title is empty or unparseable, ask the operator for a
 > short title rather than guessing.
 
-### Step 5: Locate, verify, and stage the file
+### Step 5: Store the raw transcript in BroadBanner (D1)
 
-1. Find the most recently downloaded `.txt` in the Downloads folder.
-2. `Read` it to confirm it contains transcript content (timestamped speaker text).
-3. Stage it to a working path under the active `Social-Distribution/transcripts/` tree if
-   one is available, named with the derived slug — otherwise stage it to
-   `/tmp/post-production/<seriesId>_<episodeSlug>.txt`. The exact directory is not
-   load-bearing for the connector-published flow; the transcript is an intermediate
-   artifact consumed by the next skill, not a committed deliverable.
+Save the raw text with the connector's **`save_transcript`** tool, keyed by the resolved
+series and the derived slug. Send the chunks from Step 3d **in order**:
+
+```
+save_transcript({
+  seriesId:     "<seriesId>",          // from Step 0 resolution
+  episodeSlug:  "<episodeSlug>",       // Step 4
+  showId:       "<showId>",            // if resolved; omit otherwise
+  episodeTitle: "<episodeTitle>",
+  episodeDate:  "<episodeDate>",
+  sourceUrl:    "<draftUrl>",
+  rawText:      "<chunk 1>"            // first call: no append → replaces
+})
+save_transcript({ seriesId, episodeSlug, rawText: "<chunk 2>", append: true })
+…                                      // one call per remaining chunk
+```
+
+- The first call **replaces** any raw text stored for this episode (a re-run starts
+  clean); each `append: true` call concatenates exactly — no separator is added, so pass
+  each slice unmodified.
+- **Verify:** the last result's `transcript.rawChars` must equal the captured `chars`
+  from Step 3c. If it doesn't, re-send from the first chunk (without `append`).
+- Keep the returned `transcript.id` as **`transcriptId`**.
+- A `403 you don't host this series` means the resolved series isn't one this creator
+  hosts — stop and re-check Step 0 rather than retrying.
+
+You may *also* keep a working copy on disk (e.g. `/tmp/post-production/<seriesId>_<episodeSlug>.txt`)
+for the correction script — but D1 is the source of truth; nothing downstream may depend
+on that file existing.
 
 ### Step 6: Report and hand off
 
 Report:
 
-- The staged `transcriptPath`
+- The `transcriptId` and that the raw transcript is stored (`rawChars` characters)
 - The derived `episodeSlug`, `episodeTitle`, and `episodeDate`
-- Line/character count
+- Line count of the captured text
 
-Then: "Transcript staged. Next: transcript-correction (against the live roster)."
+Then: "Transcript stored. Next: transcript-correction (against the live roster)."
 
-**Carries forward:** `transcriptPath`, `episodeSlug`, `episodeTitle`, `episodeDate`, raw
-line count.
+**Carries forward:** `transcriptId`, `episodeSlug`, `episodeTitle`, `episodeDate`, raw
+line count (and the raw text itself, already in context).
 
 ## Error handling
 
@@ -137,8 +234,13 @@ line count.
   the layout changed. Screenshot and ask the user for guidance.
 - **Transcript tab shows "no transcript":** auto-transcription isn't complete — tell the
   user to wait or use **Regenerate**, then retry.
-- **Download doesn't start:** click **Download .txt** again; if it still fails, ask the
-  user to download manually and provide the path.
+- **Capture hook stays empty:** re-arm the hook (Step 3a) and click **Download .txt**
+  again; then use the DOM fallback. If both fail in an attended run, the user may paste
+  the transcript text or upload the `.txt` into the conversation — store it with
+  `save_transcript` the same way. Never look for the file in `~/Downloads`.
+- **`save_transcript` fails:** transient/5xx → retry the same chunk up to 3× with backoff;
+  `413` → the transcript exceeds the ~900 KB cap (report it); `403` → the creator doesn't
+  host the resolved series (re-check Step 0).
 - **Wrong page / login required:** stop immediately, explain, and ask the user to log in
   or navigate to the correct draft.
 - **Title empty/unparseable:** ask the operator for a short title for the slug — do not

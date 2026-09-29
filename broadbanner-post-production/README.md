@@ -31,7 +31,7 @@ guest list, format, or voice.
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `post-production`      | **Orchestrator.** Inputs = `{ draftUrl, seriesName }` only. Resolves the series via `get_creator_context` + `get_show_roster`, then chains section-select → transcript-download → transcript-correction → episode-review → article-publish. Everything after the two inputs is automatic. |
 | `section-select`       | Files the Substack draft under its series **section** via the editor's `Choose a section` dropdown, matching the connector's live `seriesTitle` (case-insensitive). Skips on single-section publications or when already set; lists options and stops on no match — never picks the publication root. |
-| `transcript-download`  | Downloads the transcript `.txt` from the Substack editor via browser automation, deriving the episode slug/title/date **from the draft's own post title** (no local naming config).                                                |
+| `transcript-download`  | Captures the transcript `.txt` text **in-page** from the Substack editor (no `~/Downloads`, no local file) and stores it in D1 via `save_transcript`, deriving the episode slug/title/date **from the draft's own post title** (no local naming config). |
 | `transcript-correction`| Two-phase correction (deterministic dictionary + AI). Merges the **live** primary-host/host/guest names from `get_show_roster` into BOTH the name-normalization pass and the AI speaker-attribution pass. Self-learning dictionary append preserved. |
 | `episode-review`       | Generates the article markdown + social copy using the **server-sourced** `effectiveArticleConfig` (`articleFormat` / `editorialVoice` / `articleLength` / `articleLabel` / `seasonBookMode` / `takeawayCountRange`) from `get_show_roster`. |
 | `article-publish`       | Pushes the generated markdown as a **DRAFT article** into the portal via the `create_article` connector tool, and returns the `https://app.broadbanner.com/app/articles/<slug>` URL for the member to review/edit/publish. **No git, no Pages.** |
@@ -41,16 +41,29 @@ guest list, format, or voice.
 
 All data flows through the **BroadBanner MCP connector** (server `broadbanner`,
 `https://mcp.broadbanner.com/mcp`) — there is no local config, no gateway token, no request
-signing. Three tools carry this plugin:
+signing. These tools carry this plugin:
 
 | Tool                  | Shape                                                                                                                                                                                                                                                                                                             |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `get_creator_context` | → `{ contributorId, substackHandle, brand, brands?, pods: string[] }`. `pods` are the creator's authorized series ids.                                                                                                                                                                                             |
 | `get_show_roster`     | `({ showId?, seriesId? })` → `{ roster: { seriesId, seriesTitle, showId, brandId, primaryHost, hosts[], guests[], effectiveArticleConfig: { articleFormat, editorialVoice, articleLength, takeawayCountRange, seasonBookMode, articleLabel } } }`. People are `{ id, name, displayName }`.                              |
 | `create_article`       | `({ seriesId, title, bodyMd, showId?, slug?, subtitle?, articleLabel?, authorNames?, episodeDate?, coverImageUrl?, socialCopy? })` → `{ ok, id, slug, url }` where `url = https://app.broadbanner.com/app/articles/<slug>`.                                                                                          |
+| `save_transcript`     | `({ seriesId, episodeSlug, showId?, episodeTitle?, episodeDate?, sourceUrl?, rawText?, correctedText?, append?, articleId? })` → `{ ok, created, transcript: { id, rawChars, correctedChars, … } }`. Upsert by (seriesId, episodeSlug); `append: true` concatenates a chunk; `articleId` links it to the article. |
+| `get_transcript`      | `({ transcriptId? \| seriesId + episodeSlug, version?, offset?, limit? })` → `{ transcript, version, text, totalChars, nextOffset }` — paged by character offset. |
 
-`get_show_roster` and `create_article` are **gated on the `post_production_distribution`
-add-on** and fail closed for a session without it.
+All four data tools are **gated on the `post_production_distribution` add-on** (the
+`articles:read` / `articles:self-write` caps) and fail closed for a session without it.
+
+## Transcripts live in D1 — local or remote Cowork
+
+The transcript is **not** a local file. transcript-download captures the `.txt` text
+in-page and stores it with `save_transcript`; transcript-correction stores the corrected
+version alongside it; article-publish links it to the article. Every step (and any
+resumed run in a new session) reads it back with `get_transcript`. That removes the old
+`~/Downloads` + `/tmp/post-production/` hand-off, which failed in a **remote (cloud)
+Cowork environment** where the browser's downloads never reach the agent. The member
+downloads the corrected (or raw) transcript from the article page in the portal
+(`app.broadbanner.com/app/articles/<slug>` → **Download transcript**).
 
 ## Entitlement / authority
 
@@ -67,6 +80,7 @@ add-on** and fail closed for a session without it.
 - The **BroadBanner MCP connector** (`mcp.broadbanner.com`) connected — the skills resolve
   series, roster, editorial config, and publish through it; no local
   `broadbanner.config.json` / `pod-map.json` / gateway token is required.
-- Claude in Chrome on the **single** connected BroadBanner Chrome profile, logged into
-  Substack (for the transcript download from the post editor). The skills do not route
-  among profiles.
+- A browser logged into Substack (for section-select + the transcript capture from the
+  post editor): Claude in Chrome on the **single** connected BroadBanner Chrome profile,
+  **or** the browser of a remote Cowork environment. The skills do not route among
+  profiles, and need no local files.

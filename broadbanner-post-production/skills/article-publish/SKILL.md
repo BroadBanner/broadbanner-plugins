@@ -33,7 +33,9 @@ orchestrator, this has already run — don't repeat it.
 
 | Input          | Required | Example                                             | Notes                                                          |
 | -------------- | -------- | --------------------------------------------------- | ------------------------------------------------------------- |
-| `reviewPath`   | Yes      | `/tmp/post-production/babm-palan_review_e12-….md`   | The markdown produced by episode-review                       |
+| Review markdown| Yes      | (in context) or `reviewPath`                        | The markdown produced by episode-review                       |
+| `transcriptId` | Rec.     | `3f2c…`                                             | The D1 transcript — linked to the article in Step 3b so it's downloadable from the portal |
+| `episodeSlug`  | Rec.     | `e12-surveillance-capitalism-and-you`               | With `seriesId`, identifies the transcript if `transcriptId` is missing |
 | `seriesId`     | Yes      | `babm-palan`                                        | From the orchestrator's Step 0 resolution                     |
 | `showId`       | Rec.     | `show-abc-123`                                      | Ties the review to the specific show instance. Omit if series-level only |
 | `episodeTitle` | Rec.     | `Palantalk | E12 - Surveillance Capitalism and You` | Source of the review `title`                                  |
@@ -47,7 +49,8 @@ If the user just ran episode-review, carry these forward.
 
 ### Step 1: Read and validate the review
 
-Read the article markdown at `reviewPath`. Parse out:
+Take the article markdown from context (or read it from `reviewPath` if episode-review
+wrote one). Parse out:
 
 - **`title`** — the SEO title / H1 (strip a trailing ` - YYYY/MM/DD` date suffix if the
   format appended one; the portal shows the date separately via `episodeDate`).
@@ -103,6 +106,19 @@ Call `create_article(...)`. On success it returns:
 - On a **request-shape error** (missing required field, bad `seriesId`/`showId`), fail
   loud with the message; do NOT retry blindly. Fix the argument and re-call.
 
+### Step 3b: Link the transcript to the article
+
+So the member can download the transcript from the article page, link it:
+
+```
+save_transcript({ seriesId: "<seriesId>", episodeSlug: "<episodeSlug>", articleId: "<id from create_article>" })
+```
+
+Only `articleId` is sent — the stored raw/corrected text is untouched. Skip this step if
+the chain stored no transcript (e.g. publishing a hand-written review). A failure here is
+**not** fatal: the article is already created, so report "transcript not linked" and
+move on.
+
 ### Step 4: Report to the user
 
 Present:
@@ -118,6 +134,7 @@ Review published as a DRAFT — nothing is public until you publish it in the po
 Title:  <title>
 Series: <seriesId>  (show: <showId or series-level>)
 Draft:  <url>
+Transcript: linked — downloadable from the draft page (or: not linked — <reason>)
 
 Open the draft to edit and publish. Social copy is attached for distribution.
 ```
@@ -132,7 +149,8 @@ Open the draft to edit and publish. Social copy is attached for distribution.
 - **`create_article` request-shape error:** fail loud; fix the offending argument (usually a
   bad `seriesId`/`showId` or an empty required field) and re-call. Don't retry blindly.
 - **`create_article` transient error:** retry up to 3× with backoff, then report the failure
-  — the article markdown is still on disk at `reviewPath`, so the user can re-run this skill.
+  — the article markdown is still in context (and the transcript is safe in D1), so the
+  user can re-run this skill.
 
 ## Why no git / Pages
 

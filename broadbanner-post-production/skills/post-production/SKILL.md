@@ -122,12 +122,13 @@ Never pick the publication-root entry; on no match, list the sections and stop.
 
 **Skill:** `../transcript-download/SKILL.md`
 
-**Purpose:** Download the raw transcript `.txt` from the Substack draft, **deriving the
-episode slug/title/date from the draft's own post title** — not from any local config.
+**Purpose:** Capture the raw transcript `.txt` text **in-page** from the Substack draft and
+store it in D1 (`save_transcript`), **deriving the episode slug/title/date from the
+draft's own post title** — not from any local config. No `~/Downloads`, no local file.
 
 **Carry in:** `draftUrl`, resolved `{ seriesId, seriesTitle, brandId, showId }`.
 
-**Carries forward:** `transcriptPath` (local `.txt`), `episodeSlug`, `episodeTitle`,
+**Carries forward:** `transcriptId` (the D1 transcript), `episodeSlug`, `episodeTitle`,
 `episodeDate` (all derived from the post), raw line count.
 
 ## Step 3 — Transcript Correction
@@ -140,12 +141,12 @@ deterministic name-normalization pass AND the AI speaker-attribution pass — in
 relying only on the static `corrections-dictionary.json`. The self-learning dictionary
 append is preserved for genuinely new spellings.
 
-**Carry in:** `transcriptPath`, resolved `{ seriesId, showId, seriesTitle }`,
+**Carry in:** `transcriptId`, resolved `{ seriesId, showId, seriesTitle }`,
 `episodeSlug`, `episodeTitle`, `episodeDate`, and (from the roster you already have)
 `primaryHost`, `hosts[]`, `guests[]` so the skill needn't re-call unless it wants to
 refresh.
 
-**Carries forward:** corrected `transcriptPath` (overwrites in place), confirmed speaker
+**Carries forward:** `transcriptId` (corrected text now stored alongside the raw), confirmed speaker
 names, any flagged sections.
 
 ## Step 4 — Episode Review
@@ -157,10 +158,10 @@ names, any flagged sections.
 (structural template), `editorialVoice` (tone), `articleLength`, `takeawayCountRange`,
 `seasonBookMode`, and `articleLabel` — instead of any local `broadbanner.config.json`.
 
-**Carry in:** corrected `transcriptPath`, resolved `{ seriesId, seriesTitle, primaryHost,
+**Carry in:** `transcriptId` (corrected text), resolved `{ seriesId, seriesTitle, primaryHost,
 hosts, guests, effectiveArticleConfig }`, `episodeSlug`, `episodeTitle`, `episodeDate`.
 
-**Carries forward:** `reviewPath` (markdown), `seoTitle`, `subtitle`, `bodyMd`,
+**Carries forward:** the review markdown, `transcriptId`, `seoTitle`, `subtitle`, `bodyMd`,
 `socialCopy`, `articleLabel`, `authorNames` (from `primaryHost` / `hosts`).
 
 ## Step 5 — Review Publish
@@ -170,7 +171,8 @@ hosts, guests, effectiveArticleConfig }`, `episodeSlug`, `episodeTitle`, `episod
 **Purpose:** Push the generated markdown as an **editable DRAFT** into the member portal
 via the `create_article` connector tool, and return the portal URL. **No git, no Pages.**
 
-**Carry in:** everything from Step 4 plus `seriesId`, `showId`, `episodeDate`.
+**Carry in:** everything from Step 4 plus `seriesId`, `showId`, `episodeDate`,
+`episodeSlug`, `transcriptId` (linked to the new article so it's downloadable there).
 
 **Carries forward:** `{ ok, id, slug, url }` from `create_article` — the
 `https://app.broadbanner.com/app/articles/<slug>` URL for the member to review/edit/publish.
@@ -185,10 +187,10 @@ Post-production complete for <seriesTitle> — <episodeTitle>
 Resolved:    seriesId=<seriesId>, brand=<brandId>, show=<showId or series-level>
 Section:     <seriesTitle> (set | already set | n/a — single-section publication)
 Config:      format=<articleFormat>, voice=<editorialVoice>, label=<articleLabel>
-Transcript:  <transcriptPath> (<line count> lines) — corrected against live roster
+Transcript:  stored in BroadBanner (<transcriptId>; raw <rawChars> / corrected
+             <correctedChars> chars) — corrected against live roster
              (primary host <name>; hosts <…>; guests <…>)
-Review:      <reviewPath>
-Published:   DRAFT → <url>
+Published:   DRAFT → <url>  (transcript downloadable from the draft page)
 
 Next: open the review in the portal to edit and publish. It is a DRAFT — nothing is
 public until you publish it there.
@@ -205,9 +207,14 @@ later step depends on. Then:
 | ---------------------- | ---------------------------------------------------------------- |
 | Step 1 (section)       | `draftUrl` + browser logged into Substack                        |
 | Step 2 (download)      | `draftUrl` + browser logged into Substack                        |
-| Step 3 (correction)    | `transcriptPath` (the raw `.txt`)                                 |
-| Step 4 (review)        | the corrected `transcriptPath`                                    |
-| Step 5 (publish)       | `reviewPath` (the generated markdown) + `seriesId` / `showId`    |
+| Step 3 (correction)    | the stored raw transcript — `get_transcript({ seriesId, episodeSlug, version: "raw" })` |
+| Step 4 (review)        | the stored corrected transcript — `get_transcript({ …, version: "corrected" })` |
+| Step 5 (publish)       | the review markdown (in context) + `seriesId` / `showId` / `episodeSlug` |
+
+Because the transcript lives in D1, a resume works from **any** session or environment —
+local or remote — with nothing carried over on disk. If you don't know the `episodeSlug`,
+re-derive it from the draft's title (transcript-download Steps 1–2 and 4 only), then check
+`get_transcript` — if the raw text is already stored, skip the capture.
 
 ## Error handling
 
@@ -222,8 +229,9 @@ later step depends on. Then:
 - **Section not matched:** Step 1 lists the publication's sections and stops — never
   guess a section and never file the post under the publication root. Fix the series
   title / section name so they agree, then resume from Step 1.
-- **Browser not available:** Steps 1–2 need browser access to the Substack editor. If the
-  browser isn't connected, report: "Steps 1–2 need browser access to the Substack draft.
-  Connect Chrome (logged into Substack) and re-run."
+- **Browser not available:** Steps 1–2 need browser access to the Substack editor — a
+  local Chrome (Claude in Chrome) or the browser of a remote Cowork environment both
+  work. If no browser is available, report: "Steps 1–2 need browser access to the
+  Substack draft. Connect a browser logged into Substack and re-run."
 - **Transcript too short:** if the downloaded transcript is under ~100 lines, warn — the
   download may have failed or the recording is very short.
