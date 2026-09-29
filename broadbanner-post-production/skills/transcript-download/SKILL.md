@@ -1,6 +1,6 @@
 ---
 name: transcript-download
-description: "Capture a Substack live/podcast transcript via browser automation, store it in BroadBanner (D1) via the connector's save_transcript tool, and derive the episode slug, title, and date FROM THE DRAFT ITSELF. Use when the user provides a Substack draft URL for post-production, says 'download the transcript', 'grab the .txt', or 'process this live'. Drives the Substack editor's transcript panel and captures the .txt text IN-PAGE — no ~/Downloads, no local files — so it works identically in local and remote Cowork environments. Second step of the post-production chain (after section-select). Production+ add-on (post_production_distribution)."
+description: "Capture a Substack live/podcast transcript via browser automation and store it in BroadBanner (D1) with the connector's save_transcript tool, deriving the episode slug, title, and date FROM THE DRAFT ITSELF. Use when the user provides a Substack draft URL for post-production, says 'download the transcript', 'grab the .txt', or 'process this live'. Captures the .txt text IN-PAGE — no ~/Downloads, no local files — so it works in local and remote Cowork. Second step of the post-production chain (after section-select). Production+ add-on (post_production_distribution)."
 metadata:
   requiresTool: post_production_distribution
 ---
