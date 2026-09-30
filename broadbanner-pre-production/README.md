@@ -33,11 +33,12 @@ all spec-resolution, cadence, `--refresh`, and prompt-regression-guard logic.
 - **Production+** with the **Pre-Production Assistant** add-on (`pre_production_assistant`).
   The skill preflights this and points you to the member portal if unmet.
 - The **`broadbanner-scheduled-tasks`** plugin installed (the engine this delegates to).
-- **Desktop Cowork on a local machine**, Cowork Home set to "run on your computer" (not
-  the beta cloud mode) — these are browser-automation tasks that drive local Chrome and
-  cannot run in the cloud.
+- **Cloud Cowork scheduled tasks** (Cowork Home in "run in cloud" mode when installing).
+  Cowork is retiring tasks that run on your computer (no new ones from 2026-10-06). The
+  tasks drive the cloud environment's browser, which needs its own one-time login to
+  Substack and Restream Studio.
 - The **BroadBanner MCP connector** connected, on a session authorized to schedule.
-- The single BroadBanner Chrome profile logged into Substack (and Restream Studio).
+- The cloud environment's browser logged into Substack (and Restream Studio).
 
 ## Related
 

@@ -59,9 +59,10 @@
  * Output (default): a JSON object
  *   { projectRoot, projectBasename, specDir, vars, tasks[], warnings[] }
  * where each task is
- *   { id, description, cronExpression?|fireAt?, enabled, runLocation, prompt, sourceFile }
- * runLocation is "any" (default — runs locally or in a remote Cowork environment)
- * or "local" (the spec declared it must run on the operator's own computer).
+ *   { id, description, cronExpression?|fireAt?, enabled, prompt, sourceFile }
+ * Every task is installed as a CLOUD task (Cowork is retiring tasks that run on
+ * the operator's computer). A spec declaring `runLocation: local`, or whose
+ * prompt still carries the pre-cloud "local machine only" text, gets a warning.
  */
 
 import fs from "node:fs";
@@ -293,16 +294,20 @@ function slugify(name) {
     .replace(/^-+|-+$/g, "");
 }
 
-// Where a task may run. Browser tasks are NOT inherently local — a remote Cowork
-// environment has its own browser — so the default is "any". A spec opts into
-// "local" only when it genuinely needs the operator's own computer.
-function coerceRunLocation(v, warnings, file) {
-  if (v === undefined || v === null || v === "") return "any";
+// Cloud-only: `runLocation` is obsolete. `any` (or absent) is fine; `local`
+// can't be honored any more, so say so rather than silently ignoring it.
+function checkRunLocation(v, warnings, file) {
+  if (v === undefined || v === null || v === "") return;
   const s = String(v).trim().toLowerCase();
-  if (s === "any" || s === "local") return s;
-  warnings.push(`${file}: unknown runLocation "${v}" (expected any | local); using "any"`);
-  return "any";
+  if (s === "any") return;
+  warnings.push(
+    `${file}: runLocation "${v}" is no longer supported — every task installs as a cloud task (Cowork is retiring tasks that run on this computer). Remove the field, or rework the task if it truly needs the local machine.`,
+  );
 }
+
+// Specs scaffolded from pre-cloud templates tell the run it "cannot run in the
+// cloud", which makes a cloud run stop itself. Detect that and point at --refresh.
+const STALE_LOCAL_TEXT = /local machine only|cannot run in the cloud|on the operator's \*\*local machine\*\*/i;
 
 function coerceBool(v, dflt) {
   if (v === undefined || v === null || v === "") return dflt;
@@ -438,13 +443,17 @@ function main() {
         f,
       );
 
-      const runLocation = coerceRunLocation(frontmatter.runLocation, warnings, f);
+      checkRunLocation(frontmatter.runLocation, warnings, f);
+      if (STALE_LOCAL_TEXT.test(body)) {
+        warnings.push(
+          `${f}: prompt still says the task is local-only (scaffolded from an older template) — re-run with --refresh before installing it as a cloud task, or the cloud run will stop itself.`,
+        );
+      }
 
       const task = {
         id,
         description,
         enabled: coerceBool(frontmatter.enabled, true),
-        runLocation,
         prompt,
         sourceFile: path.relative(root, full),
       };
@@ -481,7 +490,7 @@ function main() {
           ? `once @ ${t.fireAt}`
           : "ad-hoc (manual only)";
       process.stdout.write(
-        `  • ${t.id}\n      ${when}   enabled=${t.enabled}   runLocation=${t.runLocation}\n      ${t.description}\n      ← ${t.sourceFile}\n`,
+        `  • ${t.id}\n      ${when}   enabled=${t.enabled}\n      ${t.description}\n      ← ${t.sourceFile}\n`,
       );
     }
     if (warnings.length) {

@@ -3,19 +3,20 @@ id: schedule-substack-live-{{PROJECT_BASENAME}}
 description: Run the substack-schedule-live skill daily for {{BRAND_LABEL}} — schedules ready shows on Substack.
 cronExpression: 10 3 * * *
 enabled: true
-runLocation: local
 ---
 <!-- Pre-Production Assistant (Production+ add-on, pre_production_assistant / cap scheduling:auto): the unattended auto-scheduling of Substack lives. -->
-You are running on a daily ~3:10am schedule on the operator's **local machine**. Invoke the `substack-schedule-live` skill from the `broadbanner-live-production` plugin. This run is pre-approved to run autonomously — do NOT pause for per-show confirmation.
+You are running on a daily ~3:10am schedule as a **cloud** Cowork scheduled task. Invoke the `substack-schedule-live` skill from the `broadbanner-live-production` plugin. This run is pre-approved to run autonomously — do NOT pause for per-show confirmation.
 
-## ⚠️ Local machine only — cannot run in the cloud
+## Runs in the cloud
 
-This task drives a **local Chrome browser** through the Claude-in-Chrome connection (there is no Substack scheduling API). It **cannot** run on a cloud/headless agent — schedule it on a machine where the single BroadBanner Chrome profile is open and logged in to {{PUBLICATION_TARGET}} at fire time. If no browser is connected, the skill stops and reports; nothing is scheduled.
+Substack has no scheduling API, so this drives a browser — the **cloud environment's own browser**, not your computer's. (Cowork is retiring tasks that run on your computer; BroadBanner tasks are cloud-only.) That browser must be logged in to {{PUBLICATION_TARGET}} — sign in once in the cloud environment; its login is separate from your local Chrome. If there's no browser or it hits a login wall, the skill stops and reports; nothing is scheduled.
+
+The skill converts show times against the **browser's own timezone** (it reads it from the page), so a cloud browser running in UTC still schedules each show at the right moment. The cron itself is evaluated in the scheduler's timezone — for a daily sweep with a 7-day horizon the exact hour doesn't matter.
 
 ## Prerequisites
 
 - The **BroadBanner MCP connector** (`https://mcp.broadbanner.com/mcp`) connected, on a session authorized to schedule (brand-admin / super-admin today; host-of-series once creator-scoped scheduling ships). The skill is **connector-only** — no `broadbanner.config.json`, no `.creds/gateway.token`, no `BROADBANNER_ENC_PASSPHRASE`, no mount.
-- The **single connected** BroadBanner Chrome profile logged in to {{PUBLICATION_TARGET}}. There is no profile routing — the skill uses whatever browser is connected and verifies the account.
+- The cloud environment's browser logged in to {{PUBLICATION_TARGET}}. There is no profile routing — the skill uses the browser it has and verifies the account.
 
 ## What to do
 

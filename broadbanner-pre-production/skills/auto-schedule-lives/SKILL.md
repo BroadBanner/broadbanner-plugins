@@ -32,14 +32,15 @@ and the entitlement is absent, stop with the CTA below. If the context omits the
 > (`pre_production_assistant`, $5/mo). Your account isn't entitled yet — add it from
 > your member portal → https://app.broadbanner.com/pricing/membership. Nothing was scheduled.
 
-## ⚠️ Local machine only — cannot run in the cloud
+## Runs in the cloud
 
-The scheduled tasks this installs drive **local Chrome** (Substack/Restream have no
-API). They **cannot run on a cloud/headless agent**. Two requirements: (1) install and
-run from **desktop Cowork on the machine** where the single BroadBanner Chrome profile
-stays logged in; (2) set **Cowork Home to run on your computer** (not the beta "run in
-cloud" mode) so the tasks file as **"Runs on this computer."** See the
-`broadbanner-scheduled-tasks` `bb-scheduled-manager` skill for the full run-location detail.
+The tasks this installs are **cloud** Cowork scheduled tasks. Cowork is retiring tasks
+that run on your computer (no new ones from 2026-10-06), so BroadBanner tasks are
+cloud-only. They still drive a browser (Substack/Restream have no API) — the **cloud
+environment's own browser**, which must be logged in to Substack **and** Restream
+Studio (a one-time sign-in there, separate from your local Chrome). Install with Cowork
+Home in **"run in cloud"** mode so they file as cloud tasks. See the
+`broadbanner-scheduled-tasks` `bb-scheduled-manager` skill for the full detail.
 
 ## Prerequisites
 
@@ -48,8 +49,8 @@ cloud" mode) so the tasks file as **"Runs on this computer."** See the
   creator-scoped scheduling ships). Connector-only — no config, no gateway token.
 - The **`broadbanner-scheduled-tasks`** plugin installed (this skill delegates to its
   `bb-scheduled-manager` skill). If it isn't installed, tell the user to add it from the marketplace.
-- The single connected BroadBanner Chrome profile logged into Substack (and Restream
-  Studio, for the restream task).
+- The cloud environment's browser logged into Substack (and Restream Studio, for the
+  restream task).
 
 ## Step 1 — Install the auto-scheduling tasks (delegate to the engine)
 
@@ -79,9 +80,10 @@ drive that install for them.
 ## Step 2 — Confirm + report
 
 After the engine finishes, confirm both tasks (`schedule-substack-live-*`,
-`schedule-restream-live-*`) are registered and show **"Runs on this computer."** Report
-the two task ids, their cron, and run location. Remind the user to click **Run now**
-once on each to capture browser/connector approvals.
+`schedule-restream-live-*`) are registered as **cloud** tasks. Report the two task ids,
+their cron, and run location. Have the user click **Run now** once on each **and watch
+it**: that first run captures browser/connector approvals and confirms the cloud browser
+is logged into Substack and Restream Studio.
 
 To later change cadence, re-run this skill (or `/bb-scheduled-manager update`); to remove, use
 `/bb-scheduled-manager uninstall`.

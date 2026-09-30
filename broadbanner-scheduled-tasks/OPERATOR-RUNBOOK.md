@@ -12,15 +12,16 @@ exactly the failure mode this plugin exists to prevent.
 > files a task under whichever project created it — there is no project
 > parameter. Run the skill from the right project, every time.
 
-> **Local or remote.** Every task here drives a browser (Substack/Restream have no
-> API), but that doesn't tie it to your computer. The release pollers
-> (`release-substack-text`, `release-substack-clips`) are `runLocation: any`: install
-> them from desktop Cowork to run on this computer, or with Cowork Home in **"run in
-> cloud"** mode to run in a remote environment (they keep going while your laptop is
-> off). The live-scheduling pair (pre-production add-on) is still `runLocation: local`.
-> Either way, the browser where the task runs must be logged into Substack at fire
-> time — a remote environment's browser needs its own one-time Substack login. A run
-> with no browser or a logged-out browser stops and reports; nothing goes out.
+> **Cloud only.** Every task here runs as a **cloud** Cowork scheduled task. Cowork is
+> retiring tasks that run on your computer (no longer maintained; no new ones from
+> 2026-10-06), and local runs saved a full session on the Mac per run — the release
+> pollers alone left ~21,000 behind, enough to crash the desktop app at launch. Install
+> with Cowork Home in **"run in cloud"** mode. The tasks drive the cloud environment's
+> own browser, which needs a one-time sign-in to Substack (and Restream Studio for the
+> live-scheduling pair) — separate from your local Chrome. A run with no browser or a
+> logged-out browser stops and reports; nothing goes out. Tasks still showing "Runs on
+> this computer": see bb-scheduled-manager → "Migrating tasks that run on this
+> computer" (uninstall, then reinstall with `--refresh`).
 
 ---
 

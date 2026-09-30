@@ -35,6 +35,8 @@ series you host, and publish clips to TikTok/YouTube/Facebook.
 - The **BroadBanner MCP connector** (`mcp.broadbanner.com`) connected — the scheduling
   skills read show data and write scheduled-event state through it; no local
   `broadbanner.config.json` or `.creds/gateway.token` is required.
-- Claude in Chrome extension on a **single** connected BroadBanner Chrome profile
-  (authenticated Substack / Restream sessions). The skills do not route among profiles.
+- A browser logged into Substack / Restream Studio: Claude in Chrome on a **single**
+  connected BroadBanner Chrome profile for attended runs, or the cloud environment's
+  browser for cloud scheduled tasks (pre-production auto-scheduling). The skills do not
+  route among profiles, and convert show times against the browser's own timezone.
 - `Social-Distribution/` directory with restream-clip tracker files (for `restream-publish-clip`).

@@ -68,13 +68,13 @@ The snapshot provides three scheduling-related fields per show:
 
 Restream Studio's Schedule modal Date/Time pickers operate on **the browser's timezone** (the label next to the Time field reflects the browser's machine, not the show). After the D1 migration, shows are commonly stored as `America/New_York` while the operator's machine is `America/Chicago` — using `scheduledStartLocal`, `showDate`, or `showStart` directly schedules the event at the wrong wall-clock time.
 
-> **The conversion target is the BROWSER's timezone — not the bash environment's.** In a scheduled/Cowork run, this skill's shell executes in a sandbox whose `TZ` is often **UTC**, while Restream Studio runs in Chrome on the operator's machine. So `new Date(utc).getHours()` in bash (which reads the *shell's* ambient zone) is wrong by the full UTC offset (5–6h), not just the 1-hour ET↔CT case. **Never rely on the shell's ambient timezone.** Resolve the browser's IANA zone explicitly (`BROWSER_TZ`) and convert against it.
+> **The conversion target is the BROWSER's timezone — not the bash environment's.** In a scheduled/Cowork run, this skill's shell executes in a sandbox whose `TZ` is often **UTC**, while Restream Studio runs in the browser — your Chrome, or a cloud environment's browser that may itself be in UTC. So `new Date(utc).getHours()` in bash (which reads the *shell's* ambient zone) is wrong by the full UTC offset (5–6h), not just the 1-hour ET↔CT case. **Never rely on the shell's ambient timezone.** Resolve the browser's IANA zone explicitly (`BROWSER_TZ`) and convert against it.
 
 **Resolve `BROWSER_TZ`** (resolution order):
 
 1. **Modal TZ label (authoritative here).** Once the Schedule modal is open (Step 4), the label beside the Time field IS the browser's zone (e.g. `America/Chicago`). `read_page` it and use it as `BROWSER_TZ`.
 2. **Browser eval.** If the label isn't legible: `javascript_tool` → `Intl.DateTimeFormat().resolvedOptions().timeZone`.
-3. **Ask.** If both are blocked: ask the user for their IANA zone.
+3. **Ask** (attended runs only). If both are blocked: ask the user for their IANA zone. In an **unattended scheduled run**, never ask — stop and report that the browser timezone couldn't be resolved; nothing is scheduled.
 
 Do **not** fall back to the shell's own timezone. (For a Step 0 preview before the modal is open, use the browser eval or ask provisionally and re-confirm against the modal label at Step 4.)
 

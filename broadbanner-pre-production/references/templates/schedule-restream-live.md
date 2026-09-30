@@ -3,19 +3,20 @@ id: schedule-restream-live-{{PROJECT_BASENAME}}
 description: Run the restream-schedule-live skill daily for {{BRAND_LABEL}} — pairs Substack channels and schedules draft Restream events.
 cronExpression: 0 4 * * *
 enabled: true
-runLocation: local
 ---
 <!-- Pre-Production Assistant (Production+ add-on, pre_production_assistant / cap scheduling:auto): the unattended auto-scheduling of Restream lives. -->
-You are running on a daily ~4:00am schedule on the operator's **local machine**, AFTER the substack-live task has already captured stream keys and scheduled shows on Substack. Invoke the `restream-schedule-live` skill from the `broadbanner-live-production` plugin. This run is pre-approved to run autonomously — do NOT pause for per-show confirmation.
+You are running on a daily ~4:00am schedule as a **cloud** Cowork scheduled task, AFTER the substack-live task has already captured stream keys and scheduled shows on Substack. Invoke the `restream-schedule-live` skill from the `broadbanner-live-production` plugin. This run is pre-approved to run autonomously — do NOT pause for per-show confirmation.
 
-## ⚠️ Local machine only — cannot run in the cloud
+## Runs in the cloud
 
-This task drives **Restream Studio in a local Chrome browser** through the Claude-in-Chrome connection. It **cannot** run on a cloud/headless agent — schedule it on a machine where the single BroadBanner Chrome profile is open and logged in to Restream Studio (`app.restream.io`) at fire time. If no browser is connected, the skill stops and reports; nothing is scheduled.
+This drives **Restream Studio in the cloud environment's own browser**, not your computer's. (Cowork is retiring tasks that run on your computer; BroadBanner tasks are cloud-only.) That browser must be logged in to Restream Studio (`app.restream.io`) — sign in once in the cloud environment; its login is separate from your local Chrome. If there's no browser or it hits a login wall, the skill stops and reports; nothing is scheduled.
+
+The skill converts show times against the **browser's own timezone** (it reads it from the page), so a cloud browser running in UTC still schedules each show at the right moment. The cron itself is evaluated in the scheduler's timezone — for a daily sweep with a 7-day horizon the exact hour doesn't matter. Keep this task's cron after the substack-live task's (same timezone), so stream keys exist before pairing.
 
 ## Prerequisites
 
 - The **BroadBanner MCP connector** (`https://mcp.broadbanner.com/mcp`) connected, on a session authorized to schedule (brand-admin / super-admin today). The skill is **connector-only** — no `broadbanner.config.json`, no `.creds/gateway.token`, no `BROADBANNER_ENC_PASSPHRASE`, no mount.
-- The **single connected** BroadBanner Chrome profile logged in to Restream Studio. There is no profile routing — the skill uses whatever browser is connected.
+- The cloud environment's browser logged in to Restream Studio. There is no profile routing — the skill uses the browser it has.
 - The matching Substack channel must already exist in Restream — provisioned by the **Restream-Worker** channel-sync pass.
 
 ## What to do

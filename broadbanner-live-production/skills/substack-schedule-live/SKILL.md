@@ -57,15 +57,15 @@ The snapshot provides two scheduling-related fields per show:
 | `scheduledStartLocal` | Wall-clock time in the **show's** `localTimeZone` (NOT the user's). | `2026-04-14T13:00:00` (America/New_York) |
 | `localTimeZone`       | The show's stored timezone (often `America/New_York`).              | `America/New_York`                       |
 
-Substack's "Schedule for a future date" input is `type="datetime-local"` — the browser interprets the value as wall-clock time **in the browser's timezone**. The browser runs on the operator's real machine (typically `America/Chicago`); the show's stored `localTimeZone` is usually `America/New_York`. Feeding `scheduledStartLocal` straight in records the show at the wrong wall-clock time.
+Substack's "Schedule for a future date" input is `type="datetime-local"` — the browser interprets the value as wall-clock time **in the browser's timezone**. The browser may be your machine's (typically `America/Chicago`) or a cloud environment's (often UTC) — either way, convert against it; the show's stored `localTimeZone` is usually `America/New_York`. Feeding `scheduledStartLocal` straight in records the show at the wrong wall-clock time.
 
-> **The conversion target is the BROWSER's timezone — not the bash environment's.** In a scheduled/Cowork run, this skill's shell executes in a sandbox whose `TZ` is often **UTC**, while Chrome runs on the operator's machine. So `new Date(utc).getHours()` in bash (which reads the *shell's* ambient zone) produces a value that is wrong by the full UTC offset (5–6h), not just the 1-hour ET↔CT case. **Never rely on the shell's ambient timezone.** Resolve the browser's IANA zone explicitly and convert against it.
+> **The conversion target is the BROWSER's timezone — not the bash environment's.** In a scheduled/Cowork run, this skill's shell executes in a sandbox whose `TZ` is often **UTC**, while the browser runs elsewhere — your Chrome, or a cloud environment's browser that may itself be in UTC. So `new Date(utc).getHours()` in bash (which reads the *shell's* ambient zone) produces a value that is wrong by the full UTC offset (5–6h), not just the 1-hour ET↔CT case. **Never rely on the shell's ambient timezone.** Resolve the browser's IANA zone explicitly and convert against it.
 
 **Resolve the browser timezone (`BROWSER_TZ`) once, before computing any datetime.** Resolve it as soon as a browser is connected — the `Intl` eval is environment-level (works on any open tab; no Substack navigation needed). If you present the Step 0 eligible-show preview *before* a browser is connected, defer the local-time columns until a browser is available, or ask the user. Re-confirm at Step 4 if in doubt. Resolution order:
 
 1. **Browser eval (authoritative).** With any tab active:
    `javascript_tool` → `Intl.DateTimeFormat().resolvedOptions().timeZone` (e.g. `"America/Chicago"`). Use that as `BROWSER_TZ`.
-2. **If `javascript_tool` is blocked:** ask the user "What timezone is your computer set to?" and accept an IANA name (e.g. `America/Chicago`).
+2. **If `javascript_tool` is blocked:** in an attended run, ask the user "What timezone is your browser set to?" and accept an IANA name (e.g. `America/Chicago`). In an **unattended scheduled run**, never ask — stop and report that the browser timezone couldn't be resolved; nothing is scheduled.
 
 Do **not** fall back to the shell's own timezone — that is the bug this replaces.
 

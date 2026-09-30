@@ -71,12 +71,11 @@ pass `--templates-dir`).
 
 ## Requirements
 
-- **Desktop Cowork locally, or a remote (cloud) Cowork environment.** The scheduled
-  skills drive a browser (Substack/Restream have no API), but a remote Cowork
-  environment has its own browser, so the release pollers (`runLocation: any`) run in
-  either place — the remote option keeps them firing while your computer is off. Specs
-  that genuinely need your machine declare `runLocation: local`. Whichever you use, the
-  browser in that environment must be logged into the creator's Substack.
+- **Cloud Cowork scheduled tasks.** Cowork is retiring tasks that run on your computer
+  (no new ones from 2026-10-06), and local runs piled up a saved session per run on the
+  Mac. Install with Cowork Home in **"run in cloud"** mode. The tasks drive the cloud
+  environment's own browser, which needs a one-time login to Substack (and Restream
+  Studio for the schedule-live tasks).
 - Cowork with the `scheduled-tasks` MCP (`create_scheduled_task`,
   `update_scheduled_task`, `list_scheduled_tasks`).
 - The **BroadBanner MCP connector** connected (`https://mcp.broadbanner.com/mcp`) —
