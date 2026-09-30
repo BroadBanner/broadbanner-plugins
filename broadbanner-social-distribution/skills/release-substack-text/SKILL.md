@@ -76,20 +76,28 @@ a one-line "skipped: account not entitled for `banner_blast`" report (this is un
 never prompt). If the fields are omitted (older connector), proceed — the server-side cap
 check is the backstop.
 
-Substack posting is browser automation (a local logged-in browser). This skill runs on
-the operator's **single connected Chrome profile** — no profile map, no enumeration, no
-`select_browser` routing:
+Substack posting is browser automation in a logged-in browser. **That browser can be
+local or remote:** this skill runs the same way on desktop Cowork (your Chrome via Claude
+in Chrome) and in a **remote/cloud Cowork environment** (that environment's own
+browser). It needs no local files, config, or downloads — the connector supplies the data
+and media is fetched in-page — so it never cares which machine it's on. Use the **one**
+browser the environment provides — no profile map, no enumeration, no `select_browser`
+routing. (Tool names below are Claude in Chrome's; use the equivalent tab/navigation
+tools if the environment names them differently.)
 
-1. If **no** browser is connected → **stop and report** (no browser to drive).
+1. If **no** browser is available → **stop and report** (no browser to drive).
 2. Use the single connected browser. Open a **dedicated MCP working tab** with
    `tabs_create_mcp` and **record its tabId in a running `OPENED_TABS` list** — do not
    hijack the user's current tab, and track every tab you open so Step 4 can close exactly
    the skill's own tabs. In that tab, `navigate` to `https://substack.com/@{substackHandle}`
-   and `resize_window` to **1200×900**.
+   and `resize_window` to **1200×900** (if the environment can't resize, confirm the
+   viewport is at least 1200px wide).
 3. **Verify you are logged in as `{substackHandle}`** (the profile page shows that account).
    - Wrong account, or a login screen → **clean up (Step 4) and stop**, telling the user to
-     log into `{substackHandle}`'s Substack in the browser Cowork drives. Posting under the
-     wrong identity is a public mistake — never switch to "another" browser.
+     log into `{substackHandle}`'s Substack in the browser Cowork drives — for a remote
+     run, that's the remote environment's browser, whose login is separate from their
+     local Chrome. Posting under the wrong identity is a public mistake — never switch to
+     "another" browser.
 
 Reuse this one working tab for every post in the run — the verification in Step 3a reloads
 it in place rather than opening new tabs, so the run stays at a single tab.

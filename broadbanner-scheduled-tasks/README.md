@@ -71,10 +71,12 @@ pass `--templates-dir`).
 
 ## Requirements
 
-- **Desktop Cowork on a local machine.** The BroadBanner scheduled skills drive a
-  **local Chrome browser** via the Claude-in-Chrome connection (Substack/Restream
-  have no API), so these tasks **cannot run on a cloud/headless agent** — install
-  and run them where the single BroadBanner Chrome profile stays open and logged in.
+- **Desktop Cowork locally, or a remote (cloud) Cowork environment.** The scheduled
+  skills drive a browser (Substack/Restream have no API), but a remote Cowork
+  environment has its own browser, so the release pollers (`runLocation: any`) run in
+  either place — the remote option keeps them firing while your computer is off. Specs
+  that genuinely need your machine declare `runLocation: local`. Whichever you use, the
+  browser in that environment must be logged into the creator's Substack.
 - Cowork with the `scheduled-tasks` MCP (`create_scheduled_task`,
   `update_scheduled_task`, `list_scheduled_tasks`).
 - The **BroadBanner MCP connector** connected (`https://mcp.broadbanner.com/mcp`) —

@@ -14,23 +14,30 @@ files — the current Cowork scheduler does not auto-discover dropped files. Onl
 call to `create_scheduled_task` actually registers a task. This skill makes that
 call for every spec.
 
-## ⚠️ Browser tasks are LOCAL-machine only — read first
+## Run location — local or remote (read first)
 
-The BroadBanner scheduled skills (`substack-schedule-live`, `restream-schedule-live`,
-`release-substack-text`, `release-substack-clips`) all drive a **local Chrome
-browser** through the Claude-in-Chrome connection — Substack and Restream Studio
-have no posting/scheduling API, so the browser is load-bearing. These tasks
-**cannot run on a cloud/headless agent**: register and run them from **desktop
-Cowork on the machine where the single BroadBanner Chrome profile stays open and
-logged in** at fire time. A scheduled run with no connected browser stops and
-reports (nothing posted/scheduled).
+The BroadBanner scheduled skills drive a **browser** (Substack and Restream Studio
+have no posting/scheduling API), but a browser does **not** mean "your computer": a
+**remote (cloud) Cowork environment** can open tabs and drive its own Chrome, too.
+Each spec declares where it may run with its `runLocation` frontmatter:
 
-**Run location is the Cowork _Home run-mode_ setting, not a per-task argument.** If
-Cowork Home is on the beta **"run in cloud"** mode, every task you create runs in the
-cloud and can never reach local Chrome. **Before installing, set Cowork Home to run on
-your computer** (turn the beta "run in cloud" mode OFF); then every task files as a
-local ("Runs on this computer") task. Verify each task shows **"Runs on this computer"**
-after install (Step 4).
+| `runLocation` | Meaning | Shipped templates |
+| --- | --- | --- |
+| `any` (default) | Runs **on this computer** *or* **in a remote Cowork environment**. Everything comes from the MCP connector and in-page fetches — no local files, config, or credentials. | `release-substack-text`, `release-substack-clips` |
+| `local` | Must run **on this computer** (the spec needs the operator's own browser/machine). | `schedule-substack-live`, `schedule-restream-live` (pre-production add-on) |
+
+Whichever location a task runs in, **the browser there must be logged into the
+creator's Substack** at fire time — your local Chrome for a local task, the remote
+environment's browser for a cloud task. A run that finds no browser, a login wall, or
+the wrong account stops cleanly and reports (nothing posted). A remote task is the
+better fit for the release pollers: they keep firing while the laptop is asleep or
+closed.
+
+**Run location is the Cowork _Home run-mode_ setting, not a per-task argument.** Tasks
+you create while Home is in **"run in cloud"** mode file as cloud tasks; with it off they
+file as "Runs on this computer". Pick the mode that matches the tasks you're installing
+**before** Step 4 — and if the batch mixes `local` specs with a cloud Home mode, install
+the `local` ones in a separate pass with the cloud mode turned off.
 
 ## ⚠️ Project filing — read first
 
@@ -74,6 +81,14 @@ project (e.g. `~/LevRemembers`). If you cannot identify it or it is not mounted,
 call `request_cowork_directory` for it and wait.
 
 Translate that to its bash-sandbox mount path for running the collector.
+
+**Remote (cloud) Cowork session with no local folder to mount?** Use the session's own
+working directory as the project root instead (e.g. a `broadbanner-tasks/` folder in the
+outputs dir) and pass `--basename "<ProjectName>"` in Step 2 so the task ids still carry
+the project's name. The specs get scaffolded there from the shipped templates; that's
+fine — the scheduler stores each task's prompt itself, so nothing at run time reads the
+spec file back. (Keep the project's versioned specs in the real project folder when you
+have one; this fallback is for connector-only creators installing from the cloud.)
 
 `broadbanner.config.json` in that folder is **optional**:
 
@@ -200,16 +215,14 @@ Present the plan to the user before mutating anything.
 
 ## Step 4 — Apply
 
-> **⚠️ These tasks must run ON THIS COMPUTER (local), never in the cloud.**
-> They drive local Chrome — a cloud-run task can never reach the browser and fails
-> every fire. **Run location is governed by the Cowork _Home run-mode_ setting, not
-> a per-task argument.** If Cowork Home is set to the beta **"run in cloud"** mode,
-> **every** task you create runs in the cloud regardless of which session you
-> installed from. **Before installing, set Cowork Home to run on your computer**
-> (turn the beta "run in cloud" mode OFF); then every task files as a local
-> ("Runs on this computer") task. There is no reliable per-task override — the Home
-> run-mode is the control. (If a future build *does* expose a run-location argument
-> on `create_scheduled_task`, set it to the local option too, but don't rely on it.)
+> **Run location follows each task's `runLocation`** (see "Run location" at the top).
+> It's governed by the Cowork _Home run-mode_ setting, not a per-task argument: tasks
+> created while Home is in **"run in cloud"** mode file as cloud tasks, otherwise as
+> "Runs on this computer". `runLocation: any` tasks (the release pollers) are correct
+> either way — ask the user which they want if they haven't said, and recommend cloud
+> when they want releases to continue while their computer is off. `runLocation: local`
+> tasks must be created with the cloud mode **off**. (If a future build exposes a
+> run-location argument on `create_scheduled_task`, set it from `runLocation` instead.)
 
 For each task in the plan:
 
@@ -230,24 +243,34 @@ may differ slightly from the cron minute. That's expected.
 ### Verify run location (do NOT skip)
 
 After creating, confirm via `list_scheduled_tasks` (or the Cowork scheduled-tasks
-sidebar) that **every** task reports **"Runs on this computer"**. If any task is
-filed as **"Runs in cloud"**, it is broken — a cloud task cannot reach local Chrome.
-The cause is almost always the **Cowork Home run-mode set to the beta "run in cloud"
-mode**: tell the user to switch Home to run on their computer, then **delete and
-recreate** the affected tasks (a cloud-created task keeps its location). Report the
-final run location for each task in Step 5.
+sidebar) where each task landed and check it against its `runLocation`:
+
+- `runLocation: any` → **"Runs on this computer"** and **"Runs in cloud"** are both
+  fine. Just confirm it matches what the user chose.
+- `runLocation: local` → must be **"Runs on this computer"**. If it filed as "Runs in
+  cloud", the Home run-mode was in cloud mode: have the user switch it off, then
+  **delete and recreate** that task (a created task keeps its location).
+
+For every **cloud** task, remind the user that the remote environment's browser needs its
+own Substack login (sign in once there — its session is separate from local Chrome).
+The first remote run that hits a login wall stops and reports; nothing posts.
+
+Remote runs evaluate `cronExpression` in the scheduler's timezone, which may not be the
+user's. After install, check the **next run** time the scheduler shows for each cloud
+task; if daytime-bounded crons (e.g. clips `0 8-22 * * *`) are shifted, adjust the hour
+range with `--clip-cron` / `--text-cron` and re-run install.
 
 ## Step 5 — Report
 
 Print a summary table: each `taskId`, its schedule, the action taken
-(created / updated / enabled / disabled / unchanged), and its **run location**
-(must be "on this computer"). Echo any collector warnings. If any task still
-reports "Runs in cloud" after the Step 4 verification, flag it loudly as broken —
-it cannot reach the local browser.
+(created / updated / enabled / disabled / unchanged), its `runLocation`, and where it
+actually **runs** (this computer / cloud). Echo any collector warnings. Flag loudly any
+`runLocation: local` task that still reports "Runs in cloud" after the Step 4 check.
 
 For any task that drives a browser or remote connector, recommend the user click
 **Run now** once so tool approvals are captured and future scheduled runs don't
-pause on permission prompts.
+pause on permission prompts. For a cloud task, that first **Run now** also confirms the
+remote browser is logged into Substack.
 
 ## Uninstall / remove tasks
 

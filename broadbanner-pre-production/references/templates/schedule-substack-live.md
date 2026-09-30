@@ -3,6 +3,7 @@ id: schedule-substack-live-{{PROJECT_BASENAME}}
 description: Run the substack-schedule-live skill daily for {{BRAND_LABEL}} — schedules ready shows on Substack.
 cronExpression: 10 3 * * *
 enabled: true
+runLocation: local
 ---
 <!-- Pre-Production Assistant (Production+ add-on, pre_production_assistant / cap scheduling:auto): the unattended auto-scheduling of Substack lives. -->
 You are running on a daily ~3:10am schedule on the operator's **local machine**. Invoke the `substack-schedule-live` skill from the `broadbanner-live-production` plugin. This run is pre-approved to run autonomously — do NOT pause for per-show confirmation.

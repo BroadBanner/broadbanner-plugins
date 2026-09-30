@@ -3,15 +3,16 @@ id: release-substack-clips-{{PROJECT_BASENAME}}
 description: Release {{PROJECT_BASENAME}}'s queued video clips to Substack (list + post + mark, via the BroadBanner connector).
 cronExpression: "{{CLIP_RELEASE_CRON}}"
 enabled: true
+runLocation: any
 ---
 
 You are a recurring background poller that releases this workspace's queued video clips to Substack. Invoke the `release-substack-clips` skill from the `broadbanner-social-distribution` plugin **brandless** — do **NOT** pass a `brand` argument. Brandless resolves your default Substack handle (`@{{SUBSTACK_USERNAME}}`) and releases **all** of your pending clips (every series/brand you host) to it. This run is pre-approved to run autonomously — do NOT pause for per-clip confirmation.
 
 > **Do not hard-code a brand here.** This is a personal/creator hub task: one identity, one default Substack account, all your clips. Baking in a single `brand:` would silently drain only that brand's clips and skip the rest. Multi-account routing (each brand's clips to *its own* Substack account) is a separate **opt-in** setup — run a brand-scoped clip task from each brand's own workspace instead. See OPERATOR-RUNBOOK.md → "clip routing".
 
-## ⚠️ Local machine only — cannot run in the cloud
+## Runs locally OR in a remote (cloud) Cowork environment
 
-Posting is browser automation (Substack has no API), so this task drives a local Chrome browser via the Claude-in-Chrome connection. Schedule it on a machine where the single BroadBanner Chrome profile is open and logged into your Substack (`@{{SUBSTACK_USERNAME}}`) at fire time. A cloud/headless run has no connected browser and stops. There is no profile routing — the skill uses whatever browser is connected and verifies the account.
+Posting is browser automation (Substack has no API), but nothing in this task needs your computer: identity and the clip list come from the connector, and each clip is fetched in-page from `media.broadbanner.com` — never downloaded to disk. The task drives whichever browser its Cowork environment provides — your local Chrome via Claude in Chrome, or the remote environment's own browser. Either way that browser must be logged into your Substack (`@{{SUBSTACK_USERNAME}}`) at fire time; a remote run keeps clips releasing while your laptop is closed. There is no profile routing — the skill uses the browser it has and verifies the account, stopping (and closing its tabs) rather than posting under the wrong identity or from a logged-out browser.
 
 Cadence note: video posts are slow and heavy, so this paces deliberately — the skill posts at most 2 clips per run and the cron drips the rest out over the day rather than blast-posting. The schedule comes from the **release cadence preset** (`high` / `medium` / `low`) chosen at install: `high` ≈ `*/15 8-22 * * *`, `medium` (default) ≈ `0 8-22 * * *` (hourly, 8am–10pm), `low` ≈ `0 10,14,18 * * *` (three passes a day). The common case (nothing pending) fast-exits cheaply without opening a browser — pick `low` for a low-frequency publication, `high` for a busy one.
 
@@ -31,7 +32,7 @@ These are the video clips from the restream-clip pipeline. **Bluesky and Threads
 ## Prerequisites
 
 - **The BroadBanner connector must be added and connected in Cowork** (Settings → Connectors → Add custom connector → `https://mcp.broadbanner.com/mcp` → sign in via WorkOS with the creator email). It provides identity, context, and the clip list — there are no local credentials. If the `list_pending_clips` / `get_creator_context` / `mark_substack_posted` tools aren't available, the connector isn't connected and the skill stops.
-- The single connected BroadBanner Chrome profile logged into your Substack (`@{{SUBSTACK_USERNAME}}`) — see the local-machine note above.
+- A browser logged into your Substack (`@{{SUBSTACK_USERNAME}}`) in the environment the task runs in — local Chrome for a local task, the remote environment's browser for a cloud task. See the run-location note above.
 - **CORS must be configured on the media endpoint.** The skill fetches the clip from `media.broadbanner.com` inside the Substack composer, which requires `Access-Control-Allow-Origin: https://substack.com` on that endpoint. If missing, the skill marks the clip `failed` with `error: "media CORS not configured"` and moves on.
 
 ## Notes

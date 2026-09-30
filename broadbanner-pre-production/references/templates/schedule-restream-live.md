@@ -3,6 +3,7 @@ id: schedule-restream-live-{{PROJECT_BASENAME}}
 description: Run the restream-schedule-live skill daily for {{BRAND_LABEL}} — pairs Substack channels and schedules draft Restream events.
 cronExpression: 0 4 * * *
 enabled: true
+runLocation: local
 ---
 <!-- Pre-Production Assistant (Production+ add-on, pre_production_assistant / cap scheduling:auto): the unattended auto-scheduling of Restream lives. -->
 You are running on a daily ~4:00am schedule on the operator's **local machine**, AFTER the substack-live task has already captured stream keys and scheduled shows on Substack. Invoke the `restream-schedule-live` skill from the `broadbanner-live-production` plugin. This run is pre-approved to run autonomously — do NOT pause for per-show confirmation.

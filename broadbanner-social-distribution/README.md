@@ -31,9 +31,12 @@ release queued Substack notes and clips. Browser automation runs on the operator
 ## Requirements
 
 - An authenticated Substack session in your browser (none of the skills automate login).
-- Claude in Chrome extension (for browser automation) — a **single** connected BroadBanner
-  Chrome profile. The skills do not enumerate or route among profiles; they verify the
-  connected browser is logged into the expected account and stop if it isn't.
+- A browser Cowork can drive — **either** Claude in Chrome on desktop Cowork (a **single**
+  connected BroadBanner Chrome profile) **or** the browser of a remote/cloud Cowork
+  environment. The skills do not enumerate or route among profiles; they verify the
+  browser is logged into the expected account and stop if it isn't. The connector-based
+  release skills (`release-substack-text`, `release-substack-clips`) need nothing local,
+  so their scheduled tasks can run in the cloud (see `broadbanner-scheduled-tasks`).
 - The **BroadBanner MCP connector** (`mcp.broadbanner.com`) connected — the connector-based
   skills (`substack-note`, `release-substack-text`, `release-substack-clips`) get identity,
   the Substack handle, and authorized series from it; no local `broadbanner.config.json` or

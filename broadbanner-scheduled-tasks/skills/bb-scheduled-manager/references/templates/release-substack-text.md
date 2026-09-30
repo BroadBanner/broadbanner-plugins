@@ -3,6 +3,7 @@ id: release-substack-text-{{PROJECT_BASENAME}}
 description: Release {{PROJECT_BASENAME}}'s web-composed text posts to Substack (list + post + mark, via the BroadBanner connector).
 cronExpression: "{{TEXT_RELEASE_CRON}}"
 enabled: true
+runLocation: any
 ---
 
 You are a recurring background poller that releases this workspace's web-composed text posts to Substack, keeping Substack close behind the Worker queue (Bluesky/Threads post within 0–3 min via that queue; this keeps Substack near-parity). Invoke the `release-substack-text` skill from the `broadbanner-social-distribution` plugin. This run is pre-approved to run autonomously — do NOT pause for confirmation.
@@ -23,7 +24,7 @@ These are the text posts created from the BannerBlast web composer (`#blastItBut
 ## Prerequisites
 
 - **The BroadBanner connector must be added and connected in Cowork** (Settings → Connectors → Add custom connector → `https://mcp.broadbanner.com/mcp` → sign in via WorkOS with the creator email). It provides identity, context, and the hosted data — there are no local credentials. If the `list_pending_substack` / `get_creator_context` / `mark_substack_posted` tools aren't available, the connector isn't connected and the skill stops.
-- **Local machine only — cannot run in the cloud.** Substack has no API, so release is browser automation: this task drives a local Chrome browser via the Claude-in-Chrome connection. Schedule it on a machine where the single BroadBanner Chrome profile is open and logged into the creator's Substack (the account = `substackHandle` from `get_creator_context`) at fire time. A cloud/headless run has no connected browser and stops. There is no profile routing — the skill uses whatever browser is connected and verifies the account (it stops rather than post under the wrong identity).
+- **Runs locally OR in a remote (cloud) Cowork environment.** Substack has no API, so release is browser automation — but nothing here needs your computer: identity and data come from the connector, and the image (if any) is fetched in-page from R2, so no local files are read or written. The task drives whichever browser its Cowork environment provides — your local Chrome via Claude in Chrome, or the remote environment's own browser. Either way, that browser must be logged into the creator's Substack (the account = `substackHandle` from `get_creator_context`) at fire time. A remote run means posts keep releasing while your laptop is closed. There is no profile routing — the skill uses the browser it has and verifies the account; it stops (and closes its tabs) rather than post under the wrong identity or from a logged-out browser.
 
 ## Notes
 

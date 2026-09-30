@@ -59,7 +59,9 @@
  * Output (default): a JSON object
  *   { projectRoot, projectBasename, specDir, vars, tasks[], warnings[] }
  * where each task is
- *   { id, description, cronExpression?|fireAt?, enabled, prompt, sourceFile }
+ *   { id, description, cronExpression?|fireAt?, enabled, runLocation, prompt, sourceFile }
+ * runLocation is "any" (default — runs locally or in a remote Cowork environment)
+ * or "local" (the spec declared it must run on the operator's own computer).
  */
 
 import fs from "node:fs";
@@ -291,6 +293,17 @@ function slugify(name) {
     .replace(/^-+|-+$/g, "");
 }
 
+// Where a task may run. Browser tasks are NOT inherently local — a remote Cowork
+// environment has its own browser — so the default is "any". A spec opts into
+// "local" only when it genuinely needs the operator's own computer.
+function coerceRunLocation(v, warnings, file) {
+  if (v === undefined || v === null || v === "") return "any";
+  const s = String(v).trim().toLowerCase();
+  if (s === "any" || s === "local") return s;
+  warnings.push(`${file}: unknown runLocation "${v}" (expected any | local); using "any"`);
+  return "any";
+}
+
 function coerceBool(v, dflt) {
   if (v === undefined || v === null || v === "") return dflt;
   if (typeof v === "boolean") return v;
@@ -425,10 +438,13 @@ function main() {
         f,
       );
 
+      const runLocation = coerceRunLocation(frontmatter.runLocation, warnings, f);
+
       const task = {
         id,
         description,
         enabled: coerceBool(frontmatter.enabled, true),
+        runLocation,
         prompt,
         sourceFile: path.relative(root, full),
       };
@@ -465,7 +481,7 @@ function main() {
           ? `once @ ${t.fireAt}`
           : "ad-hoc (manual only)";
       process.stdout.write(
-        `  • ${t.id}\n      ${when}   enabled=${t.enabled}\n      ${t.description}\n      ← ${t.sourceFile}\n`,
+        `  • ${t.id}\n      ${when}   enabled=${t.enabled}   runLocation=${t.runLocation}\n      ${t.description}\n      ← ${t.sourceFile}\n`,
       );
     }
     if (warnings.length) {

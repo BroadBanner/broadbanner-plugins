@@ -12,11 +12,15 @@ exactly the failure mode this plugin exists to prevent.
 > files a task under whichever project created it — there is no project
 > parameter. Run the skill from the right project, every time.
 
-> **⚠️ Local machine only.** Every task here drives a **local Chrome browser** via
-> the Claude-in-Chrome connection (Substack/Restream have no API). They **cannot
-> run on a cloud/headless agent** — install and run them from **desktop Cowork on
-> the machine where the single BroadBanner Chrome profile stays open and logged in**
-> at fire time. A run with no connected browser stops and reports; nothing goes out.
+> **Local or remote.** Every task here drives a browser (Substack/Restream have no
+> API), but that doesn't tie it to your computer. The release pollers
+> (`release-substack-text`, `release-substack-clips`) are `runLocation: any`: install
+> them from desktop Cowork to run on this computer, or with Cowork Home in **"run in
+> cloud"** mode to run in a remote environment (they keep going while your laptop is
+> off). The live-scheduling pair (pre-production add-on) is still `runLocation: local`.
+> Either way, the browser where the task runs must be logged into Substack at fire
+> time — a remote environment's browser needs its own one-time Substack login. A run
+> with no browser or a logged-out browser stops and reports; nothing goes out.
 
 ---
 
