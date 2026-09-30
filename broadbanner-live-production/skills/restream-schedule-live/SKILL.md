@@ -18,7 +18,7 @@ All data access goes through these tools — there is no `curl`, no `API_BASE`, 
 | Tool                     | Args                                                                                      | Replaces                                                                                                                              |
 | ------------------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `list_schedulable_shows` | `{ states: ["substack_scheduled","restream_paired"] }`                                    | `GET /v1/shows` **filtered server-side** to those states. Returns `{ generatedAt, shows: [...matching], _fetch: { cfCacheStatus, totalShows, returnedShows, age, cfRay } }`, served fresh each call. **Always pass `states`** — the unfiltered org-wide snapshot is ~600 KB and overflows the tool-result cap. |
-| `get_restream_workspaces`| none                                                                                      | `GET /v1/restream-workspaces`. Returns `{ accounts: [{ id, workspaces: [{ workspaceName, isDefault, podIds }] }] }` verbatim.        |
+| `get_restream_workspaces`| none                                                                                      | `GET /v1/restream-workspaces`. Returns `{ accounts: [{ id, displayName, workspaces: [{ workspaceName, displayName, isDefault, podIds }] }] }` verbatim. `workspaces[].displayName` is the label shown in the Restream Studio left sidebar. |
 | `list_restream_events`   | `{ workspace?, event_status? }`                                                           | `GET /v1/restream-events`. Returns `{ restream_events: [...] }`. **Courtesy/informational only** — never a scheduling gate.          |
 | `upsert_restream_event`  | `{ showId, publication, event_status, event_id, scheduled_at, workspace? }`               | `PATCH /v1/restream-events/:show_id`. The tool sets `X-Actor: skill:restream-schedule-live`, `X-Publication`, and the `workspace` query param FOR you. |
 
@@ -120,9 +120,11 @@ When the show list is presented to the user (Step 0) and in the final report (St
 
 Scheduling state lives in D1's `restream_events` table, reached through the connector's admin tools. The local `Social-Distribution/restream-event-state-*.json` files are **frozen** as of the Phase 3 cutover (2026-05-13) — do not read or write them. All current state flows through the tools.
 
-**Row identity is `(show_id, restream_workspace)`** — a single show can have a row per workspace because each Restream workspace carries its own OAuth credential set (SOTSP's `sick-of-this-show` and `time-for-life` are the canonical example). When the user's Restream account has no workspace selector at all (e.g. LR / LevRemembers), the workspace is `null` and there's exactly one row per show.
+**Row identity is `(show_id, restream_workspace)`** — a single show can have a row per workspace because each Restream workspace carries its own **API** OAuth credential set on the server side (the SOTSP account's `sots` and `tfl` workspaces are the canonical example). When the user's Restream account has no workspace selector at all, the workspace is `null` and there's exactly one row per show.
 
-The account → workspace → pod-id catalog comes from `get_restream_workspaces` (no arguments). The response is account-oriented — `accounts[i]` is a Restream account (1:1 with networks), each with its `workspaces[]` and per-workspace `podIds[]`. Look up a series by walking `accounts[].workspaces[].podIds[]` and using the matching workspace's `workspaceName`. When `isDefault` is true, **omit the `workspace` arg** on `upsert_restream_event`; Restream's API treats single-workspace accounts as not requiring it. For multi-workspace accounts, each workspace must be queried independently (one `list_restream_events({ workspace })` per workspace).
+The account → workspace → pod-id catalog comes from `get_restream_workspaces` (no arguments). The response is account-oriented — `accounts[i]` is a Restream account (1:1 with networks), each with its `workspaces[]` and per-workspace `podIds[]`. Look up a series by walking `accounts[].workspaces[].podIds[]`: the matching workspace's `workspaceName` is the D1/API identity (the `workspace` arg), and its `displayName` is the **sidebar label** you click in the browser (Step 1.5). When `isDefault` is true, **omit the `workspace` arg** on `upsert_restream_event`; Restream's API treats single-workspace accounts as not requiring it. For multi-workspace accounts, each workspace must be queried independently (one `list_restream_events({ workspace })` per workspace).
+
+> **One browser session covers every workspace.** The per-workspace credential split above is an API/server concern only. In the browser, a single Restream login lists **all** of the account's workspaces in the left sidebar, and one Restream Studio tab can switch between them in-app. Do not log out/in, open another Chrome profile, or open a separate tab per workspace — switch in the sidebar (Step 1.5).
 
 > The catalog lives in D1's `restream_accounts` + `restream_workspaces` + `pods.restream_workspace_id` (D1 migs 0027 + 0028) — adding a new account, workspace, or series assignment is a SQL change, no skill edit + redeploy. The legacy `references/restream-workspaces.json` is retained in-repo only as historical reference.
 
@@ -269,22 +271,41 @@ Filtered by 7-day horizon — deferred {M} show(s) scheduled >7d out:
 
 If no eligible shows remain after the `hasLiveScheduled`/`restreamKey` filter (or after the horizon filter), report "No shows ready for Restream scheduling" and stop.
 
-Present the list of eligible shows to the user for confirmation. **Display the machine-local time** (computed per the recipe in "Timezone handling" above) — that's what will actually be entered into the Restream modal. Surface the show-stored TZ wall-clock only when it differs from the machine TZ:
+#### Resolve each show's workspace and group the run
+
+Call `get_restream_workspaces` **once** for the whole run. For each eligible show, walk `accounts[].workspaces[].podIds[]` for the show's `seriesId` and attach:
+
+| Field                 | Source                          | Used for                                                  |
+| --------------------- | ------------------------------- | --------------------------------------------------------- |
+| `ws.workspaceName`    | matching workspace              | the `workspace` arg on `upsert_restream_event` (Step 6)    |
+| `ws.displayName`      | matching workspace              | the **sidebar label** to click (Step 1.5)                  |
+| `ws.isDefault`        | matching workspace              | omit `workspace` on the write when true                    |
+| `ws.accountName`      | parent `account.displayName`    | the account header at the top of the sidebar               |
+
+A show whose `seriesId` is in **no** workspace's `podIds` has `ws = null` — it lives at the account's top level (no sub-workspace to select). **Do not hardcode seriesId → workspace mappings** — the catalog is D1-managed and moves (e.g. `babm-pv` lives in the SOTSP account's `sots` workspace, not at a B&B top level).
+
+Then **group the eligible shows by workspace** (key: `ws.workspaceName`, or `__none__` for `ws = null`), preserving `scheduledStart` order inside each group. The browser pass (Steps 1.5–7) walks the groups one at a time, so the sidebar switches **once per workspace**, not once per show.
+
+Present the grouped list to the user for confirmation. **Display the machine-local time** (computed per the recipe in "Timezone handling" above) — that's what will actually be entered into the Restream modal. Surface the show-stored TZ wall-clock only when it differs from the machine TZ:
 
 ```
-Found {N} show(s) ready for Restream scheduling (machine TZ: {MACHINE_TZ_ABBR}):
+Found {N} show(s) ready for Restream scheduling across {W} workspace(s) (machine TZ: {MACHINE_TZ_ABBR}):
 
-1. {showTitle} — {LOCAL_DATE} at {LOCAL_TIME_12H} {MACHINE_TZ_ABBR}
-   {if localTimeZone differs from machine TZ:
-     Show-stored: {scheduledStartLocal} ({localTimeZone})
-   }
-   Default title: {defaultShowTitle}
-   Restream key: {restreamKey (first 8 chars)}…
+Workspace "{ws.displayName}" ({ws.workspaceName}):
+  1. {showTitle} — {LOCAL_DATE} at {LOCAL_TIME_12H} {MACHINE_TZ_ABBR}
+     {if localTimeZone differs from machine TZ:
+       Show-stored: {scheduledStartLocal} ({localTimeZone})
+     }
+     Default title: {defaultShowTitle}
+     Restream key: {restreamKey (first 8 chars)}…
+
+Account top level (no workspace):
+  2. …
 
 Proceed with scheduling all?
 ```
 
-This skill runs from a **single connected Chrome browser profile** — brand-admin scheduling is production support. There is no per-show Chrome-profile routing; the real multi-tenant mechanism is switching Restream **workspaces** in-app (Step 1.5). Use whatever browser is currently connected.
+This skill runs from a **single connected Chrome browser profile** and a **single Restream Studio tab**. There is no per-show Chrome-profile routing and no per-workspace login: one Restream session manages every workspace on the account, and the multi-tenant mechanism is switching workspaces in the left sidebar (Step 1.5). Use whatever browser is currently connected.
 
 ### Step 1: Open browser and navigate to Restream
 
@@ -298,32 +319,32 @@ read_page: filter=interactive
 
 Look for the events list containing stream titles and "Draft" status badges. If a login prompt appears, stop and tell the user to log in manually.
 
-### Step 1.5: Navigate to the correct workspace
+### Step 1.5: Switch to the group's workspace (in-app, same session)
 
-Restream Studio organizes streams into workspaces. The correct workspace must be selected **before** searching for the event — events only appear in their owning workspace.
+Restream Studio organizes streams into workspaces, and **events only appear in their owning workspace** — so the right workspace must be active **before** searching for an event. One logged-in Restream session lists every workspace on the account in the **left sidebar**; switching is an in-app click in the same tab. Never log out, change Chrome profile, or open a new tab to reach another workspace.
 
-The workspace is shown in the left sidebar. Use the **seriesId** of the current show to determine which workspace to enter:
+Run this step **once at the start of each workspace group** (from Step 0's grouping), and re-verify it after any navigation back to `/home` (Step 7).
 
-| seriesId                    | Target workspace                             |
-| --------------------------- | -------------------------------------------- |
-| `sotsp-tfl`                 | **Time For Life** (left sidebar)             |
-| any other `sotsp-*`         | **Sick of this Show** (left sidebar)         |
-| `babm-*` / `fp-*` / `twv-*` | Main account level — no sub-workspace needed |
+#### 1.5a: Read the sidebar
 
-#### How to navigate
+`read_page` (or `find: "workspace list in left sidebar"`) the left panel. Expect:
 
-Use `read_page` to read the left sidebar. The account/workspace controls appear at the top of the left panel.
+- The **account** at the top (avatar + name, e.g. `ws.accountName` — "Sick of This Shit Publications", often truncated like "Sick of this Shit P…").
+- The account's **workspaces** listed beneath it as clickable items, labelled by `ws.displayName` (e.g. "Sots", "Time For Life"). If they're collapsed under the account header, expand it first (click the account name / its dropdown arrow).
 
-- The **main account** is displayed at the top (e.g., "Sick of this Shit P..." with the account avatar and dropdown arrow).
-- **Sub-workspaces** appear below the main account as clickable items (e.g., "Time For Life", "Sick of this Show").
+#### 1.5b: Click the target workspace
 
-To switch workspaces, `left_click` the target workspace name in the left sidebar. Wait 2 seconds for the event list to reload.
+Match the sidebar item to the group's `ws.displayName` — case-insensitive, allowing truncation (the label may be cut with `…`). If no item matches `displayName`, try `ws.workspaceName`. For the `__none__` group (account top level), click the account name at the top of the sidebar instead.
 
-To return to main account level (for BABM/FP/TWV shows), click the main account name at the top of the sidebar.
+`left_click` the item (ask the user to click it if `left_click` is blocked). Wait ~2 seconds for the event list to reload.
 
-**Verify the switch** by using `read_page` after clicking — the events shown in the list should now belong to the target workspace. If the workspace names are not visible in the sidebar, use `screenshot` to locate them visually.
+#### 1.5c: Verify the switch — before touching any event
 
-This step must run for each show individually — if scheduling multiple shows that belong to different workspaces, re-run this step before each one.
+Confirm with `read_page` that the target workspace is now the **active/selected** one (highlighted item, and/or the workspace name shown in the header/breadcrumb above the event list). Also sanity-check that the event list changed and contains at least one draft whose title contains a `defaultShowTitle` from this group. If the switch can't be confirmed, take a `screenshot` and re-try once; if it still can't be confirmed, **do not schedule** — a wrong-workspace Schedule pairs the wrong channels.
+
+#### 1.5d: Workspace not in the sidebar
+
+If the target workspace isn't listed at all, the logged-in Restream user hasn't been invited to it (or the catalog's `displayName` is stale). **Skip that whole group**, record each of its shows as `workspace "{displayName}" not visible in Restream sidebar — check the Restream login has access`, and continue with the next group. Don't guess a different workspace.
 
 ### Step 2: Find the target event (and decide whether to schedule it)
 
@@ -510,10 +531,10 @@ Verify the event is now showing as "Scheduled" instead of "Draft" in the event l
 
 ### Step 6: Write the scheduled-event state
 
-Determine the workspace for this show:
+Use the workspace already resolved for this show in Step 0 (`ws`) — don't re-fetch the catalog per show:
 
-1. Look up the show's `seriesId` in the catalog from `get_restream_workspaces`. Walk `accounts[].workspaces[].podIds[]` and find the workspace whose `podIds` contains the `seriesId`. That workspace's `workspaceName` is the value to pass as `workspace` — **unless `isDefault` is true, in which case OMIT `workspace` entirely** (do NOT pass an empty string). The parent `account.id` tells you which OAuth credential set the tool uses.
-2. If no workspace matches the `seriesId`, OMIT `workspace` (the no-workspace case for accounts without a workspace selector).
+1. Pass `ws.workspaceName` as `workspace` — **unless `ws.isDefault` is true, in which case OMIT `workspace` entirely** (do NOT pass an empty string).
+2. If `ws` is `null` (the `__none__` group — account top level), OMIT `workspace`.
 
 Then call `upsert_restream_event` with the three write fields (`event_id`, `event_status`, `scheduled_at`), plus `publication` and (conditionally) `workspace`. The tool sets `X-Actor: skill:restream-schedule-live`, `X-Publication`, and the `workspace` query param FOR you — you only supply the values.
 
@@ -543,11 +564,13 @@ There is no direct-API fallback — a tool error is the failure to report, not a
 
 ### Step 7: Process remaining shows
 
-If there are additional shows to schedule:
+Walk the Step 0 workspace groups in order, one show at a time, all in the **same Restream tab**:
 
-1. Navigate back to `https://app.restream.io/home` (or verify the event list is visible).
-2. Process the next show starting from Step 1.5 (re-select the workspace) then Step 2.
-3. Process shows one at a time. After each show, confirm the state was written before moving to the next.
+1. After a show, return to the event list (`https://app.restream.io/home`, or verify the list is visible).
+2. **Re-verify the active workspace** (Step 1.5c) — a page load may land back on a different workspace. If it isn't the current group's, re-select it (1.5b) before Step 2.
+3. **Next show in the same group** → go straight to Step 2 (no sidebar switch needed once verified).
+4. **Group finished** → switch to the next group's workspace in the sidebar (Step 1.5), then continue at Step 2.
+5. After each show, confirm the state was written (Step 6) before moving to the next. A failure on one show (or a skipped workspace) never stops the other groups.
 
 ### Step 8: Close the browser tab
 
@@ -564,17 +587,21 @@ After all shows are processed, present a summary:
 ```
 Restream events scheduled — times shown in {MACHINE_TZ_ABBR}:
 
-1. {showTitle} — {LOCAL_DATE} at {LOCAL_TIME_12H} {MACHINE_TZ_ABBR}
-   {if localTimeZone differs from machine TZ:
-     Show-stored: {scheduledStartLocal} ({localTimeZone})
-   }
-   Channel paired: {channel name}
-   Status: Scheduled ✓
+Workspace "{ws.displayName}" ({ws.workspaceName}):
+  1. {showTitle} — {LOCAL_DATE} at {LOCAL_TIME_12H} {MACHINE_TZ_ABBR}
+     {if localTimeZone differs from machine TZ:
+       Show-stored: {scheduledStartLocal} ({localTimeZone})
+     }
+     Channel paired: {channel name}
+     Status: Scheduled ✓
+  D1 written for workspace={ws.workspaceName} (omitted if isDefault).
 
-D1 written for workspace=<workspace> (or __none__).
+Account top level (no workspace):
+  …
+  D1 written for workspace=__none__.
 ```
 
-If any shows failed, list them separately with the failure reason.
+If any shows failed or a workspace group was skipped (Step 1.5d), list them separately with the reason.
 
 ## Re-titling a scheduled show (title drift)
 
@@ -621,7 +648,8 @@ channels.
 
 ## Error handling
 
-- **Not logged in:** Stop and tell the user to log in to Restream at `app.restream.io` in Chrome.
+- **Not logged in:** Stop and tell the user to log in to Restream at `app.restream.io` in Chrome. One login covers every workspace on the account.
+- **Target workspace missing from the sidebar / switch can't be verified:** Skip that workspace group (Step 1.5d), report its shows, and continue with the other groups. Never schedule into an unverified workspace.
 - **Event not found:** "Not found" means **no draft row contains the `defaultShowTitle`** — full stop. A draft whose title shows a *previous* episode's topic (e.g. a "Voice From Ukraine" draft still reading last week's headline) is **found** and is the recurring container to reuse — do NOT report it as "not found" or "a different/aired show." Only when there is genuinely no draft containing the series name does the user need to create one in Restream Studio (+ New Stream). This skill schedules existing draft events; it does not create new ones.
 - **Event already scheduled / Live / Finished:** Step 2's `read_page` badge check is the only place this decision is made. Skip the show, note it in the final report, and optionally best-effort call `upsert_restream_event` to align D1 (`event_status: "scheduled"` or `"finished"`). Never consult D1's `event_status` as a pre-flight filter — the API behind it has been observed misreporting Draft events as `upcoming`/`finished`.
 - **Channel not found:** The Substack channel for this show hasn't been created yet. Suggest triggering the Restream-Worker channel sync (`POST /sync-channels`, or wait for the next _/30 tick), or `banner-admin schedule-live` to create it manually.
@@ -641,5 +669,5 @@ channels.
 - **Restream's Schedule modal operates in the BROWSER's local timezone, not the show's stored timezone.** The TZ label next to the Time field reflects the operator's machine (typically `America/Chicago`). The show's `localTimeZone` is independent (often `America/New_York`) — they are NOT expected to match. Always convert `scheduledStart` (UTC) → machine-local wall-clock via the "Timezone handling" recipe and feed those values to the Date/Time pickers. Never use `showDate`, `showStart`, or `scheduledStartLocal` directly — those are pre-rendered in the show's stored TZ (or Eastern Time for legacy snapshot compatibility) and will drift the schedule by the offset between the show TZ and the machine TZ.
 - **Process shows one at a time** — each scheduling pass interacts with the Restream modal, which has state. Complete one show fully before moving to the next.
 - **Only schedule Draft events — and the decision lives in the browser, not in D1.** Step 2's `read_page` of the event row's status badge is the sole authority. Do not gate scheduling on D1's `event_status` field: the poller writes that field from Restream's `GET /v2/user/events` response, which has been observed reporting `upcoming`/`finished` for events the Studio UI still shows as Draft. Letting D1 gate the pass caused the skill to miss scheduling for every workspace.
-- **Multi-tenant switching is in-app, not by browser profile.** This skill runs from a single connected Chrome profile; the real per-tenant mechanism is switching Restream workspaces in the sidebar (Step 1.5). Workspace is part of D1 row identity `(show_id, restream_workspace)`, so each workspace's scheduling state is isolated.
+- **One session, many workspaces — switching is in-app.** A single Restream login lists every workspace on the account in the left sidebar, and one Studio tab manages them all. This skill runs from a single connected Chrome profile and a single tab; it groups shows by workspace (Step 0), switches in the sidebar once per group (Step 1.5), and verifies the active workspace before every event. The target sidebar label comes from the catalog's `displayName` — never a hardcoded seriesId table. Workspace is part of D1 row identity `(show_id, restream_workspace)`, so each workspace's scheduling state is isolated.
 - **State lives in D1, reached via the connector tools** — the legacy `Social-Distribution/restream-event-state-*.json` files are frozen as of the Phase 3 cutover (2026-05-13). All reads and writes from this skill flow through `list_restream_events` / `upsert_restream_event`. The poller (`banner-blast restream-poller`) shares the table via its own path and owns channel metadata; workspace is part of row identity so each workspace's scheduling state is isolated. See `RESTREAM-EVENT-STATE-TO-D1-MIGRATION-PLAN.md` (in the BroadBanner workspace root) for the architectural reasoning.

@@ -16,7 +16,7 @@ The skill converts show times against the **browser's own timezone** (it reads i
 ## Prerequisites
 
 - The **BroadBanner MCP connector** (`https://mcp.broadbanner.com/mcp`) connected, on a session authorized to schedule (brand-admin / super-admin today). The skill is **connector-only** — no `broadbanner.config.json`, no `.creds/gateway.token`, no `BROADBANNER_ENC_PASSPHRASE`, no mount.
-- The cloud environment's browser logged in to Restream Studio. There is no profile routing — the skill uses the browser it has.
+- The cloud environment's browser logged in to Restream Studio. There is no profile routing — the skill uses the browser it has. One Restream login covers **every workspace** on the account: the skill groups shows by workspace and switches between them in the Restream left sidebar within that single session.
 - The matching Substack channel must already exist in Restream — provisioned by the **Restream-Worker** channel-sync pass.
 
 ## What to do

@@ -39,4 +39,9 @@ series you host, and publish clips to TikTok/YouTube/Facebook.
   connected BroadBanner Chrome profile for attended runs, or the cloud environment's
   browser for cloud scheduled tasks (pre-production auto-scheduling). The skills do not
   route among profiles, and convert show times against the browser's own timezone.
+- **One Restream session, many workspaces.** A single Restream login lists every
+  workspace on the account in the left sidebar. `restream-schedule-live` groups shows by
+  workspace (from the D1 catalog's `displayName`) and switches in-app once per group;
+  `restream-publish-clip` selects the clip's workspace the same way. No per-workspace
+  login, tab, or Chrome profile.
 - `Social-Distribution/` directory with restream-clip tracker files (for `restream-publish-clip`).

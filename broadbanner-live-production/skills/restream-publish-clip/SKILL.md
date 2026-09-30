@@ -90,11 +90,9 @@ proceeding.
 Verify `~/BroadBanner` is mounted at `/sessions/*/mnt/BroadBanner`. If not,
 call `mcp__cowork__request_cowork_directory` with `path: "~/BroadBanner"`.
 
-Also load `broadbanner.config.json` from the brand workspace root (alongside
-`Social-Distribution/`). Capture the `chromeProfiles` block (if present) — you'll
-need it in Step 3.5 to pick the correct browser profile for the chosen clip.
-If the block is absent, profile-routing is disabled and the skill will use
-the currently-selected browser.
+This skill runs on the single connected Chrome profile — there is no
+`chromeProfiles` routing. One Restream login manages every workspace on the
+account; Step 3.5 selects the clip's workspace in-app.
 
 ---
 
@@ -254,33 +252,28 @@ if len(original_title) > 100:
 
 ---
 
-### Step 3.5: Select the correct Chrome profile
+### Step 3.5: Select the clip's Restream workspace (in-app)
 
-Before any browser action, switch to the Claude-in-Chrome profile that owns
-the Restream account for this clip's series. See `references/chrome-profile-routing.md`
-for the full algorithm.
+Clip projects, like events, belong to a Restream **workspace**, and a single
+Restream login lists every workspace on the account in the left sidebar. Use
+the connected browser as-is — never switch Chrome profiles or log in again —
+and select the workspace in-app:
 
-Quick version:
+1. **Resolve the target.** If the BroadBanner MCP connector is connected, call
+   `get_restream_workspaces` and find the workspace whose `podIds` contains
+   `pod_id`; its `displayName` is the sidebar label. If `pod_id` is in no
+   workspace, the project lives at the account top level. If the connector
+   isn't available (or the call is unauthorized), skip to Step 4 and use the
+   fallback there.
+2. **Switch.** Open `https://app.restream.io/home`, `read_page` the left
+   sidebar, and click the item matching `displayName` (case-insensitive,
+   truncation allowed; expand the account header first if the workspaces are
+   collapsed). For the top-level case, click the account name.
+3. **Verify** via `read_page` that the target workspace is now the active one
+   before navigating to the project.
 
-1. Look up `chromeProfiles.bySeriesId[pod_id]` from the config loaded in Step 0.
-2. Else look up `chromeProfiles.byBrand[<brand for pod_id>]` (resolve brand
-   via the brand prefix on `pod_id`, or via `BroadBanner-Core` pod-map if available).
-3. Else: skip the switch.
-
-If a target deviceId resolved:
-
-```
-list_connected_browsers → confirm <resolved deviceId> is in the connected list (ignore the `name` field — it's a volatile ordinal)
-select_browser({ deviceId: <resolved deviceId> })
-```
-
-Skip `select_browser` if the current browser is already that deviceId. If the
-resolved deviceId is not in the connected list, **stop and tell the user** —
-publishing on the wrong account posts under the wrong identity. Suggest pairing
-the missing profile via `switch_browser`.
-
-This skill processes one clip per invocation, so the resolution happens once
-per run (between picking the clip in Step 3 and navigating in Step 4).
+This skill processes one clip per invocation, so the switch happens once per
+run (between picking the clip in Step 3 and navigating in Step 4).
 
 ---
 
@@ -294,7 +287,10 @@ https://app.restream.io/clips/<project_id>
 
 Confirm the project view has loaded via `read_page` — it should show a list
 of clips for this episode. If the page shows an error or redirects to the
-clips index, the `project_id` may be stale; ask the user to verify before
+clips index, the most likely cause is that **a different workspace is
+active**: switch to each other workspace listed in the sidebar in turn (same
+session, same tab) and retry the project URL. Only if it fails in every
+workspace is the `project_id` stale — then ask the user to verify before
 continuing.
 
 ---
