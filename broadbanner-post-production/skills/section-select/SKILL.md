@@ -1,6 +1,6 @@
 ---
 name: section-select
-description: "Assign a Substack draft to the correct publication section (series) before post-production — using the LIVE series title from the BroadBanner MCP connector, not a local config. Use when the Substack editor's toolbar reads 'Choose a section', when the user says 'set the section', 'file this under <series>', or 'select the section', or as the first browser step of the post-production chain (before transcript-download). Multi-section publications only; single-section publications have no dropdown and skip. Production+ add-on (post_production_distribution)."
+description: "Assign a Substack draft to the correct publication section (series) before post-production — using the LIVE series title from the BroadBanner MCP connector, not a local config. Use when the Substack editor's toolbar reads 'Choose a section', when the user says 'set the section', 'file this under the series', or 'select the section', or as the first browser step of the post-production chain (before transcript-download). Multi-section publications only; single-section publications have no dropdown and skip. Production+ add-on (post_production_distribution)."
 metadata:
   requiresTool: post_production_distribution
 ---

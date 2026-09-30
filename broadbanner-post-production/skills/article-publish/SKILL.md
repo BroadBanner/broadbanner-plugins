@@ -1,6 +1,6 @@
 ---
 name: article-publish
-description: "Push a generated article markdown into the member portal as an editable DRAFT via the BroadBanner MCP connector's create_article tool. Use when the user says 'publish the review', 'push it to the portal', 'create the article draft', or after episode-review completes in the post-production chain. Returns the app.broadbanner.com/app/articles/<slug> URL for the member to review, edit, and publish. NO git, NO GitHub Pages — this replaces the old pages-publish flow. Production+ add-on (post_production_distribution)."
+description: "Push a generated article markdown into the member portal as an editable DRAFT via the BroadBanner MCP connector's create_article tool. Use when the user says 'publish the review', 'push it to the portal', 'create the article draft', or after episode-review completes in the post-production chain. Returns the app.broadbanner.com/app/articles URL of the draft for the member to review, edit, and publish. NO git, NO GitHub Pages — this replaces the old pages-publish flow. Production+ add-on (post_production_distribution)."
 metadata:
   requiresTool: post_production_distribution
 ---
