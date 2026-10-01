@@ -35,10 +35,11 @@ series you host, and publish clips to TikTok/YouTube/Facebook.
 - The **BroadBanner MCP connector** (`mcp.broadbanner.com`) connected — the scheduling
   skills read show data and write scheduled-event state through it; no local
   `broadbanner.config.json` or `.creds/gateway.token` is required.
-- A browser logged into Substack / Restream Studio: Claude in Chrome on a **single**
-  connected BroadBanner Chrome profile for attended runs, or the cloud environment's
-  browser for cloud scheduled tasks (pre-production auto-scheduling). The skills do not
-  route among profiles, and convert show times against the browser's own timezone.
+- Claude in Chrome on a **single** connected BroadBanner Chrome profile, logged into
+  Substack / Restream Studio. This applies to scheduled runs too (pre-production
+  auto-scheduling): those tasks run on this computer, because Cowork cloud sessions don't
+  currently provide a browser. The skills do not route among profiles, and convert show
+  times against the browser's own timezone.
 - **One Restream session, many workspaces.** A single Restream login lists every
   workspace on the account in the left sidebar. `restream-schedule-live` groups shows by
   workspace (from the D1 catalog's `displayName`) and switches in-app once per group;

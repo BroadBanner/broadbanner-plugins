@@ -20,7 +20,7 @@
     {
       "name": "broadbanner-live-production",
       "source": "./broadbanner-live-production",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "description": "Creator+ live-production automation for BroadBanner creators. Schedule Substack and Restream live streams for the series you host, and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI. Maps to the creator_workspace entitlement (Creator+).",
       "author": {
         "name": "Banner and Backbone Media"
@@ -38,7 +38,7 @@
     {
       "name": "broadbanner-pre-production",
       "source": "./broadbanner-pre-production",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "description": "Pre-Production Assistant (Production+ add-on) for BroadBanner creators. Auto-schedules your shows on Substack and Restream on a recurring basis across every brand you host — the unattended automation of the manual schedule-live skills. Maps to the pre_production_assistant entitlement (cap scheduling:auto). Installs its recurring tasks through the broadbanner-scheduled-tasks engine.",
       "author": {
         "name": "Banner and Backbone Media"
@@ -47,7 +47,7 @@
     {
       "name": "broadbanner-scheduled-tasks",
       "source": "./broadbanner-scheduled-tasks",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "description": "The scheduled-task engine for BroadBanner Cowork projects. The `bb-scheduled-manager` skill installs, updates, or uninstalls declarative scheduled-task specs (cron or one-time) in the Cowork scheduler from a project's .broadbanner/scheduled-tasks/ directory, filed under the project it's run from. Generic and reusable — tier plugins supply their own task templates via --templates-dir. Renamed from broadbanner-scheduling.",
       "author": {
         "name": "Banner and Backbone Media"

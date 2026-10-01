@@ -1,6 +1,6 @@
 {
   "name": "broadbanner-scheduled-tasks",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "The scheduled-task engine for BroadBanner Cowork projects. The `bb-scheduled-manager` skill installs, updates, or uninstalls declarative scheduled-task specs (cron or one-time) in the Cowork scheduler from a project's .broadbanner/scheduled-tasks/ directory, filed under the project it's run from. Generic and reusable \u2014 tier plugins supply their own task templates via --templates-dir. Renamed from broadbanner-scheduling.",
   "author": {
     "name": "Banner and Backbone Media"

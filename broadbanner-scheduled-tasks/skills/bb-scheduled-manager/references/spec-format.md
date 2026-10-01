@@ -13,6 +13,7 @@ description: One-line summary shown in the sidebar.   # required
 cronExpression: 10 3 * * *                # recurring (LOCAL time, 5-field cron)
 # fireAt: 2026-07-01T09:00:00-04:00       # OR one-time (ISO 8601 w/ offset)
 enabled: true                             # optional; default true
+runLocation: local                        # optional; any (default) | local — browser tasks MUST be local
 ---
 ```
 
@@ -26,9 +27,12 @@ Rules:
 - `id` is slugified to `[a-z0-9-]`. It is the scheduler storage key — keep it
   stable across runs so updates are idempotent.
 - `enabled: false` registers the task but leaves it paused.
-- Every task runs in the **cloud** (Cowork is retiring tasks that run on your computer).
-  The former `runLocation` field is obsolete: omit it. `runLocation: any` is accepted
-  silently; `runLocation: local` triggers a collector warning.
+- `runLocation` says where the task may run: `local` (must run on the operator's
+  computer) or `any` (default: this computer **or** the cloud). Cowork cloud sessions
+  have **no browser**, so any spec that drives Substack/Restream must declare `local`
+  (all shipped templates do); the collector warns on a browser-driving spec that isn't
+  `local`. The engine checks each registered task against it; the actual location comes
+  from the Cowork Home run-mode at install time.
 
 ## Body
 

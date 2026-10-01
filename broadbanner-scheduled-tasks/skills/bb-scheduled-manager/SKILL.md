@@ -14,41 +14,72 @@ files — the current Cowork scheduler does not auto-discover dropped files. Onl
 call to `create_scheduled_task` actually registers a task. This skill makes that
 call for every spec.
 
-## Run location — cloud only (read first)
+## Run location — this computer (read first)
 
-**Every BroadBanner scheduled task runs in the cloud.** Cowork is retiring tasks that run
-on your computer (no new ones from **2026-10-06**), and local runs saved a session on the
-Mac per run — enough to crash the desktop app. The tasks drive the **cloud environment's
-own browser** (Substack/Restream have no API); everything else comes from the connector.
+The BroadBanner scheduled skills drive a **browser**, because Substack and Restream
+Studio have no posting/scheduling API. **Cowork cloud sessions don't currently provide a
+browser.** A cloud run of any of these tasks stops at the first browser step with "no
+browser available" and posts or schedules nothing. This happened on 2026-10-01: the
+cloud-only rollout made the Substack auto-scheduler miss a same-day live. So **every
+shipped template is `runLocation: local`** and must be created as **"Runs on this
+computer"**, driving your Chrome through Claude in Chrome.
 
-- **Browser logins.** The cloud browser needs its own one-time sign-in to Substack (and
-  Restream Studio for the schedule-live tasks) — separate from local Chrome. A run that
-  finds no browser, a login wall, or the wrong account stops cleanly and reports
-  (nothing posted or scheduled).
-- **Run location is the Cowork _Home run-mode_ setting, not a per-task argument.** Turn
-  Home's **"run in cloud"** mode ON before Step 4, so every task files as a cloud task.
-  (If a future build exposes a run-location argument on `create_scheduled_task`, set it
-  to cloud.)
-- **`runLocation: local` is no longer supported.** The collector warns on any spec that
-  still declares it; install it as a cloud task anyway, or rework the task if it truly
-  needs the operator's machine. (`runLocation: any`, or omitting the field, is fine.)
+| `runLocation` | Meaning | Shipped templates |
+| --- | --- | --- |
+| `local` | Must run **on this computer** (Claude in Chrome). | `release-substack-text`, `release-substack-clips`, `schedule-substack-live`, `schedule-restream-live` (all of them) |
+| `any` (default) | May run on this computer **or** in the cloud. Only for a spec with **no** browser step. | (none shipped today) |
 
-### Migrating tasks that run on this computer
+At fire time, the connected Chrome profile must be logged into the creator's Substack
+(and Restream Studio for `schedule-restream-live`), and the computer must be awake. A run
+that finds no browser, a login wall, or the wrong account stops cleanly and reports
+(nothing posted).
 
-If `list_scheduled_tasks` (or the sidebar) shows any of this project's tasks as **"Runs
-on this computer"**, move them: a created task keeps its location, so it must be
-recreated.
+**Run location is the Cowork _Home run-mode_ setting, not a per-task argument.** Tasks
+you create while Home is in **"run in cloud"** mode file as cloud tasks; with it off they
+file as "Runs on this computer". Turn the cloud mode **off** before Step 4 for any
+`local` spec. (If a future build exposes a run-location argument on
+`create_scheduled_task`, set it from `runLocation` instead.)
 
-1. With Home in **"run in cloud"** mode, run this skill's **uninstall** flow for those
-   tasks (keep their spec files — answer "keep" in U4).
+> **Timing: create local tasks before 2026-10-06.** Cowork is retiring tasks that run on
+> your computer: no new ones can be created from 2026-10-06. Tasks created before then
+> keep running. Install (or migrate) local tasks before that date. A durable cloud option
+> that has a browser is being investigated separately.
+
+### Session cleanup for local tasks (required)
+
+Every task that runs on this computer leaves a Cowork session behind (~350 KB of
+metadata each), and the desktop app loads all of them at launch. In Sept 2026, ~21k
+sessions from the release pollers ran the app out of memory, so it crashed on open. Before
+installing local tasks, have the user run this **once in Terminal on the Mac** (not in
+Cowork; its sandbox can't reach `~/Library`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BroadBanner/broadbanner-plugins/main/broadbanner-scheduled-tasks/skills/bb-scheduled-manager/scripts/install-session-prune.sh | bash
+```
+
+It installs a launchd agent that deletes **finished scheduled-task sessions older than 3
+days** at login and every 6 hours. Manual chats are never touched. Options:
+`| bash -s -- --dry-run` previews, `--days 7` keeps a week, `--uninstall` removes it. Pair
+it with the `medium` or `low` cadence: `high` posts text every 2 minutes (~720
+sessions/day).
+
+### Migrating tasks that run in the cloud
+
+If `list_scheduled_tasks` (or the sidebar) shows any of this project's browser tasks as
+**"Runs in cloud"** (installed by the short-lived cloud-only build, scheduled-tasks
+0.5.0 / pre-production 0.3.0), move them back. A created task keeps its location, so it
+must be recreated:
+
+1. With Home's cloud mode **off**, run this skill's **uninstall** flow for those tasks
+   (keep their spec files: answer "keep" in U4).
 2. Run **install with `--refresh`** (Step 2) so the specs are re-scaffolded from the
-   current templates before registering. This matters: specs scaffolded from older
-   templates carry prompt text that says "Local machine only — cannot run in the cloud",
-   which would make a cloud run stop itself. (For the schedule-live pair, refresh via the
-   pre-production `auto-schedule-lives` skill, which passes its own `--templates-dir`.)
-   Warn the user `--refresh` replaces local edits to the shipped specs.
-3. Sign the cloud browser into Substack (and Restream Studio), then **Run now** once on
-   each task and confirm it completed.
+   current templates. This matters: specs from the cloud-only templates tell the run to
+   drive "the cloud environment's own browser". (For the schedule-live pair, refresh via
+   the pre-production `auto-schedule-lives` skill, which passes its own
+   `--templates-dir`.) Warn the user that `--refresh` replaces local edits to the shipped
+   specs.
+3. Confirm Chrome (Claude in Chrome) is logged into Substack (and Restream Studio), then
+   **Run now** once on each task and confirm it completed.
 
 ## ⚠️ Project filing — read first
 
@@ -93,13 +124,13 @@ call `request_cowork_directory` for it and wait.
 
 Translate that to its bash-sandbox mount path for running the collector.
 
-**No local folder to mount (e.g. a cloud Cowork session)?** Use the session's own
+**No local folder to mount?** Use the session's own
 working directory as the project root instead (e.g. a `broadbanner-tasks/` folder in the
 outputs dir) and pass `--basename "<ProjectName>"` in Step 2 so the task ids still carry
 the project's name. The specs get scaffolded there from the shipped templates; that's
 fine — the scheduler stores each task's prompt itself, so nothing at run time reads the
 spec file back. (Keep the project's versioned specs in the real project folder when you
-have one; this fallback is for connector-only creators installing from the cloud.)
+have one; this fallback is for connector-only creators without a project folder.)
 
 `broadbanner.config.json` in that folder is **optional**:
 
@@ -226,10 +257,13 @@ Present the plan to the user before mutating anything.
 
 ## Step 4 — Apply
 
-> **Create every task as a cloud task.** Confirm Cowork Home's **"run in cloud"** mode
-> is ON before creating anything — tasks file wherever Home says, and a task created as
-> "Runs on this computer" can't be moved later (only deleted and recreated). If the user
-> can't or won't switch it, stop: local tasks are being retired (see "Run location").
+> **Run location follows each task's `runLocation`** (see "Run location" at the top).
+> It's governed by the Cowork _Home run-mode_ setting, not a per-task argument: tasks
+> created while Home is in **"run in cloud"** mode file as cloud tasks, otherwise as
+> "Runs on this computer". Every shipped template is `runLocation: local`, so confirm
+> Home's cloud mode is **off** before creating anything. A `runLocation: any` spec (no
+> browser step) is correct either way. (If a future build exposes a run-location argument
+> on `create_scheduled_task`, set it from `runLocation` instead.)
 
 For each task in the plan:
 
@@ -250,30 +284,38 @@ may differ slightly from the cron minute. That's expected.
 ### Verify run location (do NOT skip)
 
 After creating, confirm via `list_scheduled_tasks` (or the Cowork scheduled-tasks
-sidebar) that **every** task reports **"Runs in cloud"**. Any task that filed as "Runs on
-this computer" was created with Home's cloud mode off: have the user switch it on, then
-**delete and recreate** that task.
+sidebar) where each task landed and check it against its `runLocation`:
 
-Remind the user that the cloud browser needs its own Substack (and, for schedule-live,
-Restream Studio) login — sign in once there; it's separate from local Chrome. The first
-run that hits a login wall stops and reports; nothing posts.
+- `runLocation: any` → **"Runs on this computer"** and **"Runs in cloud"** are both
+  fine. Just confirm it matches what the user chose.
+- `runLocation: local` → must be **"Runs on this computer"**. If it filed as "Runs in
+  cloud", the Home run-mode was in cloud mode: have the user switch it off, then
+  **delete and recreate** that task (a created task keeps its location).
 
-Cloud runs evaluate `cronExpression` in the scheduler's timezone, which may not be the
-user's. After install, check the **next run** time the scheduler shows for each task; if
+Remind the user that local tasks only fire while the computer is awake with Chrome
+(Claude in Chrome) connected and logged into Substack (and Restream Studio for
+schedule-live). A run that finds no browser or a login wall stops and reports; nothing
+posts.
+
+After install, check the **next run** time the scheduler shows for each task; if
 daytime-bounded crons (e.g. clips `0 8-22 * * *`) are shifted, adjust the hour range with
 `--clip-cron` / `--text-cron` and re-run install.
 
 ## Step 5 — Report
 
 Print a summary table: each `taskId`, its schedule, the action taken
-(created / updated / enabled / disabled / unchanged), and where it actually **runs**.
-Echo any collector warnings. Flag loudly any task that still reports "Runs on this
-computer" after the Step 4 check — it needs migrating (see "Run location").
+(created / updated / enabled / disabled / unchanged), its `runLocation`, and where it
+actually **runs** (this computer / cloud). Echo any collector warnings. Flag loudly any
+`runLocation: local` task that still reports "Runs in cloud" after the Step 4 check.
 
 For any task that drives a browser or remote connector, recommend the user click
 **Run now** once so tool approvals are captured and future scheduled runs don't
-pause on permission prompts. That first **Run now** also confirms the cloud browser is
-logged into Substack (and Restream Studio).
+pause on permission prompts. That first **Run now** also confirms Chrome is logged into
+Substack (and Restream Studio).
+
+If the user hasn't installed the session cleanup agent yet (see "Session cleanup for
+local tasks"), remind them now; without it, local runs pile up until the desktop app
+crashes at launch.
 
 ## Uninstall / remove tasks
 

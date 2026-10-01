@@ -12,16 +12,20 @@ exactly the failure mode this plugin exists to prevent.
 > files a task under whichever project created it — there is no project
 > parameter. Run the skill from the right project, every time.
 
-> **Cloud only.** Every task here runs as a **cloud** Cowork scheduled task. Cowork is
-> retiring tasks that run on your computer (no longer maintained; no new ones from
-> 2026-10-06), and local runs saved a full session on the Mac per run — the release
-> pollers alone left ~21,000 behind, enough to crash the desktop app at launch. Install
-> with Cowork Home in **"run in cloud"** mode. The tasks drive the cloud environment's
-> own browser, which needs a one-time sign-in to Substack (and Restream Studio for the
-> live-scheduling pair) — separate from your local Chrome. A run with no browser or a
-> logged-out browser stops and reports; nothing goes out. Tasks still showing "Runs on
-> this computer": see bb-scheduled-manager → "Migrating tasks that run on this
-> computer" (uninstall, then reinstall with `--refresh`).
+> **Runs on this computer.** Every task here drives a browser (Substack/Restream have
+> no API), and Cowork cloud sessions don't currently provide one. So all four templates
+> are `runLocation: local`: install them from desktop Cowork with Home's **"run in
+> cloud"** mode **off**. Chrome (Claude in Chrome) must be logged into Substack (and
+> Restream Studio for schedule-live), and the computer awake, at fire time. A run with no
+> browser or a logged-out browser stops and reports; nothing goes out. Create local tasks
+> **before 2026-10-06**, when Cowork stops allowing new ones (existing ones keep running).
+> Tasks installed as "Runs in cloud" by the short-lived cloud-only build must be migrated
+> back (see `bb-scheduled-manager` → "Migrating tasks that run in the cloud").
+>
+> **Install the session cleanup once per Mac.** Every local run leaves a session file the
+> desktop app loads at launch; enough of them crash the app on open. In Terminal (not
+> Cowork): `curl -fsSL https://raw.githubusercontent.com/BroadBanner/broadbanner-plugins/main/broadbanner-scheduled-tasks/skills/bb-scheduled-manager/scripts/install-session-prune.sh | bash`. It deletes finished scheduled-task sessions older
+> than 3 days, every 6 hours. Manual chats are never touched; `--uninstall` removes it.
 
 ---
 

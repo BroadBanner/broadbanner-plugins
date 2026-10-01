@@ -71,11 +71,16 @@ pass `--templates-dir`).
 
 ## Requirements
 
-- **Cloud Cowork scheduled tasks.** Cowork is retiring tasks that run on your computer
-  (no new ones from 2026-10-06), and local runs piled up a saved session per run on the
-  Mac. Install with Cowork Home in **"run in cloud"** mode. The tasks drive the cloud
-  environment's own browser, which needs a one-time login to Substack (and Restream
-  Studio for the schedule-live tasks).
+- **Desktop Cowork on your computer.** The scheduled skills drive a browser
+  (Substack/Restream have no API), and Cowork cloud sessions don't currently provide
+  one, so every shipped template is `runLocation: local` and runs through Claude in
+  Chrome. Chrome must be logged into the creator's Substack (and Restream Studio for
+  schedule-live). Create local tasks before 2026-10-06 (Cowork stops allowing new ones
+  then; existing ones keep running).
+- **The session cleanup agent** (`skills/bb-scheduled-manager/scripts/install-session-prune.sh`),
+  installed once per Mac from Terminal. Each local run leaves a session file the desktop
+  app loads at launch, and enough of them crash it. The agent deletes finished
+  scheduled-task sessions older than 3 days.
 - Cowork with the `scheduled-tasks` MCP (`create_scheduled_task`,
   `update_scheduled_task`, `list_scheduled_tasks`).
 - The **BroadBanner MCP connector** connected (`https://mcp.broadbanner.com/mcp`) —

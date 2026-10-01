@@ -59,10 +59,9 @@
  * Output (default): a JSON object
  *   { projectRoot, projectBasename, specDir, vars, tasks[], warnings[] }
  * where each task is
- *   { id, description, cronExpression?|fireAt?, enabled, prompt, sourceFile }
- * Every task is installed as a CLOUD task (Cowork is retiring tasks that run on
- * the operator's computer). A spec declaring `runLocation: local`, or whose
- * prompt still carries the pre-cloud "local machine only" text, gets a warning.
+ *   { id, description, cronExpression?|fireAt?, enabled, runLocation, prompt, sourceFile }
+ * runLocation is "any" (default — no browser step, may run locally or in the cloud)
+ * or "local" (the spec declared it must run on the operator's own computer).
  */
 
 import fs from "node:fs";
@@ -294,20 +293,19 @@ function slugify(name) {
     .replace(/^-+|-+$/g, "");
 }
 
-// Cloud-only: `runLocation` is obsolete. `any` (or absent) is fine; `local`
-// can't be honored any more, so say so rather than silently ignoring it.
-function checkRunLocation(v, warnings, file) {
-  if (v === undefined || v === null || v === "") return;
-  const s = String(v).trim().toLowerCase();
-  if (s === "any") return;
-  warnings.push(
-    `${file}: runLocation "${v}" is no longer supported — every task installs as a cloud task (Cowork is retiring tasks that run on this computer). Remove the field, or rework the task if it truly needs the local machine.`,
-  );
-}
+// Where a task may run. Cowork cloud sessions have no browser, so any spec that
+// drives Substack/Restream must be "local" (all shipped templates are). "any" is
+// only for a spec with no browser step.
+const CLOUD_BROWSER_TEXT = /cloud environment's own browser|## Runs in the cloud|\*\*Runs in the cloud\.\*\*/i;
+const BROWSER_STEP_TEXT = /browser automation|Claude[- ]in[- ]Chrome|drives? (a|the|your) .*browser/i;
 
-// Specs scaffolded from pre-cloud templates tell the run it "cannot run in the
-// cloud", which makes a cloud run stop itself. Detect that and point at --refresh.
-const STALE_LOCAL_TEXT = /local machine only|cannot run in the cloud|on the operator's \*\*local machine\*\*/i;
+function coerceRunLocation(v, warnings, file) {
+  if (v === undefined || v === null || v === "") return "any";
+  const s = String(v).trim().toLowerCase();
+  if (s === "any" || s === "local") return s;
+  warnings.push(`${file}: unknown runLocation "${v}" (expected any | local); using "any"`);
+  return "any";
+}
 
 function coerceBool(v, dflt) {
   if (v === undefined || v === null || v === "") return dflt;
@@ -443,10 +441,13 @@ function main() {
         f,
       );
 
-      checkRunLocation(frontmatter.runLocation, warnings, f);
-      if (STALE_LOCAL_TEXT.test(body)) {
+      const runLocation = coerceRunLocation(frontmatter.runLocation, warnings, f);
+      // Specs scaffolded by the short-lived cloud-only build (scheduled-tasks 0.5.0 /
+      // pre-production 0.3.0) tell the run to use the cloud environment's browser,
+      // which doesn't exist, so the run stops before posting anything.
+      if (CLOUD_BROWSER_TEXT.test(body) || runLocation !== "local" && BROWSER_STEP_TEXT.test(body)) {
         warnings.push(
-          `${f}: prompt still says the task is local-only (scaffolded from an older template) — re-run with --refresh before installing it as a cloud task, or the cloud run will stop itself.`,
+          `${f}: this spec drives a browser but isn't set up to run on this computer (scaffolded from the cloud-only templates?). Cowork cloud sessions have no browser — re-run with --refresh and install it with Home's cloud mode OFF.`,
         );
       }
 
@@ -454,6 +455,7 @@ function main() {
         id,
         description,
         enabled: coerceBool(frontmatter.enabled, true),
+        runLocation,
         prompt,
         sourceFile: path.relative(root, full),
       };
@@ -490,7 +492,7 @@ function main() {
           ? `once @ ${t.fireAt}`
           : "ad-hoc (manual only)";
       process.stdout.write(
-        `  • ${t.id}\n      ${when}   enabled=${t.enabled}\n      ${t.description}\n      ← ${t.sourceFile}\n`,
+        `  • ${t.id}\n      ${when}   enabled=${t.enabled}   runLocation=${t.runLocation}\n      ${t.description}\n      ← ${t.sourceFile}\n`,
       );
     }
     if (warnings.length) {
