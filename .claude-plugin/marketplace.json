@@ -20,7 +20,7 @@
     {
       "name": "broadbanner-live-production",
       "source": "./broadbanner-live-production",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "description": "Creator+ live-production automation for BroadBanner creators. Schedule Substack and Restream live streams for the series you host, and publish clips to TikTok, YouTube, and Facebook via the Restream clips UI. Maps to the creator_workspace entitlement (Creator+).",
       "author": {
         "name": "Banner and Backbone Media"
@@ -38,7 +38,7 @@
     {
       "name": "broadbanner-pre-production",
       "source": "./broadbanner-pre-production",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "description": "Pre-Production Assistant (Production+ add-on) for BroadBanner creators. Auto-schedules your shows on Substack and Restream on a recurring basis across every brand you host — the unattended automation of the manual schedule-live skills. Maps to the pre_production_assistant entitlement (cap scheduling:auto). Installs its recurring tasks through the broadbanner-scheduled-tasks engine.",
       "author": {
         "name": "Banner and Backbone Media"
