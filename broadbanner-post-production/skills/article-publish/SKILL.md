@@ -41,7 +41,7 @@ orchestrator, this has already run — don't repeat it.
 | `episodeTitle` | Rec.     | `Palantalk | E12 - Surveillance Capitalism and You` | Source of the review `title`                                  |
 | `episodeDate`  | Rec.     | `2026-03-31`                                        | → `episodeDate`                                                |
 | `articleLabel`  | Rec.     | `Palantalk In Review`                               | From `effectiveArticleConfig` → `articleLabel`                  |
-| `authorNames`  | Rec.     | `["Nick Paro"]`                                     | From the roster (primary host + hosts) → `authorNames`        |
+| `authorNames`  | Rec.     | `"Nick Paro, Jane Doe"`                              | From the roster (primary host + hosts), ONE comma-separated string (not an array) |
 
 If the user just ran episode-review, carry these forward.
 
@@ -82,7 +82,7 @@ create_article({
   slug:          "<episodeSlug>",           // optional — let the server slug from title if omitted
   subtitle:      "<subtitle>",              // optional
   articleLabel:   "<articleLabel>",           // optional — the review-kind label
-  authorNames:   ["<host names>"],          // optional — from the roster
+  authorNames:   "<host 1>, <host 2>",       // optional — from the roster; a single string, not an array
   episodeDate:   "<episodeDate>",           // optional — YYYY-MM-DD
   coverImageUrl: "<url>",                   // optional — omit unless you have one
   socialCopy:    "<socialCopy>",            // optional — the social distribution block
@@ -120,6 +120,8 @@ the chain stored no transcript (e.g. publishing a hand-written review). A failur
 move on.
 
 ### Step 4: Report to the user
+
+The draft is the starting point the writing memory learns from. Any edits the creator makes in the portal before publishing (body or social copy) shape the next episode's draft. Tell them so in the report: "Edit freely; your changes teach the next draft."
 
 Present:
 

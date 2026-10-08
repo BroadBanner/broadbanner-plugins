@@ -108,6 +108,28 @@ Extract the episode spine as internal working notes (not in the output):
 - Calls to action stated by hosts/guests
 - Direct quotes worth capturing (block-quote / pull-quote candidates)
 
+### Step 3b: Load the creator's writing memory
+
+BroadBanner learns from every review this creator publishes. It compares the published text and social copy with the draft that `article-publish` filed, so the creator's edits teach the next draft. Load it now, using the episode's main themes from Step 3 as keywords:
+
+```
+get_writing_context({ seriesId, keywords: [<2–5 main themes>] })
+```
+
+It returns:
+
+- **`instructions[]`:** word choices the creator consistently makes ("rebukes" not "slams"), words they keep cutting, how long their published reviews run, sign-offs, punctuation habits, and any explicit writing settings.
+- **`exemplars[]`:** reviews and social copy they published, **this series first**. Match their voice, rhythm, openings and how they frame takeaways.
+- **`relatedArticles[]`:** published BroadBanner articles on the same topics, with public URLs.
+
+**Precedence when they conflict:**
+1. The transcript (facts, quotes).
+2. The server config and the format and voice references from Steps 1–2. They define the structure and voice, and always win.
+3. `instructions[]`: apply word choices, cuts and sign-offs wherever they don't contradict 1–2.
+4. `exemplars[]`: a style reference only.
+
+**Never** take facts, quotes or names from exemplars; they're other episodes. If the call fails or returns nothing (a new creator), carry on without it.
+
 ### Step 4: Generate the review
 
 Follow both loaded references:
@@ -129,9 +151,21 @@ Apply the server config as the binding constraints:
 - Book links (book-review format): publisher > independent bookstore > thrift; no large
   tech-company bookstores.
 
+Apply the writing memory from Step 3b within those constraints: the creator's word choices, cuts, sign-off and typical length.
+
+**Related reading (optional).** If `relatedArticles` includes BroadBanner pieces that genuinely add context for a reader, end the body with a short list, at most 3, the creator's own first:
+
+```
+## Related reading
+
+- [Title](url)
+```
+
+They're links for readers, never sources for what was said on the show. Skip this if the format reference defines its own closing.
+
 Produce the review body **and** the social distribution copy (Substack blurb, Bluesky
 post ≤300 chars, YouTube description) per the format reference's Social Distribution Copy
-section. Keep the social copy as a distinct block — `article-publish` passes it to
+section. Write it in the creator's voice from Step 3b, using the blurb exemplars. Substack copy carries no hashtags. Keep the social copy as a distinct block — `article-publish` passes it to
 `create_article` as `socialCopy`.
 
 ### Step 5: Hold the output

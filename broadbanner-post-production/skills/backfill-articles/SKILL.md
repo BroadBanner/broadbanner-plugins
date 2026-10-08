@@ -100,6 +100,8 @@ Notes:
 
 ## Step 4 — Report
 
+Backfilled articles are published, so the writing memory picks them up within about 15 minutes. They become voice examples for this creator's future reviews and related reading across BroadBanner. Mention it in the report. Backfilling a creator's back catalogue is the fastest way to teach the writing agents their voice.
+
 Summarize what was imported:
 
 ```
