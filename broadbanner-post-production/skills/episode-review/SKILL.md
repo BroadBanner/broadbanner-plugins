@@ -69,10 +69,12 @@ it; if you don't have it, call `get_show_roster({ showId })` / `({ seriesId })` 
 Also use the roster's `primaryHost`, `hosts[]`, `guests[]` for attribution, the signature
 line, and `authorNames`.
 
-**If `effectiveArticleConfig` is missing or `articleFormat`/`editorialVoice` are empty:**
-STOP and report — the show isn't configured for reviews on the server. Ask the operator to
-set the review config for this series in the portal. Do NOT fall back to a hardcoded
-default; explicit is better than implicit.
+`effectiveArticleConfig` resolves **show ?? series ?? brand**, so a series with no review
+config inherits the brand's article defaults. **Only if it is still missing, or
+`articleFormat`/`editorialVoice` are still empty:** STOP and report — neither the series
+nor its brand is configured for reviews on the server. Ask the operator to set the review
+config for this series (or the brand's Article defaults) in the portal. Do NOT fall back to
+a hardcoded default; explicit is better than implicit.
 
 ### Step 2: Load references by tag
 
@@ -108,36 +110,46 @@ Extract the episode spine as internal working notes (not in the output):
 - Calls to action stated by hosts/guests
 - Direct quotes worth capturing (block-quote / pull-quote candidates)
 
-### Step 3b: Load the creator's writing memory
+### Step 3b: Load the writing context (voice + writing memory)
 
-BroadBanner learns from every review this creator publishes. It compares the published text and social copy with the draft that `article-publish` filed, so the creator's edits teach the next draft. Load it now, using the episode's main themes from Step 3 as keywords:
+BroadBanner learns from every review this creator publishes. It compares the published text and social copy with the draft that `article-publish` filed, so the creator's edits teach the next draft. The same call carries the brand and series **voice** settings. Load it now, using the episode's main themes from Step 3 as keywords:
 
 ```
-get_writing_context({ seriesId, keywords: [<2–5 main themes>] })
+get_writing_context({
+  showId: "<showId>",          // preferred; else seriesId: "<seriesId>"
+  form: "episode-review",
+  keywords: [<2–5 main themes>],
+})
 ```
 
 It returns:
 
-- **`instructions[]`:** word choices the creator consistently makes ("rebukes" not "slams"), words they keep cutting, how long their published reviews run, sign-offs, punctuation habits, and any explicit writing settings.
-- **`exemplars[]`:** reviews and social copy they published, **this series first**. Match their voice, rhythm, openings and how they frame takeaways.
+- **`voice`:** the series and brand voice settings (summary, audience, tone, perspective, do/don't rules, preferred terms, sign-off), series over brand.
+- **`instructions[]`:** in order — series voice, brand voice, the creator's explicit settings, then learned habits (word choices they consistently make, such as "rebukes" not "slams", words they keep cutting, how long their published reviews run, sign-offs, punctuation).
+- **`exemplars[]`:** reviews they published (pinned and same-series first) and their social copy (`kind: blurb_*`). Match their voice, rhythm, openings and how they frame takeaways.
 - **`relatedArticles[]`:** published BroadBanner articles on the same topics, with public URLs.
 
 **Precedence when they conflict:**
 1. The transcript (facts, quotes).
-2. The server config and the format and voice references from Steps 1–2. They define the structure and voice, and always win.
-3. `instructions[]`: apply word choices, cuts and sign-offs wherever they don't contradict 1–2.
-4. `exemplars[]`: a style reference only.
+2. The server config and the **format** reference: structure, length and labels always win.
+3. The **explicit brand/series voice** lines in `instructions[]` (series over brand). They refine the tone and override the `voice-*.md` preset where they disagree.
+4. The `voice-<editorialVoice>.md` preset from Step 2: the base tone.
+5. The creator's learned habits in `instructions[]`: apply word choices, cuts and sign-offs wherever they don't contradict 1–4.
+6. `exemplars[]`: a style reference only.
 
-**Never** take facts, quotes or names from exemplars; they're other episodes. If the call fails or returns nothing (a new creator), carry on without it.
+**Never** take facts, quotes or names from exemplars; they're other episodes. If the call fails, returns nothing (a new creator), or the connector lacks the tool, carry on with the preset alone and mention it in the Step 6 report. It is an enhancement, not a gate.
 
 ### Step 4: Generate the review
 
-Follow both loaded references:
+Follow both loaded references, refined by the writing context:
 
 - **The format reference** controls structure: section order, required sections, length
   constraints, title format.
-- **The voice reference** controls tone: attribution style, editorial stance, sentence
-  construction, what to avoid.
+- **The voice reference** controls the base tone: attribution style, editorial stance,
+  sentence construction, what to avoid.
+- **The writing context `instructions`** (Step 3b) refine the tone — the scope's do/don't
+  rules, preferred terms, sign-off, and the creator's learned edits. Explicit voice
+  settings win over the preset on conflict.
 
 Apply the server config as the binding constraints:
 
@@ -186,6 +198,7 @@ Present:
 - The block quote (narrative/book-review) or the takeaway bullets (summary) for a quality
   check
 - Config used: `articleFormat: <value>`, `editorialVoice: <value>`, `articleLabel: <value>`
+- Writing context: loaded (N instructions, M exemplars) — or "not available, preset only"
 - `authorNames` derived from the roster (primary host + hosts)
 - Next: "Review ready. Next: article-publish (push as a portal DRAFT)."
 
@@ -205,12 +218,16 @@ Before delivering, verify:
 - [ ] Book links (if any) follow the linking policy
 - [ ] Social distribution copy is present (Substack, Bluesky, YouTube)
 - [ ] Speaker attribution matches the live roster (primary host / hosts / guests)
-- [ ] Editorial voice matches the loaded voice reference
+- [ ] Editorial voice matches the loaded voice reference, refined by every writing-context instruction
+- [ ] No `dontRules` phrase present; `preferredTerms` used; no fact or quote reused from an exemplar
 
 ## Error handling
 
-- **`effectiveArticleConfig` missing / unconfigured:** STOP — ask the operator to set the
-  review config for this series in the portal. No hardcoded default.
+- **`effectiveArticleConfig` missing / unconfigured (after the brand fallback):** STOP —
+  ask the operator to set the review config for this series or its brand in the portal.
+  No hardcoded default.
+- **`get_writing_context` fails / unavailable:** proceed with the voice preset only and
+  say so in the report.
 - **Unknown tag value (no matching reference file):** list available reference files for
   that dimension and stop. Don't fall back to a default.
 - **Transcript too short for a meaningful review** (<~500 words): flag it — the source may

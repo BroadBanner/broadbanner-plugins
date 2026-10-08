@@ -80,6 +80,9 @@ create_article({
   seriesId:    "<seriesId>",   // when a series was resolved
   // brandId:  "<brandId>",    // OR when organizing under the brand (no series)
 
+  origin:      "import",                 // always — imported, not AI-written or hand-typed
+  form:        "<form>",                 // ONLY if obvious (see below); otherwise omit
+
   title:       "<post title>",
   bodyMd:      "<markdown content>",
   status:      "published",              // it's already published on Substack
@@ -92,6 +95,11 @@ create_article({
 `https://app.broadbanner.com/app/articles/<slug>`.
 
 Notes:
+- Always pass **`origin: "import"`** — imported posts become voice exemplars once
+  published, but are never treated as an AI draft to learn edits against.
+- Pass **`form`** only when it's obvious from the post: `episode-review` (a show recap /
+  "In Review" post), `opinion`, `essay`, `column` (a recurring named column), or `news`.
+  When in doubt, **omit it** — a wrong form is worse than none.
 - Pass **`brandId`** only when there is no series; pass **`seriesId`** otherwise. Never both.
 - `substackUrl` is the source link (the archive shows a "Read on Substack" banner above the
   body; reviews/articles don't embed video, so this routes readers to the post).

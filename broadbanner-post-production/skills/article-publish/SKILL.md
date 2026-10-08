@@ -75,6 +75,8 @@ Assemble the arguments for the connector tool:
 
 ```
 create_article({
+  origin:        "ai",                      // always — this is an AI-generated draft
+  form:          "episode-review",          // always — the article kind
   seriesId:      "<seriesId>",              // required
   title:         "<title>",                 // required
   bodyMd:        "<bodyMd>",                // required — the review body markdown
@@ -90,7 +92,10 @@ create_article({
 ```
 
 Only pass the fields you actually have — omit optionals rather than sending empty strings.
-The review is created as a **DRAFT**; `create_article` does not publish it.
+Always pass `origin: "ai"` and `form: "episode-review"`: they mark the draft as the
+agent's, so when the member edits and publishes it BroadBanner learns from their edits
+(the revision history keeps this AI original). The review is created as a **DRAFT**;
+`create_article` does not publish it.
 
 ### Step 3: Call the tool and capture the result
 

@@ -29,8 +29,8 @@
     {
       "name": "broadbanner-post-production",
       "source": "./broadbanner-post-production",
-      "version": "0.5.0",
-      "description": "Production+ post-production for BroadBanner creators (post_production_distribution add-on). Turn a finished Substack live draft into a review: file it under its series section, capture and store the transcript, correct it against the live roster, generate the review from the show's editorial config, and push it as an editable DRAFT to the member portal. The operator supplies only the draft URL and series name; everything else comes from the BroadBanner MCP connector.",
+      "version": "0.6.0",
+      "description": "Production+ post-production for BroadBanner creators (post_production_distribution add-on). Turn a finished Substack live draft into a review: file its section, store and correct the transcript against the live roster, and generate the review in the brand/series voice. article-write drafts opinion pieces, essays and columns from the archive and learned style, and tunes brand/series voice. Everything lands as an editable portal DRAFT via the BroadBanner MCP connector.",
       "author": {
         "name": "Banner and Backbone Media"
       }

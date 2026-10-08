@@ -164,7 +164,7 @@ hosts, guests, effectiveArticleConfig }`, `episodeSlug`, `episodeTitle`, `episod
 **Carries forward:** the review markdown, `transcriptId`, `seoTitle`, `subtitle`, `bodyMd`,
 `socialCopy`, `articleLabel`, `authorNames` (from `primaryHost` / `hosts`).
 
-**Writing memory.** episode-review loads `get_writing_context({ seriesId, keywords })` before writing (its Step 3b). That carries over the creator's learned word choices, cuts, length and sign-off, and examples of their published reviews (same series first). Every review the creator edits and publishes improves the next one.
+**Writing memory + voice.** episode-review loads `get_writing_context({ showId, form: "episode-review", keywords })` before writing (its Step 3b). That carries the brand/series voice settings, the creator's learned word choices, cuts, length and sign-off, and examples of their published reviews and social copy (same series first). Every review the creator edits and publishes improves the next one.
 
 ## Step 5 — Review Publish
 
