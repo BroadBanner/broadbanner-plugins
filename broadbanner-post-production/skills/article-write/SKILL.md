@@ -151,6 +151,10 @@ piece in markdown:
 
 - Structure, length and opening/closing per the format file, adjusted by
   `articleConfig.articleLength` when set.
+- **Article template:** if `voice.effective.template` is set (the series' template, else
+  the brand's), it **replaces the format file's structure**. Use its section headings in
+  its order, fill every `[bracketed note]` with content for this piece, and never leave a
+  bracket or a guidance note in the output. Length and voice rules still apply.
 - Voice per the Step 3 instructions and exemplars (the format file governs shape; the
   writing context governs voice — on conflict, the writing context wins).
 - `title` and `subtitle` are separate fields — do not repeat them as an H1 in `bodyMd`.

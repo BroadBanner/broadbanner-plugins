@@ -144,7 +144,10 @@ It returns:
 Follow both loaded references, refined by the writing context:
 
 - **The format reference** controls structure: section order, required sections, length
-  constraints, title format.
+  constraints, title format. **Exception:** if the writing context has an article template
+  (`voice.effective.template`), its sections and order replace the format reference's
+  structure. Fill every `[bracketed note]` and leave none in the output; the format
+  reference's length and title rules still apply.
 - **The voice reference** controls the base tone: attribution style, editorial stance,
   sentence construction, what to avoid.
 - **The writing context `instructions`** (Step 3b) refine the tone — the scope's do/don't

@@ -12,6 +12,7 @@ authoritative for exact key names; this file maps plain-language requests onto f
   else brand value. `doRules` / `dontRules`: union, series first, de-duplicated.
   `preferredTerms`: merged by `use`, series wins. `summary` / `guideMd`: both are shown to
   the writer, brand first, series second. `pinnedArticleIds`: series pins, then brand pins.
+  `templateMd`: **not merged** — the series template, else the brand's.
 
 ## Fields
 
@@ -30,7 +31,8 @@ authoritative for exact key names; this file maps plain-language requests onto f
 | `preferredTerms`   | up to 50 `{ use, insteadOf? }`                  | "say 'unhoused', not 'homeless'" |
 | `signoff`          | text ≤ 300                                      | "end every piece with…" |
 | `pinnedArticleIds` | up to 5 **published** article ids in scope      | "write like this piece" (find ids with `list_articles`) |
-| `guideMd`          | markdown ≤ 8000                                 | a pasted or long-form style guide |
+| `guideMd`          | markdown ≤ 8000                                 | house-style **rules** (how to write): attribution, numbers, word choices — "here's our style sheet" |
+| `templateMd`       | markdown ≤ 8000                                 | article **structure**: section headings in order + `[bracketed notes]` — "every column should open with…, then…", "use this outline for every piece" |
 
 ## Mapping rules
 
