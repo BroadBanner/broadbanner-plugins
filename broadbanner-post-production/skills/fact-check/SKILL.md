@@ -69,7 +69,8 @@ Call `article_check_pack({ articleId })`. Read all of it before judging:
 - `paragraphs[]`: numbered blocks; `0` is the headline + dek. Use these numbers in
   findings. `refs[]` are the `[n]` sources the paragraph cites; `links[]` are other links.
 - `sources[]`: each cited story as numbered ¶ with `updatedSinceWrite`, `textExpired`,
-  `correctionNote`, `articleType` (opinion!), `sourceScore`, `citedIn`.
+  `correctionNote`, `articleType` (opinion!), `sourceScore`, `citedIn`. A PDF source's
+  paragraphs carry `page`: check that any page the piece cites ("p. 14") matches.
 - `transcript`: for episode reviews, the show transcript id (`get_transcript` for text).
 - `quotes[]`: each quote matched to the source text. `not_found` = likely misquote or
   wrong cite; `close` = paraphrased, with the source's real wording in `sourceText`;
@@ -78,7 +79,8 @@ Call `article_check_pack({ articleId })`. Read all of it before judging:
   the figure is not in its cited sources (within rounding) — verify it or flag it.
 - `lint`, `media`, `warnings`, `previousFindings` (still open from earlier checks).
 
-If a cited source has `textExpired: true`, re-capture it (`news_capture_stories` with its
+Sources cited by an article now keep their text, and older expired ones are re-fetched
+nightly, so `textExpired` should be rare. If a cited source has `textExpired: true`, re-capture it (`news_capture_stories` with its
 URL) when the broad-news tools are available; otherwise treat the claims resting on it
 as unverifiable (a `major` finding unless corroborated elsewhere).
 
