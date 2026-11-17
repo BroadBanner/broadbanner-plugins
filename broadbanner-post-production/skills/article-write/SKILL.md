@@ -204,6 +204,11 @@ Edit it in the portal and publish when it's right — your edits are how BroadBa
 learns your voice for the next draft. Or tell me what to change and I'll revise it.
 ```
 
+Then offer an independent check: "Before you publish, open a **new chat** and run
+`/fact-check` with the draft link. It checks every claim, quote and figure against the
+sources and files findings in the portal." Do not run it in this chat: the checker must
+not share the writer's context.
+
 ## Revise mode
 
 When the user asks for changes to a draft (this run's, or an existing one):
@@ -220,6 +225,19 @@ When the user asks for changes to a draft (this run's, or an existing one):
    — pass only the fields that changed; `revisionNote` is a short description of the
    change (e.g. "tightened the open, cut section 3"). It cannot publish.
 5. Report the URL and the revision note, and remind the user to publish in the portal.
+
+### Fixing fact-check findings
+
+When the user asks to "address the fact-check" (or a draft has an open check):
+
+1. `article_checks({ action: "list", articleId })`: read `status` and the newest check's
+   **open** findings (paragraph, claim, evidence, suggestion).
+2. Fix each one in the text, using the finding's evidence; never add a new fact without a
+   source. If you disagree with a finding, leave the text and tell the user why; they can
+   dismiss it with a note in the portal.
+3. Save the revision, then mark each finding you fixed:
+   `article_checks({ action: "resolve", findingId, status: "fixed", revision, note })`.
+4. Tell the user to run `/fact-check` again in the **checker** chat to confirm.
 
 ## Voice tuning
 

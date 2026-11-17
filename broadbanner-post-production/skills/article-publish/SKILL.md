@@ -146,6 +146,10 @@ Transcript: linked — downloadable from the draft page (or: not linked — <rea
 Open the draft to edit and publish. Social copy is attached for distribution.
 ```
 
+Add one line: "For an independent check before publishing, open a **new chat** and run
+`/fact-check` with the draft link: it verifies quotes against the transcript and every
+claim against its source." Never run the check in this chat.
+
 ## Error handling
 
 - **Review file not found:** ask for the correct path; suggest running `episode-review` first.
