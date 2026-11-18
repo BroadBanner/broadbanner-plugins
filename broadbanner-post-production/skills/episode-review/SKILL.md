@@ -29,6 +29,16 @@ invoked by the `post-production` orchestrator, this has already run — don't re
 > ⚠️ Post-production is the **Production+** add-on (`post_production_distribution`, $5/mo).
 > Your account isn't entitled yet — add it from https://app.broadbanner.com/pricing/membership.
 
+## Step 0.5 — Load personality
+
+Once the series is resolved (the orchestrator's Step 0, or Step 1 below), read
+`../../references/personality.md` (§2) and call
+`get_persona({ skill: "episode-review", seriesId })`. Honour one-run overrides ("without
+Ki"). Skip silently when the tool is missing or returns no personality. A returned
+personality (usually **Ki**) goes in the precedence list in Step 3b; its memory goes with
+the creator's personal settings. When invoked by `post-production`, the orchestrator
+passes any override through; run this step once.
+
 ## What this skill does NOT do
 
 It produces the review as a markdown file (+ social copy). It does **not** publish. Pushing
@@ -128,14 +138,16 @@ It returns:
 - **`instructions[]`:** in order — series voice, brand voice, the creator's explicit settings, then learned habits (word choices they consistently make, such as "rebukes" not "slams", words they keep cutting, how long their published reviews run, sign-offs, punctuation).
 - **`exemplars[]`:** reviews they published (pinned and same-series first) and their social copy (`kind: blurb_*`). Match their voice, rhythm, openings and how they frame takeaways.
 - **`relatedArticles[]`:** published BroadBanner articles on the same topics, with public URLs.
+- **`roles[]`:** the brand and series **Role** (who is writing, from what vantage), brand first. Every user gets these; see `../../references/personality.md` §1.
 
 **Precedence when they conflict:**
 1. The transcript (facts, quotes).
 2. The server config and the **format** reference: structure, length and labels always win.
-3. The **explicit brand/series voice** lines in `instructions[]` (series over brand). They refine the tone and override the `voice-*.md` preset where they disagree.
-4. The `voice-<editorialVoice>.md` preset from Step 2: the base tone.
-5. The creator's learned habits in `instructions[]`: apply word choices, cuts and sign-offs wherever they don't contradict 1–4.
-6. `exemplars[]`: a style reference only.
+3. The **personality** from Step 0.5 (core → layers → lessons), then the **Roles** (skip the Roles when Ki is loaded: her layers are the roles). Without a personality, the Roles alone. They set vantage and standards, never facts or structure.
+4. The **explicit brand/series voice** lines in `instructions[]` (series over brand). They refine the tone and override the `voice-*.md` preset where they disagree.
+5. The `voice-<editorialVoice>.md` preset from Step 2: the base tone.
+6. The creator's learned habits in `instructions[]`, then the personality's `memory`: apply word choices, cuts and sign-offs wherever they don't contradict 1–5.
+7. `exemplars[]`: a style reference only.
 
 **Never** take facts, quotes or names from exemplars; they're other episodes. If the call fails, returns nothing (a new creator), or the connector lacks the tool, carry on with the preset alone and mention it in the Step 6 report. It is an enhancement, not a gate.
 
@@ -201,7 +213,8 @@ Present:
 - The block quote (narrative/book-review) or the takeaway bullets (summary) for a quality
   check
 - Config used: `articleFormat: <value>`, `editorialVoice: <value>`, `articleLabel: <value>`
-- Writing context: loaded (N instructions, M exemplars) — or "not available, preset only"
+- Writing context: loaded (N instructions, M exemplars, R roles) — or "not available, preset only"
+- Personality: "Written with Ki (vN, scope)" — omit the line when none was loaded
 - `authorNames` derived from the roster (primary host + hosts)
 - Next: "Review ready. Next: article-publish (push as a portal DRAFT)."
 

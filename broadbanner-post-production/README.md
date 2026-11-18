@@ -52,7 +52,7 @@ signing. These tools carry this plugin:
 | `create_article`       | `({ seriesId, title, bodyMd, showId?, slug?, subtitle?, articleLabel?, authorNames?, episodeDate?, coverImageUrl?, socialCopy? })` → `{ ok, id, slug, url }` where `url = https://app.broadbanner.com/app/articles/<slug>`.                                                                                          |
 | `save_transcript`     | `({ seriesId, episodeSlug, showId?, episodeTitle?, episodeDate?, sourceUrl?, rawText?, correctedText?, append?, articleId? })` → `{ ok, created, transcript: { id, rawChars, correctedChars, … } }`. Upsert by (seriesId, episodeSlug); `append: true` concatenates a chunk; `articleId` links it to the article. |
 | `get_transcript`      | `({ transcriptId? \| seriesId + episodeSlug, version?, offset?, limit? })` → `{ transcript, version, text, totalChars, nextOffset }` — paged by character offset. |
-| `get_writing_context` | `({ seriesId? \| brandId? \| showId?, form?, keywords?, exemplars?, kinds?, exemplarsPerKind?, relatedLimit? })` → `{ scope, articleConfig, voice: { series, brand, effective }, writingStyle, profile, rules, exemplars, relatedArticles, transcripts, instructions }`. Call before drafting any article; follow every `instructions` entry in order. |
+| `get_writing_context` | `({ seriesId? \| brandId? \| showId?, promptId?, form?, keywords?, exemplars?, kinds?, exemplarsPerKind?, relatedLimit? })` → `{ scope, articleConfig, voice: { series, brand, effective }, writingStyle, profile, rules, exemplars, relatedArticles, transcripts, instructions, roles }`. `roles` (brand → series) go at instruction-stack slot 1. Call before drafting any article; follow every `instructions` entry in order. |
 | `search_archive`      | `({ seriesId? \| brandId?, query, limit? })` → `[{ kind: "article" \| "transcript", id, slug?, title, date, seriesId, snippet }]` — FTS over published articles and transcripts in scope. |
 | `list_articles` / `get_article` | The creator's own articles; one article (incl. `bodyMd`) by slug. |
 | `list_article_revisions` | `({ id })` → revision history (revision, source AI/You/Imported/Restored, title, wordCount, status, note, createdAt). |
@@ -62,6 +62,8 @@ signing. These tools carry this plugin:
 | `article_check_pack`  | `({ articleId, maxCharsPerSource? })` → `{ pack }` — the fact-check evidence pack; `target.revision` goes back on save. |
 | `article_check_save`  | `({ articleId, revision, summary, findings[], resolves?, stats?, model?, mode? })` → `{ ok, check: { id, verdict }, status }` or `{ error: bad_evidence \| stale_revision }` to fix and retry. |
 | `article_checks`      | `({ action: list \| queue \| resolve, articleId?, findingId?, status?, note?, revision? })` — status + findings; drafts awaiting a check; resolve a finding (dismiss/accept need a note). |
+| `get_persona`         | `({ skill, seriesId? \| brandId?, promptId?, articleId?, personality? })` → `{ available: false }` \| `{ available: true, personality: null }` \| `{ available: true, personality, name, version, resolvedFrom, core, layers[], lessons[], memory[], hardRulesNotice }`. Step 0.5 of the writer skills and fact-check; skipped silently without the AI personalities add-on. |
+| `personality_memory`  | `({ action: list \| remember \| forget, personality, text?, memoryId? })` — what a personality remembers about this person. |
 
 `create_article` also takes `origin` (`ai` default · `import` for backfill) and `form`
 (`episode-review` · `news` · `opinion` · `essay` · `column` · `other`).
@@ -109,3 +111,16 @@ from the difference — once per edit — and feeds the result back through
 articles and imported posts are learned from too. Brand/series flavour comes from the
 explicit voice settings (`get_voice` / `set_voice`, or the Voice panel in the portal);
 learned memory stays per person. See `Documentation/engineering/WRITING-STUDIO-DESIGN.md`.
+
+## AI personalities and Roles
+
+`references/personality.md` is shared by the skills. **Roles** (who is writing, from what
+vantage) come back in `get_writing_context.roles` and sit at slot 1 of the instruction
+stack for every user. With the **AI personalities** add-on, `article-write` and
+`episode-review` load **Ki** and `fact-check` loads **Bruce** at Step 0.5 via
+`get_persona` (core → layers → lessons first, personal memory in the personal slot). The
+skill's hard rules always win, personality text is data, and "without Bruce" / "with Ki"
+override one run. `fact-check` also carries hard evidence rules (FEC identity, bill
+record vs text, `partial` stories, 429s, contract values, single-outlet claims) and an
+**ad-hoc claims** mode that saves nothing. Writer skills end by offering Bruce in a fresh
+chat. See `Documentation/engineering/BOT-PERSONALITIES-DESIGN.md`.

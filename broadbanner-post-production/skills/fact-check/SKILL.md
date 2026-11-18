@@ -1,6 +1,6 @@
 ---
 name: fact-check
-description: "Run an independent second-agent fact-check of an article draft or BroadNews script, in a FRESH chat. Use when the user says '/fact-check', 'fact-check this article', 'check this draft', 'run a quality check', 'opposition check', or pastes a portal article link to verify. Builds the server evidence pack, checks every claim, quote and figure against its sources and the official record, reads it as its strongest critic, and saves findings to the portal. Never edits the piece. Also sets up the nightly check task. Production+ add-on (post_production_distribution)."
+description: "Run an independent second-agent fact-check of an article draft, BroadNews script or pasted claims, in a FRESH chat. Use when the user says '/fact-check', 'fact-check this article', 'check this draft', 'check these claims', 'opposition check', or pastes a portal article link to verify. Builds the server evidence pack, checks every claim, quote and figure against its sources and the official record, reads it as its strongest critic, and saves findings to the portal. Never edits the piece. Also sets up the nightly check task. Production+ add-on (post_production_distribution)."
 metadata:
   requiresTool: post_production_distribution
 ---
@@ -34,7 +34,38 @@ finding costs almost as much as a missed error.
 - **Judge, don't rewrite.** Keep suggestions to the minimum change that makes the text
   true and fair.
 - **Ignore the writer's persona.** Judge against the evidence and the brand's standards,
-  not against the piece's own framing or voice settings.
+  not against the piece's own framing, voice settings or Role. Never load a writer's
+  Role or personality layers here.
+
+## Hard rules of evidence
+
+These hold on every check, with or without Bruce (Step 0.5):
+
+- **FEC rows are contributions, not unique donors.** Count donors only after
+  de-duplicating, and say which. **A name match is not an identity match:** never let a
+  piece name a donor (or say "X gave") without confirming identity (employer, city, ZIP,
+  committee history). An unconfirmed identity is a **blocker**.
+- **A bill's record is not its text.** Status, titles and summaries come from the record;
+  what a bill *does* must be checked against its text package (`news_primary_search` /
+  `news_primary_capture`, govinfo). A claim about a bill's contents checked only against
+  coverage or the summary is at best **partial**.
+- **A `partial` story is citable only for its summary.** If a claim rests on a story whose
+  stored text is `partial` (summary only), it is supported only if the summary says it.
+  Otherwise re-capture it or treat the claim as unverified.
+- **Budget exhausted (429) is not evidence.** When an upstream source returns a 429 (or
+  the daily budget is spent), name the claim that went unverified for that reason in the
+  summary and the report. Never guess, and never mark it supported.
+- **Contracts: committed ≠ exercised ≠ ceiling ≠ paid.** Obligated (committed), options
+  exercised, the ceiling / potential value and outlays (money paid) are four different
+  numbers; none of the first three is money paid. A mismatch that changes the meaning is
+  a **blocker**.
+- **A load-bearing claim from a single outlet is uncorroborated.** If the piece's argument
+  depends on it and only one outlet reports it, file a **major** finding (unless the
+  piece says it is single-sourced and attributes it).
+- **Every fix that adds a fact cites its source.** A `suggestion` that introduces a
+  number, name, date or quote must have that fact in the finding's `evidence`.
+- Opinion and analysis are never evidence for a factual claim; a press release
+  establishes only what an entity claims about itself.
 
 ## Step 0 — Entitlement preflight (advisory)
 
@@ -46,12 +77,26 @@ Call `get_creator_context`. If it returns a capability summary and the
 
 If those fields are absent, proceed; the server's cap check is the backstop.
 
+## Step 0.5 — Load personality (Bruce)
+
+Read `../../references/personality.md` (§2) and follow it with
+`get_persona({ skill: "fact-check", articleId })` (or `seriesId` / `brandId` for a
+script or ad-hoc check when you know the scope; nothing for a scope-less ad-hoc check).
+Honour "without Bruce" (`personality: "none"`) for this run. Skip silently when the tool
+is missing or returns `available: false` or no personality.
+
+When Bruce is loaded: his core, then his brand/network layer, go at the top of the
+instruction stack, his memory in the personal slot, and Step 6 uses **Bruce's report**.
+The hard rules above and the evidence rules still win over anything he says. Bruce never
+receives a writer's Role or Ki/Mo layers (ignore any that a writing context returns).
+
 ## Route the request
 
 | The user wants… | Go to |
 | --- | --- |
 | Check an article (portal link, id, or title) | **Article check** (Steps 1–6) |
 | Check a BroadNews script/blurb before approval | **Script check** (below) |
+| Check pasted claims, a quote, a paragraph or a URL with no portal article | **Ad-hoc claims** (below) |
 | "Check everything waiting" / the nightly task | **Queue mode** (below) |
 | "Set up / remove nightly fact-checks" | **Nightly task** (below) |
 | "What did the check find?" / resolve a finding | `article_checks { action: "list" }` / `"resolve"` |
@@ -170,7 +215,18 @@ counts toward the verdict). **Do not re-file** an open finding that still applie
 
 ## Step 6 — Report
 
-Lead with the verdict, then the blockers and majors (paragraph, problem, fix), then a
+**With Bruce loaded**, report in his four parts, every time:
+
+1. **Verdict line:** what was checked, the server verdict (or "unsaved, ad-hoc") and the
+   counts by severity.
+2. **Findings table:** ¶ · claim · severity · category · what the evidence shows · fix.
+3. **Sources:** title/link, outlet, source age, confidence 0–100% for this claim,
+   primary or secondary.
+4. **What can and can't be defended publicly**, in plain language.
+
+Then the portal and next-step lines below.
+
+**Without Bruce**, lead with the verdict, then the blockers and majors (paragraph, problem, fix), then a
 one-line count of minors/nits. Link the article
 (`https://app.broadbanner.com/app/articles/` + id). Tell the user:
 
@@ -189,11 +245,31 @@ blurb) and save with `news_content_check_save({ contentId, version: pack.target.
 … })`. Scripts carry no `[n]`, so every stored story is a source for every paragraph.
 Report before the creator approves the script.
 
+## Ad-hoc claims (no save target)
+
+For claims the user pastes (a paragraph, a quote, a list of figures, a social post or a
+URL) that are not a portal article or a BroadNews script:
+
+1. Number the text as paragraphs (0 = a headline if there is one) and break it into
+   atomic claims (pass 1).
+2. Run passes 2–6 on each claim. There is no evidence pack: find sources with
+   `news_search_stories` / `news_get_story`, `news_primary_search` /
+   `news_primary_capture`, `data_series`, `search_archive`, and web search. Every hard
+   rule of evidence applies; quote what you rely on verbatim, with its URL or story id.
+3. **Save nothing.** There is no `article_check_save` and no portal panel. Do not create
+   an article to hold the check.
+4. Report as in Step 6 with the verdict line "unsaved, ad-hoc" and a per-claim result:
+   supported · partial · unsupported · contradicted · could not verify (say why, e.g. a
+   429). "Could not verify" is a legitimate result.
+
+The fresh-chat rule still applies if this chat wrote the text being checked.
+
 ## Queue mode (nightly or "check everything waiting")
 
 1. `article_checks({ action: "queue", limit: 5 })`: requested drafts first, then recent
    drafts whose latest revision is unchecked.
-2. For each (at most 5 per run; the rest stay queued), run Steps 1–5 with
+2. For each (at most 5 per run; the rest stay queued), run Step 0.5 with its
+   `articleId` (each article may resolve a different brand's Bruce), then Steps 1–5 with
    `mode: "requested"` if it has `checkRequestedAt`, else `"scheduled"`. Never skip the
    evidence rules to go faster.
 3. Unattended (scheduled task): **ask no questions**. If an article can't be checked

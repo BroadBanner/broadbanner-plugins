@@ -41,6 +41,16 @@ If those fields are omitted (older connector), proceed — the server-side cap c
 `get_writing_context` / `create_article` is the backstop. Keep the context result: Step 1
 uses it.
 
+## Step 0.5 — Load personality
+
+As soon as the scope is known (right after Step 1, or from the article in Revise mode),
+read `../../references/personality.md` (§2) and call
+`get_persona({ skill: "article-write", seriesId | brandId })` (`articleId` instead in
+Revise mode). Honour one-run overrides ("without Ki", "with Mo"). Skip silently when the
+tool is missing or returns no personality. When one is returned (usually **Ki**), its
+core → layers → lessons go first in the instruction stack and its memory goes in the
+personal slot. The hard rules above always win.
+
 ## Route the request first
 
 Decide which mode the user wants before doing anything else:
@@ -98,6 +108,9 @@ It returns the effective `articleConfig`, the brand + series `voice` (and the me
 `effective` voice), the creator's personal `writingStyle`, learned `profile` + `rules`,
 `exemplars`, `relatedArticles`, recent `transcripts`, and an ordered `instructions` list.
 
+- **Roles first (slot 1, every user).** Apply `roles` (brand → series, most specific
+  last) as described in `../../references/personality.md` §1, above the voice. If Ki was
+  loaded in Step 0.5, her layers already carry them; don't repeat them.
 - **Follow ALL `instructions`, in order.** They are already layered: series voice →
   brand voice → personal explicit style → learned rules → style profile. Where a brand or
   series voice setting conflicts with a learned personal rule, the voice setting wins.
@@ -206,10 +219,15 @@ Edit it in the portal and publish when it's right — your edits are how BroadBa
 learns your voice for the next draft. Or tell me what to change and I'll revise it.
 ```
 
-Then offer an independent check: "Before you publish, open a **new chat** and run
-`/fact-check` with the draft link. It checks every claim, quote and figure against the
-sources and files findings in the portal." Do not run it in this chat: the checker must
-not share the writer's context.
+If a personality was loaded, add the line it calls for (e.g. "Written with Ki (v3,
+brand:babm)") and, with Ki, her after-draft report (source table, weakest claims, what
+can and can't be defended).
+
+Then offer an independent check by **Bruce (fact-check)**: "Before you publish, open a
+**new chat** and run `/fact-check` with the draft link. It checks every claim, quote and
+figure against the sources and files findings in the portal (Bruce runs it if you have AI
+personalities)." Do not run it in this chat: the checker must not share the writer's
+context.
 
 ## Revise mode
 
@@ -221,7 +239,7 @@ When the user asks for changes to a draft (this run's, or an existing one):
    (revision number, source AI/You/Imported/Restored, time, word count, note). If the
    creator has edited it since your draft, **build on their latest text** — never
    overwrite their edits with an older AI version.
-3. Re-load `get_writing_context` if this is a new session.
+3. Re-load `get_writing_context` (and Step 0.5 with `articleId`) if this is a new session.
 4. Apply the feedback and save with
    `update_article({ id, title?, subtitle?, bodyMd?, form?, tags?, socialCopy?, revisionNote })`
    — pass only the fields that changed; `revisionNote` is a short description of the

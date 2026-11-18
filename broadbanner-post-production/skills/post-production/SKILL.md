@@ -164,6 +164,8 @@ hosts, guests, effectiveArticleConfig }`, `episodeSlug`, `episodeTitle`, `episod
 **Carries forward:** the review markdown, `transcriptId`, `seoTitle`, `subtitle`, `bodyMd`,
 `socialCopy`, `articleLabel`, `authorNames` (from `primaryHost` / `hosts`).
 
+**Personality + Roles.** episode-review runs its Step 0.5 (`get_persona({ skill: "episode-review", seriesId })`; skipped silently without the add-on) and applies the series/brand **Roles** from the writing context at slot 1. Pass through any one-run override from the user's request ("without Ki", "with Mo").
+
 **Writing memory + voice.** episode-review loads `get_writing_context({ showId, form: "episode-review", keywords })` before writing (its Step 3b). That carries the brand/series voice settings, the creator's learned word choices, cuts, length and sign-off, and examples of their published reviews and social copy (same series first). Every review the creator edits and publishes improves the next one.
 
 ## Step 5 — Review Publish
@@ -195,7 +197,8 @@ Transcript:  stored in BroadBanner (<transcriptId>; raw <rawChars> / corrected
 Published:   DRAFT → <url>  (transcript downloadable from the draft page)
 
 Next: open the review in the portal to edit and publish. It is a DRAFT — nothing is
-public until you publish it there.
+public until you publish it there. For an independent check first, open a new chat and
+run /fact-check with the draft link (Bruce, if you have AI personalities).
 ```
 
 ## Resuming from a step

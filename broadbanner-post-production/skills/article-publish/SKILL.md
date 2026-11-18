@@ -148,9 +148,10 @@ Transcript: linked — downloadable from the draft page (or: not linked — <rea
 Open the draft to edit and publish. Social copy is attached for distribution.
 ```
 
-Add one line: "For an independent check before publishing, open a **new chat** and run
-`/fact-check` with the draft link: it verifies quotes against the transcript and every
-claim against its source." Never run the check in this chat.
+Add one line offering **Bruce (fact-check)**: "For an independent check before
+publishing, open a **new chat** and run `/fact-check` with the draft link: it verifies
+quotes against the transcript and every claim against its source (Bruce runs it if you
+have AI personalities)." Never run the check in this chat.
 
 ## Error handling
 
