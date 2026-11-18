@@ -10,7 +10,7 @@ The output is a single markdown file with these sections in order:
 
 ```
 **SEO Title:** [title per format from series metadata]
-**Subtitle:** [1 sentence, active voice, ≤250 characters]
+**Subtitle:** [1 sentence, active voice, ≤200 characters — Substack's hard limit; count before saving]
 ```
 
 **AFBC title format:** `Anti Fascist Book Club | <book name> - <short title> - YYYY/MM/DD`

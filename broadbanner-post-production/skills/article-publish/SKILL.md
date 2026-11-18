@@ -54,7 +54,9 @@ wrote one). Parse out:
 
 - **`title`** — the SEO title / H1 (strip a trailing ` - YYYY/MM/DD` date suffix if the
   format appended one; the portal shows the date separately via `episodeDate`).
-- **`subtitle`** — the Subtitle / Pages-H2 line, if present.
+- **`subtitle`** — the Subtitle / Pages-H2 line, if present. At most **200 characters**
+  (Substack's limit; the tool rejects longer). If the review's line is longer, rewrite it as one
+  shorter sentence and tell the user, rather than truncating.
 - **`bodyMd`** — the review body markdown (block quote + review section + any Books
   Mentioned / Key Takeaways / Sources sections). This is the article body the portal
   stores and renders.

@@ -158,6 +158,8 @@ piece in markdown:
 - Voice per the Step 3 instructions and exemplars (the format file governs shape; the
   writing context governs voice — on conflict, the writing context wins).
 - `title` and `subtitle` are separate fields — do not repeat them as an H1 in `bodyMd`.
+- **`subtitle` is at most 200 characters** (Substack's hard limit; the tool rejects longer). Write
+  one sentence that fits. Never cut it off mid-thought.
 - End with the scope's `signoff` if one is set.
 
 ## Step 7 — Self-check, then save as a draft

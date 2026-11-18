@@ -11,7 +11,7 @@ The output is a single markdown file with these sections in order:
 ```
 **SEO Title:** [title per format from series metadata]
 **Pages H2:** [one sentence — see show-specific rules below]
-**Subtitle:** [1 sentence, active voice, ≤250 characters]
+**Subtitle:** [1 sentence, active voice, ≤200 characters — Substack's hard limit; count before saving]
 ```
 
 **IM title format:** `Intelligent Masculinity | With <Guest Name> - YYYY/MM/DD`
