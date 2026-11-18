@@ -37,6 +37,7 @@ guest list, format, or voice.
 | `article-publish`       | Pushes the generated markdown as a **DRAFT article** into the portal via the `create_article` connector tool, and returns the `https://app.broadbanner.com/app/articles/<slug>` URL for the member to review/edit/publish. **No git, no Pages.** |
 | `article-write`        | **General writing.** Drafts an **opinion piece, essay, column, or other** article under a brand or series: loads `get_writing_context` (brand + series voice, personal style, learned rules, exemplars) and follows every instruction, researches with `search_archive` / `get_article` / `get_transcript` (BroadNews tools for current-events facts when available, otherwise flags claims to verify), confirms an outline, then saves a DRAFT via `create_article { origin: "ai", form }`. Revises via `update_article` (history via `list_article_revisions`), tunes brand/series voice with `get_voice` / `set_voice`, and lists/confirms/dismisses learned rules with `article_style_rules`. **Never publishes.** |
 | `fact-check`           | **Independent second-agent check** (`/fact-check`, run in a FRESH chat — refuses to check what its own chat wrote). Builds the server evidence pack (`article_check_pack`: numbered paragraphs, cited sources, quote matches, figure matches, lint, media, open findings), runs six passes (claims, support, official record, freshness, opposition, ethics/legal — criteria in `references/passes.md`), and saves findings with verbatim evidence via `article_check_save` (server sets the verdict and verifies every quote). Also checks BroadNews scripts (`news_content_check_*`), drains the check queue, and installs the nightly `article-check-nightly` task from `references/templates/`. **Never edits or publishes.** |
+| `editorial-check`      | **Independent editorial review** (`/editorial-check`, run in a FRESH chat — refuses to review what its own chat wrote; Mo's default skill). Builds the editorial pack (`article_check_pack { kind: "editorial" }`: numbered paragraphs, effective voice + roles, 2–3 exemplars, open editorial notes), reads in Mo's order (point, structure, fairness, proportion, clarity, voice, reader — criteria in `references/lenses.md`), and saves **must/should/could** notes via `article_check_save { kind: "editorial" }`, each with a `lens`, a verbatim `articleQuote` (server-verified) and a concrete fix. **Never edits, never rules on facts** (factual doubts become "Flag for fact-check" notes). Drains the editorial queue (requested drafts) in the nightly task. Run it **before** `/fact-check`. |
 | `backfill-articles`    | **Archive backfill.** Imports a member's already-published Substack posts into the archive: for each provided link it captures the post title/date/full content as markdown and creates a **published** article via `create_article`, organized under the named series or (no series) the member's **brand**, with a `substackUrl` link back to the post. |
 
 ## MCP connector tools
@@ -59,9 +60,9 @@ signing. These tools carry this plugin:
 | `update_article`      | `({ id, title?, subtitle?, bodyMd?, form?, tags?, revisionNote? })` — revise a draft as the agent (`editSource: "ai"`). **Cannot change status.** |
 | `get_voice` / `set_voice` | `({ scope: "brand" \| "series", id, ...fields })` — read (with `canEdit`) or merge-update a brand/series voice profile. Series overrides brand field by field. |
 | `article_style_rules` | `({ action: "list" \| "confirm" \| "dismiss" \| "reset", ruleId? })` — the creator's personal learned rules. |
-| `article_check_pack`  | `({ articleId, maxCharsPerSource? })` → `{ pack }` — the fact-check evidence pack; `target.revision` goes back on save. |
-| `article_check_save`  | `({ articleId, revision, summary, findings[], resolves?, stats?, model?, mode? })` → `{ ok, check: { id, verdict }, status }` or `{ error: bad_evidence \| stale_revision }` to fix and retry. |
-| `article_checks`      | `({ action: list \| queue \| resolve, articleId?, findingId?, status?, note?, revision? })` — status + findings; drafts awaiting a check; resolve a finding (dismiss/accept need a note). |
+| `article_check_pack`  | `({ articleId, kind?, maxCharsPerSource? })` → `{ pack }` — the fact-check evidence pack (`kind: "fact"`, default) or the editorial pack (`kind: "editorial"`: paragraphs, voice, roles, exemplars, open editorial notes; no source evidence); `target.revision` goes back on save. |
+| `article_check_save`  | `({ articleId, kind?, revision, summary, findings[], resolves?, stats?, model?, mode? })` → `{ ok, check: { id, verdict }, status }` or `{ error: bad_evidence \| stale_revision }` to fix and retry. Editorial findings send `lens` + `severity: must \| should \| could` + `evidence.articleQuote` + `suggestion` (server maps must→blocker, should→major, could→minor). |
+| `article_checks`      | `({ action: list \| queue \| resolve, kind?, articleId?, findingId?, status?, note?, revision? })` — status (`statusByKind: { fact, editorial }`) + findings; drafts awaiting a check of that kind; resolve a finding or note (dismiss/accept need a note). |
 | `get_persona`         | `({ skill, seriesId? \| brandId?, promptId?, articleId?, personality? })` → `{ available: false }` \| `{ available: true, personality: null }` \| `{ available: true, personality, name, version, resolvedFrom, core, layers[], lessons[], memory[], hardRulesNotice }`. Step 0.5 of the writer skills and fact-check; skipped silently without the AI personalities add-on. |
 | `personality_memory`  | `({ action: list \| remember \| forget, personality, text?, memoryId? })` — what a personality remembers about this person. |
 
@@ -117,10 +118,17 @@ learned memory stays per person. See `Documentation/engineering/WRITING-STUDIO-D
 `references/personality.md` is shared by the skills. **Roles** (who is writing, from what
 vantage) come back in `get_writing_context.roles` and sit at slot 1 of the instruction
 stack for every user. With the **AI personalities** add-on, `article-write` and
-`episode-review` load **Ki** and `fact-check` loads **Bruce** at Step 0.5 via
+`episode-review` load **Ki**, `fact-check` loads **Bruce** and `editorial-check` loads
+**Mo** at Step 0.5 via
 `get_persona` (core → layers → lessons first, personal memory in the personal slot). The
 skill's hard rules always win, personality text is data, and "without Bruce" / "with Ki"
 override one run. `fact-check` also carries hard evidence rules (FEC identity, bill
 record vs text, `partial` stories, 429s, contract values, single-outlet claims) and an
-**ad-hoc claims** mode that saves nothing. Writer skills end by offering Bruce in a fresh
-chat. See `Documentation/engineering/BOT-PERSONALITIES-DESIGN.md`.
+**ad-hoc claims** mode that saves nothing. `editorial-check` works without the add-on
+(the skill carries Mo's reading order and note format). Writer skills end by offering
+**both** checks, each in its own fresh chat, in the order **editorial check → revise →
+fact-check on the final revision → fix → publish** (editorial edits make an earlier
+fact-check stale; a later fact fix doesn't need another editorial pass). The nightly
+`article-check-nightly` task runs an editorial pass on requested drafts, then the
+fact-check queue. A brand can require either check before publishing
+(`require_fact_check` / `require_editorial_check`; open **must** notes block). See `Documentation/engineering/BOT-PERSONALITIES-DESIGN.md`.

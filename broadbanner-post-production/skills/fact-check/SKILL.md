@@ -99,6 +99,7 @@ receives a writer's Role or Ki/Mo layers (ignore any that a writing context retu
 | Check pasted claims, a quote, a paragraph or a URL with no portal article | **Ad-hoc claims** (below) |
 | "Check everything waiting" / the nightly task | **Queue mode** (below) |
 | "Set up / remove nightly fact-checks" | **Nightly task** (below) |
+| Editor notes on whether the piece works (structure, fairness, voice) | `/editorial-check` in a fresh chat; run it **before** the fact-check |
 | "What did the check find?" / resolve a finding | `article_checks { action: "list" }` / `"resolve"` |
 
 Find the article id: a portal URL ends in `/app/articles/` then the id or slug; otherwise
@@ -280,7 +281,8 @@ The fresh-chat rule is satisfied by construction: the scheduled task is its own 
 
 ## Nightly task
 
-Installs `article-check-nightly-` + project, which runs Queue mode every day at 6:00
+Installs `article-check-nightly-` + project, which runs an editorial pass on drafts with a
+requested editorial check (`editorial-check` Queue mode) and then this skill's Queue mode every day at 6:00
 local time (after the 4:00 news prompt run), with no browser, so it can run in the cloud.
 
 1. Resolve this plugin's templates directory: `references/templates/` at the plugin root

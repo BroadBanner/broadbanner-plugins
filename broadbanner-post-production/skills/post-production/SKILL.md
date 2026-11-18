@@ -197,8 +197,10 @@ Transcript:  stored in BroadBanner (<transcriptId>; raw <rawChars> / corrected
 Published:   DRAFT → <url>  (transcript downloadable from the draft page)
 
 Next: open the review in the portal to edit and publish. It is a DRAFT — nothing is
-public until you publish it there. For an independent check first, open a new chat and
-run /fact-check with the draft link (Bruce, if you have AI personalities).
+public until you publish it there. Before publishing: in a new chat run
+/editorial-check with the draft link (Mo), revise, then in another new chat run
+/fact-check on the final revision (Bruce). Order: editorial → revise → fact-check →
+fix → publish.
 ```
 
 ## Resuming from a step

@@ -148,10 +148,12 @@ Transcript: linked — downloadable from the draft page (or: not linked — <rea
 Open the draft to edit and publish. Social copy is attached for distribution.
 ```
 
-Add one line offering **Bruce (fact-check)**: "For an independent check before
-publishing, open a **new chat** and run `/fact-check` with the draft link: it verifies
-quotes against the transcript and every claim against its source (Bruce runs it if you
-have AI personalities)." Never run the check in this chat.
+Add the hand-off to both independent checks (`../../references/personality.md` §3):
+"Before publishing, open a **new chat** and run `/editorial-check` with the draft link for
+editor notes (Mo), revise, then open **another new chat** and run `/fact-check` on the
+final revision: it verifies quotes against the transcript and every claim against its
+source (Bruce). Order: editorial check → revise → fact-check → fix → publish (Mo and
+Bruce run them if you have AI personalities)." Never run either check in this chat.
 
 ## Error handling
 

@@ -223,11 +223,18 @@ If a personality was loaded, add the line it calls for (e.g. "Written with Ki (v
 brand:babm)") and, with Ki, her after-draft report (source table, weakest claims, what
 can and can't be defended).
 
-Then offer an independent check by **Bruce (fact-check)**: "Before you publish, open a
-**new chat** and run `/fact-check` with the draft link. It checks every claim, quote and
-figure against the sources and files findings in the portal (Bruce runs it if you have AI
-personalities)." Do not run it in this chat: the checker must not share the writer's
-context.
+Then offer the two independent checks (`../../references/personality.md` §3), each in
+its own **new chat**:
+
+- **Mo (editorial check):** "Open a new chat and run `/editorial-check` with the draft
+  link. It reads whether the piece works and files must/should/could notes in the portal."
+- **Bruce (fact-check):** "Then, on the final revision, open another new chat and run
+  `/fact-check` with the draft link. It checks every claim, quote and figure against the
+  sources."
+
+Say the order: **editorial check → revise here → fact-check on the final revision → fix →
+publish** (Mo and Bruce run them if you have AI personalities). Do not run either check
+in this chat: a checker must not share the writer's context.
 
 ## Revise mode
 
@@ -266,6 +273,24 @@ When the user asks to "address the fact-check" (or a draft has an open check):
    `article_checks({ action: "resolve", findingId, status: "fixed", revision, note })`.
 5. Tell the user to run `/fact-check` again in the **checker** chat to confirm. Say
    which blurbs you changed, if any.
+
+### Addressing editorial notes
+
+When the user asks to "address the editorial notes" (or "Mo's notes"):
+
+1. `article_checks({ action: "list", articleId, kind: "editorial" })`: read the newest
+   editorial check's **open** notes (paragraph, lens, must/should/could, articleQuote,
+   suggestion). Do the musts first.
+2. Revise the text (Revise mode). The suggestion is a direction, not a script: keep the
+   voice. Never add a new fact to satisfy a note. Leave a "Flag for fact-check" note for
+   the fact-check; don't change the fact here. If you disagree with a note, leave it and
+   say why (the user can dismiss it in the portal).
+3. Check the social copy as above if a fix changes the framing or headline.
+4. Save the revision, then resolve each fixed note:
+   `article_checks({ action: "resolve", findingId, status: "fixed", revision, note })`.
+5. Tell the user the next step is `/fact-check` in a **fresh** chat on this final
+   revision (re-running `/editorial-check` is optional; with the brand gate on, only open
+   musts block publishing).
 
 ## Voice tuning
 
