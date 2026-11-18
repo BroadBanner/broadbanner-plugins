@@ -221,7 +221,7 @@ When the user asks for changes to a draft (this run's, or an existing one):
    overwrite their edits with an older AI version.
 3. Re-load `get_writing_context` if this is a new session.
 4. Apply the feedback and save with
-   `update_article({ id, title?, subtitle?, bodyMd?, form?, tags?, revisionNote })`
+   `update_article({ id, title?, subtitle?, bodyMd?, form?, tags?, socialCopy?, revisionNote })`
    — pass only the fields that changed; `revisionNote` is a short description of the
    change (e.g. "tightened the open, cut section 3"). It cannot publish.
 5. Report the URL and the revision note, and remind the user to publish in the portal.
@@ -235,9 +235,17 @@ When the user asks to "address the fact-check" (or a draft has an open check):
 2. Fix each one in the text, using the finding's evidence; never add a new fact without a
    source. If you disagree with a finding, leave the text and tell the user why; they can
    dismiss it with a note in the portal.
-3. Save the revision, then mark each finding you fixed:
+3. **Fix the attached social copy too.** `get_article` returns `socialCopy` (the
+   Substack / Bluesky / Threads blurbs). The blurbs were written from the original draft,
+   so a corrected claim often survives there. For each fix, check every blurb. If the
+   wording is affected, send the **full** corrected object with
+   `update_article({ id, socialCopy, revisionNote })`, keeping every platform key and its
+   shape (a string, or `{ text }`). Never tell the user to fix social copy in the editor
+   when you can do it here.
+4. Save the revision, then mark each finding you fixed:
    `article_checks({ action: "resolve", findingId, status: "fixed", revision, note })`.
-4. Tell the user to run `/fact-check` again in the **checker** chat to confirm.
+5. Tell the user to run `/fact-check` again in the **checker** chat to confirm. Say
+   which blurbs you changed, if any.
 
 ## Voice tuning
 
