@@ -55,8 +55,17 @@ Nothing else changes the personality. An override lasts for this run only.
 
 ### When a personality is returned
 
-`{ personality, name, version, resolvedFrom, core, layers: [{ scope, md }], lessons,
-memory: [{ id, text }], hardRulesNotice }`
+`{ personality, name, version, resolvedFrom, core, coreEdited, coreUpdate, layers: [{ scope,
+md, label, source }], lessons: [{ id, text, source }], memory: [{ id, text }], hardRulesNotice }`
+
+**Each member's persona is theirs alone.** `core` is this member's own copy (pinned to
+`version`). If `coreUpdate` is set, say once, in the report, "{name}'s template has an
+update; apply it in Articles → Writing team if you want it". Never apply it yourself.
+`layers` are the **publication's** style (`label` Brand style / Series style / Network
+style, or the member's own Prompt role), never something the persona learned. `lessons`
+are this member's (`source: "own"`) plus reviewed community lessons only if they opted in
+(`source: "community"`). The community opt-ins are the member's consent: read them, never
+change them.
 
 Build the instruction stack in this order (design §5.2). **The skill's hard rules sit
 above all of it and always win.**
@@ -203,7 +212,10 @@ when the connector has no `persona_lessons` tool, the call errors, or no Ki was 
    - **Skip** (`{ findingIds, skip: true, reason }`) for a one-off: a typo, a fact
      that only existed in one piece, or a fix you made to keep the peace.
    - `scope`: leave it out (the article's series) unless the rule is about the writer's
-     craft everywhere (`"global"`) or the whole brand (`"brand"`).
+     craft everywhere (`"member"`) or the whole brand (`"brand"`). Every lesson is this
+     member's alone, whatever the scope. Use `"community"` only when the member said in
+     this chat to offer it to the community, and only if `list_personas` shows their
+     `communityContribute` on.
    - `confirmed: true` **only** when the user said in this chat to keep the rule.
 3. If the reply's `remaining` > 0, run steps 1–2 once more at most. The rest waits for the
    next run.
