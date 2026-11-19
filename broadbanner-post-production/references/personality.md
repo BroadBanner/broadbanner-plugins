@@ -245,3 +245,26 @@ when the connector has no `persona_lessons` tool, the call errors, or no Ki was 
 A finding the checker **dismissed** never reaches the inbox; it was the checker's
 mistake, not the writer's. Never ask the checker skills to learn: fact-check and
 editorial-check stay independent and never call `persona_lessons`.
+
+## 6. The member's self-profile (`writing_session` part `self`)
+
+`writing_session` returns `self` for writer, post-production, news and editorial skills:
+the member's **approved** self-profile (`sections[{ key, title, md, version }]` +
+`notice`) or `null` (nothing approved yet, or they turned this use off). The fact-check
+never gets it.
+
+- **What it is for:** keep the piece on the member's through-line, in their arguments and
+  their voice. Use `throughline` and `theses` to choose the angle and the point;
+  `themes` to connect the piece to what they've covered; `personality` for tone and what
+  they push back on; `background` for the experience they write from (it overlaps with
+  their experience layers; the layers win if they differ). `report` is context only.
+- **What it is not:** a source. Never quote it in the piece, never state a view as theirs
+  unless the profile says it, and never let it override the facts, the sources, the
+  publication's voice or the skill's hard rules. If the story cuts against a thesis, write
+  the story, and say so in the report.
+- `null` → carry on without it. Don't mention it unless the user asks; then point them to
+  `/self-profile` or The Room → You.
+- Editorial (Mo): read the piece against the through-line as one more lens. "Does this fit
+  your arc?" is a `could` note at most, never a `must`.
+- Never change the profile from a writing run. Only `/self-profile` proposes changes, and
+  only the member approves them.
