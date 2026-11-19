@@ -110,6 +110,10 @@ topic words from the request. It returns the effective `articleConfig`, the bran
 - Note the `voice.effective` `signoff`, `preferredTerms`, and `dontRules` — check the
   draft against them in Step 7.
 
+- **`seriesLedger`** (series scope): facts this series has already settled. Use each
+  `correction`'s correct version, never the claim it replaced. Don't repeat an
+  `unsupported` claim without a new source. A `verified` claim can be reused with its source.
+
 If the call returns 403, the creator can't author under that scope: say so and return to
 Step 1. If it fails for another reason, report it and stop — do not draft blind.
 
@@ -180,6 +184,11 @@ Check before saving:
 - [ ] Every quote traceable to a transcript or article you actually read
 - [ ] Current-events claims either BroadNews-grounded or on the "Claims to verify" list
 - [ ] Length and structure match the format file
+- [ ] Every active lesson from Step 0.5 applied (they are this writer's past fixes)
+- [ ] None of Mo's usual cuts: stock or AI-pattern lines, a recap ending, bold run-in labels,
+      first person where the voice doesn't use it
+- [ ] No claim the `seriesLedger` corrected or found unsupported, in its old form
+- [ ] No corrections or update log in the draft; at most 30 distinct `[n]` citations
 
 Then:
 

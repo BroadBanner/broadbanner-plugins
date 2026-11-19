@@ -132,6 +132,13 @@ judging:
 - `figures[]`: each figure, with `matches` in the sources searched. `matches: []` means
   the figure is not in its cited sources (within rounding) — verify it or flag it.
 - `lint`, `media`, `warnings`, `previousFindings` (still open from earlier checks).
+- `seriesLedger` (series articles only; next to `pack` in the reply): `entries` the series has
+  already settled (`correction` claim → correct, `verified` with source, `unsupported`) and
+  `hits`: paragraphs of THIS draft that repeat a correction or unsupported claim from
+  another part. Check every hit first. A paragraph still stating the corrected-away version
+  is a finding (`claim` / `number`, at least `major`), citing the entry's source; one
+  repeating an unsupported claim with no new source is a finding too. A hit whose paragraph
+  already says the correct version is fine. A hit is only a hint, never a finding by itself.
 
 Sources cited by an article now keep their text, and older expired ones are re-fetched
 nightly, so `textExpired` should be rare. If a cited source has `textExpired: true`, re-capture it (`news_capture_stories` with its
@@ -228,7 +235,13 @@ counts toward the verdict). **Do not re-file** an open finding that still applie
 ## Step 5 — Save
 
 `article_check_save({ articleId, revision, summary, stats, model, findings, resolves, mode,
-personality, sourceRatings })`
+personality, sourceRatings, ledger })`
+
+- `ledger` (series articles only, ≤ 30): the claims this check settled for the whole series.
+  Use `verified` for a key claim confirmed against the primary record (`sourceUrl` required,
+  plus a verbatim `sourceQuote`), and `unsupported` for one you could not support. Corrections
+  are recorded automatically when the writer fixes a finding, so don't add them here. Skip
+  routine claims; the ledger is for facts later parts are likely to repeat (the scorecard).
 
 - `personality`: `"bruce"` when `get_persona` returned him; omit otherwise.
 
