@@ -54,7 +54,7 @@ If those fields are absent, proceed; the server's cap check is the backstop.
 ## Step 0.5 — Load personality (Mo)
 
 Read `../../references/personality.md` (§2) and follow it with
-`get_persona({ skill: "editorial-check", articleId })`. Honour "without Mo"
+`writing_session({ skill: "editorial-check", articleId })` (its `persona` part is `get_persona`; its `checks` part is the open findings + `nextStep`; without the tool, call `get_persona`). Honour "without Mo"
 (`personality: "none"`) for this run. Skip silently when the tool is missing or returns
 `available: false` or no personality.
 
@@ -83,7 +83,9 @@ returns the id.
 
 ## Step 1 — Build the editorial pack
 
-Call `article_check_pack({ articleId, kind: "editorial" })`. Read all of it before
+Call `article_check_pack({ articleId, kind: "editorial" })` (`delta: true` on a re-check:
+only paragraphs changed since your last pass; `articleIds` for 2–5 parts of a series, one
+save per part). Read all of it before
 judging:
 
 - `target.revision`: you send it back on save. If the piece changes mid-review, the save

@@ -43,11 +43,13 @@ uses it.
 
 ## Step 0.5 — Load personality
 
-As soon as the scope is known (right after Step 1, or from the article in Revise mode),
-read `../../references/personality.md` (§2) and call
-`get_persona({ skill: "article-write", seriesId | brandId })` (`articleId` instead in
-Revise mode). Honour one-run overrides ("without Ki", "with Mo"). Skip silently when the
-tool is missing or returns no personality. When one is returned (usually **Ki**), its
+Start every run with ONE call: `writing_session({ skill: "article-write" })` (add
+`seriesId | brandId`, `form`, `keywords` once known; in Revise mode `articleId` plus its
+`seriesId | brandId`). It returns `persona` (as `get_persona`), `scopes` (your series with
+titles and brands), `writing` (as Step 3's writing context), `checks` and `lessons`, each
+fail-soft. Without the tool, fall back to the separate calls. Read
+`../../references/personality.md` (§2) and honour one-run overrides ("without Ki", "with
+Mo"). Skip silently when no personality comes back. When one is returned (usually **Ki**), its
 core → layers → lessons go first in the instruction stack and its memory goes in the
 personal slot. With Ki, drain the lesson inbox next (`personality.md` §5): one call to
 read it, one to learn. The hard rules above always win.
@@ -67,11 +69,10 @@ Decide which mode the user wants before doing anything else:
 
 ## Step 1 — Resolve the scope (brand or series)
 
-From `get_creator_context` (`brand`, `brands?`, `pods`):
+From `writing_session` `scopes` (`series[]` with titles, `brands[]`, `defaultBrandId`):
 
-- The user named a series → match it case-insensitively against the authorized series
-  (resolve titles with `get_show_roster({ seriesId })` per `pods` id, matching
-  `roster.seriesTitle`). Capture `seriesId`.
+- The user named a series → match it case-insensitively against `scopes.series[].title`.
+  Capture its `id` as `seriesId`. Never call `get_show_roster` per series to find titles.
 - The user named a brand, or the piece isn't tied to one series → use the brand. Capture
   the **short** `brandId` (e.g. `sotsp`, `babm`).
 - Ambiguous (several brands, or the name matches several series, or nothing named and
@@ -97,15 +98,9 @@ context alone.
 
 ## Step 3 — Load the writing context (required, before any drafting)
 
-```
-get_writing_context({
-  seriesId | brandId,          // from Step 1 — one of them
-  form,                        // from Step 2
-  keywords: ["...", "..."],    // 3–10 topic words from the user's request
-})
-```
-
-It returns the effective `articleConfig`, the brand + series `voice` (and the merged
+Call `writing_session({ skill: "article-write", seriesId | brandId, form, keywords,
+include: ["writing"] })` (or `get_writing_context` with the same arguments). `keywords` = 3–10
+topic words from the request. It returns the effective `articleConfig`, the brand + series `voice` (and the merged
 `effective` voice), the creator's personal `writingStyle`, learned `profile` + `rules`,
 `exemplars`, `relatedArticles`, recent `transcripts`, and an ordered `instructions` list.
 
@@ -272,9 +267,9 @@ When the user asks to "address the fact-check" (or a draft has an open check):
    `update_article({ id, socialCopy, revisionNote })`, keeping every platform key and its
    shape (a string, or `{ text }`). Never tell the user to fix social copy in the editor
    when you can do it here.
-4. Fix **every** open finding in **one** revision (one `update_article`), not one revision
-   per finding. Then mark each finding you fixed:
-   `article_checks({ action: "resolve", findingId, status: "fixed", revision, note })`.
+4. Fix **every** open finding in **one** revision: one `update_article` with
+   `resolves: [{ findingId, note }]` for every finding it fixes (they're marked fixed against
+   the new revision in the same call). No separate resolve calls.
 5. **Series parts.** If the article is one part of a series and a fix changes a shared fact,
    claim, scorecard row or attribution, find the sibling parts
    (`list_articles({ seriesId })`), apply the same fix to each in this session, and tell
@@ -297,8 +292,7 @@ When the user asks to "address the editorial notes" (or "Mo's notes"):
    say why (the user can dismiss it in the portal).
 3. Check the social copy as above if a fix changes the framing or headline.
 4. Apply the musts, shoulds **and** coulds you accept in **one** revision; a could never gets
-   a revision of its own. Then resolve each fixed note:
-   `article_checks({ action: "resolve", findingId, status: "fixed", revision, note })`.
+   a revision of its own. Resolve them in that same `update_article` with `resolves[]`.
    Then learn from the fixes (Ki loaded): `../../references/personality.md` §5 with this
    `articleId`.
 5. Tell the user the next step is `/fact-check` in a **fresh** chat on this final

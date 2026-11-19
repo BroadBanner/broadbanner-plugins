@@ -20,7 +20,8 @@ vantage** ("A national-security reporter who reads contracts before press releas
 
 ## 2. Step 0.5 — Load personality
 
-After the entitlement preflight and once the scope is known, call:
+After the entitlement preflight, prefer ONE `writing_session({ skill, … })` call: its
+`persona` part is exactly `get_persona` (the same arguments apply). Without it, call:
 
 ```
 get_persona({
@@ -198,7 +199,8 @@ not after a check catches the same thing again.
 after you resolve findings as fixed in a fix round (pass that `articleId`). Skip silently
 when the connector has no `persona_lessons` tool, the call errors, or no Ki was loaded.
 
-1. `persona_lessons({ action: "inbox", limit: 20 })` (add `articleId` after a fix round)
+1. Use the `lessons` part of `writing_session` when you started with it; otherwise call
+   `persona_lessons({ action: "inbox", limit: 20 })` (add `articleId` after a fix round)
    → `findings[]`, `remaining`, and your live `lessons[]`. Empty → done.
 2. Group the findings by the mistake behind them and send **one**
    `persona_lessons({ action: "learn", items })` call:

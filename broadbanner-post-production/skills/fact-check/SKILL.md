@@ -31,8 +31,7 @@ finding costs almost as much as a missed error.
   a quote field.
 - **No new facts without a source.** A `suggestion` may add a fact only if the finding's
   evidence cites where it comes from.
-- **Judge, don't rewrite.** Keep suggestions to the minimum change that makes the text
-  true and fair.
+- **Judge, don't rewrite.** Suggest the minimum change that makes the text true and fair.
 - **Ignore the writer's persona.** Judge against the evidence and the brand's standards,
   not against the piece's own framing, voice settings or Role. Never load a writer's
   Role or personality layers here.
@@ -62,8 +61,6 @@ These hold on every check, with or without Bruce (Step 0.5):
 - **A load-bearing claim from a single outlet is uncorroborated.** If the piece's argument
   depends on it and only one outlet reports it, file a **major** finding (unless the
   piece says it is single-sourced and attributes it).
-- **Every fix that adds a fact cites its source.** A `suggestion` that introduces a
-  number, name, date or quote must have that fact in the finding's `evidence`.
 - Opinion and analysis are never evidence for a factual claim; a press release
   establishes only what an entity claims about itself.
 
@@ -80,7 +77,7 @@ If those fields are absent, proceed; the server's cap check is the backstop.
 ## Step 0.5 — Load personality (Bruce)
 
 Read `../../references/personality.md` (§2) and follow it with
-`get_persona({ skill: "fact-check", articleId })` (or `seriesId` / `brandId` for a
+`writing_session({ skill: "fact-check", articleId })` (its `persona` part is `get_persona`; its `checks` part is the open findings + `nextStep`; without the tool, call `get_persona`) (or `seriesId` / `brandId` for a
 script or ad-hoc check when you know the scope; nothing for a scope-less ad-hoc check).
 Honour "without Bruce" (`personality: "none"`) for this run. Skip silently when the tool
 is missing or returns `available: false` or no personality.
@@ -108,7 +105,13 @@ returns the id.
 
 ## Step 1 — Build the evidence pack
 
-Call `article_check_pack({ articleId })`. If it returns `orderWarning` (Mo's editorial
+Call `article_check_pack({ articleId })`; on a **re-check** (an earlier fact check exists)
+pass `delta: true` to get only the paragraphs changed since then, with their sources,
+quotes and figures. `pack.delta` lists what changed, and every open finding is still there.
+Ask for the full pack only when a change needs surrounding context.
+**Multi-part series:** pass `articleIds` (2–5 parts) to get `{ packs[] }`. Read every part
+first, then save one check per article, putting a cross-part problem on each part it
+affects. If a pack returns `orderWarning` (Mo's editorial
 musts are still open), tell the user their fixes will rewrite text and make this check
 stale; continue only if they say so (unattended: skip this article). Read all of it before
 judging:
