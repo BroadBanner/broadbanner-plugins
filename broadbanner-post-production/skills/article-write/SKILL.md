@@ -27,19 +27,13 @@ creator's edit-and-publish is the signal that improves the next draft.
 - **Never invent facts, quotes, or sources.** Unverified claims about current events are
   flagged for the user (see Step 4).
 
-## Step 0 — Entitlement preflight (advisory)
+## Step 0 — Entitlement preflight (no call)
 
-This skill is declared `metadata.requiresTool: post_production_distribution`. Call
-`get_creator_context`; if it returns a capability summary (`entitledTools` / `caps` /
-`isAdmin` / `tier`), confirm the add-on is present (or `isAdmin`), otherwise stop with:
-
-> ⚠️ Article writing is part of the **Production+** add-on (`post_production_distribution`, $5/mo).
-> Your account isn't entitled yet — add it from https://app.broadbanner.com/pricing/membership.
-> Nothing was written.
-
-If those fields are omitted (older connector), proceed — the server-side cap check on
-`get_writing_context` / `create_article` is the backstop. Keep the context result: Step 1
-uses it.
+Follow `../../references/preflight.md`: if this connector has the tools this skill uses,
+carry on; if not, stop with "⚠️ Article writing is part of the **Production+** add-on
+(`post_production_distribution`). Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was written." Don't call
+`get_creator_context` just to check.
 
 ## Step 0.5 — Load personality
 
@@ -63,9 +57,9 @@ Decide which mode the user wants before doing anything else:
 | A review of a specific episode / live show                | Hand off to the `post-production` chain (or `episode-review` if a corrected transcript is ready). Not this skill. |
 | A sourced news story / roundup with citations             | If the `broad-news` plugin's `news-article` skill is available (and `whoami` shows `available.broadNews`), hand off to it. Otherwise write it here as `form: "other"` and flag every factual claim for verification. |
 | A new opinion / essay / column / other piece              | Steps 1–8 below. |
-| Changes to a draft that already exists                    | **Revise mode** (below). |
-| "Make this series sound more X" / "our brand never says Y" | **Voice tuning** (below). |
-| "What have you learned about my writing?"                 | **Learned rules** (below). |
+| Changes to a draft that already exists                    | **Revise mode**: `references/revise-mode.md`. |
+| "Make this series sound more X" / "our brand never says Y" | **Voice tuning**: `references/voice-and-rules.md`. |
+| "What have you learned about my writing?"                 | **Learned rules**: `references/voice-and-rules.md`. |
 
 ## Step 1 — Resolve the scope (brand or series)
 
@@ -234,106 +228,11 @@ in this chat: a checker must not share the writer's context.
 
 ## Revise mode
 
-When the user asks for changes to a draft (this run's, or an existing one):
+Read `references/revise-mode.md` and follow it whenever the user asks for changes to an existing draft, or to address fact-check findings or editorial notes (one revision per round, `resolves[]` in the same `update_article`, sibling parts, learning from the fixes).
 
-1. Identify the article: from this session's `create_article` result, or
-   `list_articles({ q: "<words from the title>" })` → match, then `get_article({ slug })` for
-   the current body. Always pass `q`; never list the whole archive to find one piece.
-2. To show history or compare, call `list_article_revisions({ id })` and summarize
-   (revision number, source AI/You/Imported/Restored, time, word count, note). If the
-   creator has edited it since your draft, **build on their latest text** — never
-   overwrite their edits with an older AI version.
-3. Re-load `get_writing_context` (and Step 0.5 with `articleId`) if this is a new session.
-4. Apply the feedback and save with
-   `update_article({ id, title?, subtitle?, bodyMd?, form?, tags?, socialCopy?, revisionNote })`
-   — pass only the fields that changed; `revisionNote` is a short description of the
-   change (e.g. "tightened the open, cut section 3"). It cannot publish.
-5. Report the URL and the revision note, and remind the user to publish in the portal.
+## Voice tuning and learned rules
 
-### Fixing fact-check findings
-
-When the user asks to "address the fact-check" (or a draft has an open check):
-
-1. `article_checks({ action: "list", articleId, kind: "fact", view: "open" })`: the status,
-   the newest check, and only the **open** findings (paragraph, claim, evidence,
-   suggestion). Use `view: "all"` only to show history.
-2. Fix each one in the text, using the finding's evidence; never add a new fact without a
-   source. If you disagree with a finding, leave the text and tell the user why; they can
-   dismiss it with a note in the portal.
-3. **Fix the attached social copy too.** `get_article` returns `socialCopy` (the
-   Substack / Bluesky / Threads blurbs). The blurbs were written from the original draft,
-   so a corrected claim often survives there. For each fix, check every blurb. If the
-   wording is affected, send the **full** corrected object with
-   `update_article({ id, socialCopy, revisionNote })`, keeping every platform key and its
-   shape (a string, or `{ text }`). Never tell the user to fix social copy in the editor
-   when you can do it here.
-4. Fix **every** open finding in **one** revision: one `update_article` with
-   `resolves: [{ findingId, note }]` for every finding it fixes (they're marked fixed against
-   the new revision in the same call). No separate resolve calls.
-5. **Series parts.** If the article is one part of a series and a fix changes a shared fact,
-   claim, scorecard row or attribution, find the sibling parts
-   (`list_articles({ seriesId })`), apply the same fix to each in this session, and tell
-   the user which parts you changed.
-6. **Learn from the fixes** (Ki loaded): `../../references/personality.md` §5 with this
-   `articleId`. Do it once per round, after the resolves.
-7. Tell the user to run `/fact-check` again in the **checker** chat to confirm. Say
-   which blurbs you changed, if any.
-
-### Addressing editorial notes
-
-When the user asks to "address the editorial notes" (or "Mo's notes"):
-
-1. `article_checks({ action: "list", articleId, kind: "editorial", view: "open" })`: the
-   newest editorial check's **open** notes (paragraph, lens, must/should/could,
-   articleQuote, suggestion). Do the musts first.
-2. Revise the text (Revise mode). The suggestion is a direction, not a script: keep the
-   voice. Never add a new fact to satisfy a note. Leave a "Flag for fact-check" note for
-   the fact-check; don't change the fact here. If you disagree with a note, leave it and
-   say why (the user can dismiss it in the portal).
-3. Check the social copy as above if a fix changes the framing or headline.
-4. Apply the musts, shoulds **and** coulds you accept in **one** revision; a could never gets
-   a revision of its own. Resolve them in that same `update_article` with `resolves[]`.
-   Then learn from the fixes (Ki loaded): `../../references/personality.md` §5 with this
-   `articleId`.
-5. Tell the user the next step is `/fact-check` in a **fresh** chat on this final
-   revision (re-running `/editorial-check` is optional; with the brand gate on, only open
-   musts block publishing).
-
-## Voice tuning
-
-When the user says things like "make Palantalk sound more combative" or "remember our
-brand never says 'folks'":
-
-1. Decide the **scope** and tell the user which you're editing:
-   - **Brand** voice applies to every series under the brand.
-   - **Series** voice applies to that series only and **overrides the brand** field by
-     field (do/don't rules and preferred terms are combined, series first).
-   If it's unclear which they mean, ask.
-2. `get_voice({ scope: "brand" | "series", id })` to read the current settings
-   and `canEdit`. If `canEdit` is false, explain that only the series host / brand owner
-   (or an admin) can change it, and stop.
-3. Map the request onto fields (see `references/voice-fields.md`) and show the proposed
-   change as before → after.
-4. On confirmation, `set_voice({ scope, id, ...changedFields })` — merge
-   semantics: send only changed keys; `null` clears a field. For list fields
-   (`doRules`, `dontRules`, `preferredTerms`, `tone`), send the full new list (existing
-   items + the addition).
-5. Confirm what changed and that it applies to future drafts for that scope.
-
-## Learned rules
-
-When the user asks what the system has learned, or wants to correct it:
-
-- `article_style_rules({ action: "list" })` — show rules grouped by status (candidate /
-  confirmed), each with its evidence count.
-- `article_style_rules({ action: "confirm", ruleId })` — the creator agrees; it becomes a
-  firm instruction.
-- `article_style_rules({ action: "dismiss", ruleId })` — wrong or unwanted; it stops
-  applying.
-- `reset` only on an explicit request, after confirming it wipes the learned memory.
-
-These rules are **personal** — they follow the creator across all brands and series.
-Brand/series voice is set separately (Voice tuning).
+Read `references/voice-and-rules.md` when the user asks to tune a brand or series voice ("make this series sound more X"), or asks what the system has learned about their writing, or to confirm, dismiss or reset a learned rule.
 
 ## Error handling
 

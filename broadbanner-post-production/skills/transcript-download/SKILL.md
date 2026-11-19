@@ -30,20 +30,13 @@ does not correct it, generate a review, or publish anything.
 > If you land on the editor standalone and the toolbar reads `Choose a section`, run
 > `../section-select/SKILL.md` first — it needs the same resolved `seriesTitle`.
 
-## Step 0 — Entitlement preflight (advisory)
+## Step 0 — Entitlement preflight (no call)
 
-This skill is declared `metadata.requiresTool: post_production_distribution`. Before any
-browser work, call `get_creator_context` and, if it returns a capability summary
-(`entitledTools` / `caps` / `tier` / `isAdmin`), confirm the caller holds the add-on
-(`post_production_distribution` ∈ `entitledTools`, or `isAdmin`). If those fields are
-present and the entitlement is absent, stop with the CTA below. If the context omits the
-fields (older connector), proceed — the downstream connector tools fail closed as the
-backstop. When invoked by the `post-production` orchestrator, this check has already run —
-don't repeat it.
-
-> ⚠️ Post-production is the **Production+** add-on (`post_production_distribution`, $5/mo).
-> Your account isn't entitled yet — add it from your member portal →
-> https://app.broadbanner.com/pricing/membership. Nothing was downloaded.
+Follow `../../references/preflight.md`: if this connector has the tools this skill uses,
+carry on; if not, stop with "⚠️ Post-production is part of the **Production+** add-on
+(`post_production_distribution`). Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was captured." Don't call
+`get_creator_context` just to check.
 
 ## Inputs
 

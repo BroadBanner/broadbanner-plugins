@@ -27,17 +27,13 @@ come **live** from `get_show_roster`. Those real names are merged into both pass
 guest who has never appeared before is still spelled and attributed correctly. The
 self-learning dictionary append is preserved for genuinely new recurring misspellings.
 
-## Step 0 — Entitlement preflight (advisory)
+## Step 0 — Entitlement preflight (no call)
 
-This skill is declared `metadata.requiresTool: post_production_distribution`. Call
-`get_creator_context`; if it returns a capability summary
-(`entitledTools` / `caps` / `isAdmin`), confirm the add-on is present (or `isAdmin`).
-If present-and-absent, stop with the CTA below; if the fields are omitted (older
-connector), proceed — the connector gate is the backstop. When invoked by the
-`post-production` orchestrator, this has already run — don't repeat it.
-
-> ⚠️ Post-production is the **Production+** add-on (`post_production_distribution`, $5/mo).
-> Your account isn't entitled yet — add it from https://app.broadbanner.com/pricing/membership.
+Follow `../../references/preflight.md`: if this connector has the tools this skill uses,
+carry on; if not, stop with "⚠️ Post-production is part of the **Production+** add-on
+(`post_production_distribution`). Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was corrected." Don't call
+`get_creator_context` just to check.
 
 ## Inputs
 

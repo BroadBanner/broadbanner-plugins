@@ -29,12 +29,13 @@ itself stays unfiled. This skill closes that gap.
 - **Section already correct** — the toolbar button already shows the resolved series
   title. Report it and move on.
 
-## Step 0 — Entitlement preflight (advisory)
+## Step 0 — Entitlement preflight (no call)
 
-Same as every skill in this plugin: call `get_creator_context` and confirm
-`post_production_distribution` ∈ `entitledTools` (or `isAdmin`) when the capability
-fields are present; stop with the membership CTA if absent. When invoked by the
-`post-production` orchestrator this has already run — don't repeat it.
+Follow `../../references/preflight.md`: if this connector has the tools this skill uses,
+carry on; if not, stop with "⚠️ Post-production is part of the **Production+** add-on
+(`post_production_distribution`). Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was changed." Don't call
+`get_creator_context` just to check.
 
 ## Inputs
 
@@ -44,8 +45,8 @@ fields are present; stop with the membership CTA if absent. When invoked by the
 | Resolved series context | Yes      | `{ seriesId, seriesTitle, brandId }`                     | From the orchestrator's Step 0 (`get_show_roster`). `seriesTitle` is the match key. |
 
 If invoked standalone with only a URL and a typed series name, run the orchestrator's
-Step 0 resolution first (`get_creator_context` → `get_show_roster` per series id →
-match the typed name to a `seriesTitle`). **Never** match the dropdown against the raw
+Step 0 resolution first (`writing_session` `scopes` → match the typed name to a series
+`title`). **Never** match the dropdown against the raw
 typed name — always against the connector's `seriesTitle`, which is what the Substack
 section is named after.
 

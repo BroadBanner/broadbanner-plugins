@@ -16,13 +16,13 @@ source post.
 The member provides **one or more published post links** and, optionally, a **series
 name**. When no series is given, the article is organized under the member's **brand**.
 
-## Step 0 — Entitlement preflight (advisory)
+## Step 0 — Entitlement preflight (no call)
 
-This is a Post-Production Distribution add-on skill. Before any work, call
-`get_creator_context` and, if it returns a capability summary indicating the member lacks
-the `post_production_distribution` add-on, stop and point them at
-`app.broadbanner.com/pricing/membership`. The `create_article` tool fails closed on the
-server as the backstop, so this check is advisory (a friendlier message, not the gate).
+Follow `../../references/preflight.md`: if this connector has the tools this skill uses,
+carry on; if not, stop with "⚠️ Backfilling articles is part of the **Production+** add-on
+(`post_production_distribution`). Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was imported." Don't call
+`get_creator_context` just to check.
 
 ## Inputs
 
@@ -40,16 +40,16 @@ into Substack in that browser so paywalled posts are readable.
 
 ## Step 1 — Resolve the destination (series or brand)
 
-Call `get_creator_context` — it returns `{ contributorId, brand, brands?, pods, ...series }`.
+Call `writing_session({ skill: "backfill-articles", include: ["scopes"] })` once → `scopes`
+(`series[]` with titles, `brands[]`, `defaultBrandId`). (Older connector: fall back to
+`get_creator_context` + `get_show_roster` per `pods` id.)
 
-- **A `seriesName` was given:** match it case-insensitively against the member's authorized
-  series. Use `get_show_roster({ seriesId })` for each `pods` id and match on
-  `roster.seriesTitle` (same resolution the `post-production` orchestrator uses). On a
-  match, capture `seriesId`. Ambiguous / no match → list the candidate series titles and
-  stop (don't guess).
-- **No `seriesName`:** organize under the **brand**. Use `get_creator_context.brand`. If the
-  member has multiple `brands` and it's unclear which, ask them to pick one; otherwise use
-  the single brand. Capture `brandId` (the short brand id, e.g. `sotsp` / `babm`).
+- **A `seriesName` was given:** match it case-insensitively against `scopes.series[].title`.
+  On a match, capture its `id` as `seriesId`. Ambiguous / no match → list the candidate
+  series titles and stop (don't guess).
+- **No `seriesName`:** organize under the **brand**: `scopes.defaultBrandId`, or the only
+  entry in `scopes.brands`. If the member has several brands and it's unclear which, ask
+  them to pick one. Capture `brandId` (the short brand id, e.g. `sotsp` / `babm`).
 
 Every article created in this run uses the SAME destination (one `seriesId` **or** one
 `brandId`, never both).

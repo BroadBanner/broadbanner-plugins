@@ -122,6 +122,12 @@ is a silent skip, never a reason to stop.
 Writer skills end by offering **both** checks, each in its **own fresh chat** (never the
 writer's chat, and not the same chat as each other):
 
+Give each hand-off as one copy-paste line with the **portal link** (it carries the article
+id), e.g. `/editorial-check https://app.broadbanner.com/app/articles/SLUG`. The checker
+passes that article's id straight to `writing_session` / `article_check_pack`, so no step
+searches `list_articles` to find the piece again (efficiency plan D3). The server tracks the
+revision: never ask the user for it.
+
 - **Mo (editorial check):** "Open a new chat and run `/editorial-check` with the draft
   link. It reads whether the piece works (point, structure, fairness, proportion,
   clarity, voice, reader) and files must/should/could notes in the portal."

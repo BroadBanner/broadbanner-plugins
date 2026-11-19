@@ -38,7 +38,7 @@ outputs forward as inputs. Each skill has its own `SKILL.md` — read that skill
 instructions when you reach its step.
 
 ```
-Step 0  Resolve the series (get_creator_context + get_show_roster)
+Step 0  Resolve the series (writing_session scopes → one get_show_roster)
 Step 1  section-select        → file the draft under the section named seriesTitle
 Step 2  transcript-download   → derive slug/title/date from the draft, download the .txt
 Step 3  transcript-correction → correct against the LIVE roster (get_show_roster)
@@ -48,47 +48,34 @@ Step 5  article-publish        → create_article → editable DRAFT in the port
 
 ## Step 0 — Entitlement preflight + series resolution
 
-This skill is declared `metadata.requiresTool: post_production_distribution`. Do Step 0a
-before any browser work.
+### Step 0a — Entitlement preflight (no call)
 
-### Step 0a — Entitlement preflight (advisory)
+Follow `../../references/preflight.md` before any browser work: if this connector has
+`writing_session` / `get_show_roster` / `create_article`, carry on; if not, stop with
+"⚠️ Post-production publishing is the **Production+** add-on
+(`post_production_distribution`). Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was generated or published."
 
-Call `get_creator_context`. If it returns a capability summary
-(`entitledTools` / `caps` / `tier` / `isAdmin`), confirm the caller holds the add-on:
-`post_production_distribution` ∈ `entitledTools` (or the equivalent
-`post_production:*` cap ∈ `caps`), or `isAdmin`. If those fields are present and none
-holds, **stop** with the CTA below before any browser work. If the context omits the
-fields (older connector), proceed — the connector's `get_show_roster` / `create_article`
-tools fail closed as the backstop.
+### Step 0b — Resolve the series from `seriesName` (two calls, not one per series)
 
-> ⚠️ Post-production publishing is the **Production+** add-on
-> (`post_production_distribution`, $5/mo). Your account isn't entitled yet — add it from
-> your member portal → https://app.broadbanner.com/pricing/membership. Nothing was
-> generated or published.
-
-### Step 0b — Resolve the series from `seriesName`
-
-`get_creator_context` returns `{ contributorId, substackHandle, brand, brands?, pods: [...] }`.
-`pods` is the list of series ids the creator is authorized for. Resolve the operator's
-typed `seriesName` to a single series **by matching against each series' live title**:
-
-1. For **each** series id in `pods`, call `get_show_roster({ seriesId })`. Collect the
-   returned `roster` objects — each carries `seriesId`, `seriesTitle`, `brandId`,
-   `primaryHost`, `hosts[]`, `guests[]`, and `effectiveArticleConfig`.
-2. Match `seriesName` against `roster.seriesTitle` **case-insensitively** (trim
+1. `writing_session({ skill: "post-production", include: ["scopes"] })` → `scopes.series[]`
+   (`id`, `title`, `brand_id`), every series this creator can file under, with titles.
+   (Older connector without it: fall back to `get_creator_context` + `get_show_roster` per
+   `pods` id.)
+2. Match `seriesName` against `scopes.series[].title` **case-insensitively** (trim
    whitespace; ignore surrounding punctuation). Prefer an exact case-insensitive equality;
    fall back to a unique containment match only if no exact match exists.
 3. **Resolution outcomes:**
-   - **Exactly one match** → that roster is the resolved series. Capture
-     `{ seriesId, seriesTitle, showId, brandId, primaryHost, hosts, guests, effectiveArticleConfig }`
-     and carry all of it forward. This is the single source of truth for the rest of the run.
-   - **No match** → **stop.** List the candidate series titles the creator hosts and ask
-     the operator to re-type the series name (or fix the spelling):
+   - **Exactly one match** → call `get_show_roster({ seriesId })` **once**, for that series.
+     Capture `{ seriesId, seriesTitle, showId, brandId, primaryHost, hosts, guests,
+     effectiveArticleConfig }` from its `roster` and carry all of it forward. This is the
+     single source of truth for the rest of the run.
+   - **No match** → **stop.** List the candidate series titles and ask the operator to
+     re-type the series name (or fix the spelling):
      ```
-     No series matches "<seriesName>". You host:
-       - <seriesTitle A>
-       - <seriesTitle B>
-       - …
+     No series matches "SERIES NAME". You host:
+       - Series title A
+       - Series title B
      Re-run with one of these series names.
      ```
    - **Ambiguous (2+ matches)** → **stop.** List the matching series titles and ask the
@@ -227,7 +214,7 @@ re-derive it from the draft's title (transcript-download Steps 1–2 and 4 only)
 
 - **Series not resolved (no/ambiguous match):** handled in Step 0b — list candidates and
   stop. Never guess a series.
-- **Entitlement absent:** Step 0a stops with the membership CTA before any work.
+- **Entitlement absent:** Step 0a stops with the membership CTA before any work (no tool call needed: the tools are missing).
 - **A connector tool returns an authorization error:** the session isn't entitled to
   `post_production_distribution` (or lacks a scheduling/creator role for this series).
   Stop and report — there is no direct-API fallback.

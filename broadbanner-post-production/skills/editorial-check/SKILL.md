@@ -41,15 +41,13 @@ without asking what you meant.
 - **Judge by the brand's voice, not your taste.** The voice profile, roles and exemplars
   in the pack are the standard for the voice lens.
 
-## Step 0 — Entitlement preflight (advisory)
+## Step 0 — Entitlement preflight (no call)
 
-Call `get_creator_context`. If it returns a capability summary and the
-`post_production_distribution` add-on is missing (and not `isAdmin`), stop with:
-
-> ⚠️ Editorial checks are part of the **Production+** add-on (`post_production_distribution`).
-> Add it from https://app.broadbanner.com/pricing/membership. Nothing was reviewed.
-
-If those fields are absent, proceed; the server's cap check is the backstop.
+Follow `../../references/preflight.md`: if this connector has the tools this skill uses,
+carry on; if not, stop with "⚠️ Editorial checks is part of the **Production+** add-on
+(`post_production_distribution`). Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was reviewed." Don't call
+`get_creator_context` just to check.
 
 ## Step 0.5 — Load personality (Mo)
 
@@ -72,9 +70,9 @@ the same job.
 | The user wants… | Go to |
 | --- | --- |
 | Notes on an article (portal link, id or title) | **Article review** (Steps 1–6) |
-| "Review everything waiting" / the nightly task | **Queue mode** (below) |
+| "Review everything waiting" / the nightly task | **Queue mode**: `references/queue-mode.md` |
 | "What did the editor say?" / resolve a note | `article_checks { action: "list", articleId, kind: "editorial" }` / `"resolve"` |
-| "Set up / remove the nightly checks" | `fact-check`'s **Nightly task** (one task runs both passes) |
+| "Set up / remove the nightly checks" | `fact-check`'s **Nightly task** (`fact-check/references/other-modes.md`; one task runs both passes) |
 | A fact question ("is this right?") | Point them to `/fact-check` in a fresh chat |
 
 Find the article id: a portal URL ends in `/app/articles/` then the id or slug; otherwise
@@ -197,16 +195,6 @@ Link the article (`https://app.broadbanner.com/app/articles/` + id) and tell the
 
 If a personality was loaded, name it once ("Edited by Mo (v1, default)").
 
-## Queue mode (nightly or "review everything waiting")
+## Queue mode
 
-1. `article_checks({ action: "queue", kind: "editorial", limit: 5 })`: drafts with an
-   editorial review requested in the portal.
-2. For each (at most 5 per run; the rest stay queued), run Step 0.5 with its `articleId`,
-   then Steps 1–5 with `mode: "requested"` if it has a request time, else `"scheduled"`.
-3. Unattended (scheduled task): **ask no questions**. If an article can't be reviewed
-   (missing, forbidden, repeated `bad_evidence`), note it and continue.
-4. Finish with one line per article: title, open musts, total notes.
-
-The fresh-chat rule is satisfied by construction: the scheduled task is its own session.
-The nightly `article-check-nightly` task (set up with `/fact-check`'s **Nightly task**)
-runs this editorial pass first, then the fact-check queue.
+Read `references/queue-mode.md` for "review everything waiting" and the nightly editorial pass.

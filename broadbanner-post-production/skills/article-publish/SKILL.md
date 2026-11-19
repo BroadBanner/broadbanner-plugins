@@ -16,18 +16,13 @@ post-production chain.
 commit, no GitHub PR, no Jekyll formatting, no `Pages/` write.** The review lands as a
 draft in `app.broadbanner.com/app/articles/…`, and the member owns the publish action.
 
-## Step 0 — Entitlement preflight (advisory)
+## Step 0 — Entitlement preflight (no call)
 
-This skill is declared `metadata.requiresTool: post_production_distribution`. Call
-`get_creator_context`; if it returns a capability summary
-(`entitledTools` / `caps` / `isAdmin`), confirm the add-on is present (or `isAdmin`),
-otherwise stop with the CTA. If the fields are omitted (older connector), proceed — the
-`create_article` tool fails closed as the backstop. When invoked by the `post-production`
-orchestrator, this has already run — don't repeat it.
-
-> ⚠️ Post-production is the **Production+** add-on (`post_production_distribution`, $5/mo).
-> Your account isn't entitled yet — add it from https://app.broadbanner.com/pricing/membership.
-> Nothing was published.
+Follow `../../references/preflight.md`: if this connector has the tools this skill uses,
+carry on; if not, stop with "⚠️ Post-production is part of the **Production+** add-on
+(`post_production_distribution`). Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was published." Don't call
+`get_creator_context` just to check.
 
 ## Inputs
 
