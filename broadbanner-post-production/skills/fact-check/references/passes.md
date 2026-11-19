@@ -94,6 +94,20 @@ counter-quote; an argument does need its strongest rebuttal acknowledged.
 - **Headline/dek:** says more than the body supports (major), or makes a claim no source
   supports (blocker).
 
+## Source or writer?
+
+Before adding `sourceFault` to a finding, ask: **would a careful writer, reading this
+story, have got it wrong too?**
+
+- Yes, because the story itself states the wrong figure, a quote the speaker never gave,
+  or a claim the record contradicts → `sourceFault` (`inaccurate`), with the story's own
+  words as evidence.
+- The story carries an attributed allegation and the writer dropped the attribution →
+  the writer's fault. No `sourceFault`.
+- The story was right when written and events moved on → freshness, not a fault.
+- An opinion column cited for a fact → the writer's fault, unless the outlet labels
+  opinion as news (`biased`).
+
 ## Calibration
 
 - If you would not bet that a finding is right, phrase it as a question in the summary

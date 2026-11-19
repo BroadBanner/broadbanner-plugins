@@ -29,6 +29,9 @@ without asking what you meant.
   the fact-check's job. When you doubt a fact, file a note with `lens: "proportion"` (or
   the lens it touches), severity **should**, that says "Flag for fact-check: …" and what
   made you doubt it. Never call it wrong, and never "fix" it with a different fact.
+- **Never rate sources.** No `news_source_feedback`, `sourceFault` or `sourceRatings`
+  (the server refuses them on editorial checks). Doubts about an outlet go in a "Flag for
+  fact-check" note; Bruce rates sources on evidence.
 - **Every note is anchored.** Each note carries `evidence.articleQuote`: text copied
   **verbatim** from the pack's paragraph (no paraphrase, no ellipsis joining two passages).
   The server verifies it against the revision and rejects the save if it isn't there.

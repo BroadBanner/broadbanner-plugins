@@ -192,6 +192,25 @@ choose the higher one for facts and the lower one for style.
 Do not file style nits unless the brand's standards call for them; the check is about
 truth and fairness.
 
+## Step 3b — Rate the sources
+
+Read `../../references/personality.md` §4 once. Then, on the same evidence, judge the
+**outlets** as well as the piece (Bruce or not):
+
+- A finding where the **cited story itself** is wrong (the official record or 2+ stronger
+  sources contradict it, it was retracted, or it presents opinion as news) gets
+  `"sourceFault": { "rating": "inaccurate|unreliable|biased|mediocre", "note": "…" }`.
+  Its `evidence` must quote that story (`storyId` + verbatim `quote`); the server rates
+  only quotes it verified. The finding still describes what the **writer** must fix.
+- When the writer misused a sound story, there is no `sourceFault`. The fault is the
+  writer's.
+- Cited outlets whose key claims you confirmed against the primary record go in
+  `sourceRatings: [{ storyId, rating: "reliable" | "useful", note }]` (cited sources only,
+  at most 10). Skip outlets you only skimmed.
+
+Ratings move the **author's** source scores at agent (half) weight; dismissing the
+finding reverses its rating, and re-checks of the same piece never stack.
+
 ## Step 4 — Resolve what earlier checks found
 
 For each `previousFindings` item: if this revision fixed it, add
@@ -200,7 +219,10 @@ counts toward the verdict). **Do not re-file** an open finding that still applie
 
 ## Step 5 — Save
 
-`article_check_save({ articleId, revision, summary, stats, model, findings, resolves, mode })`
+`article_check_save({ articleId, revision, summary, stats, model, findings, resolves, mode,
+personality, sourceRatings })`
+
+- `personality`: `"bruce"` when `get_persona` returned him; omit otherwise.
 
 - `summary`: 2–4 sentences: what you checked and the headline problems.
 - `stats`: `{ claims, supported, partial, unsupported, contradicted, uncited, quotes,
@@ -213,6 +235,9 @@ counts toward the verdict). **Do not re-file** an open finding that still applie
   can't quote evidence for it, downgrade it to a question in the summary.
 - `{ error: "stale_revision" }` → the piece changed; rebuild the pack, re-check the
   changed paragraphs, and save against the new revision.
+- `sourceFeedback[]` in the reply says what each rating did (`applied`, `duplicate`,
+  `capped`, `unknown_source`, `unverified`, `not_cited`). Only `applied` moved a score;
+  the rest are normal and need no retry.
 
 ## Step 6 — Report
 
@@ -225,7 +250,9 @@ counts toward the verdict). **Do not re-file** an open finding that still applie
    primary or secondary.
 4. **What can and can't be defended publicly**, in plain language.
 
-Then the portal and next-step lines below.
+Then one **Sources rated** line from `sourceFeedback` (applied ones only, e.g.
+"defensenews.com ↓ inaccurate; apnews.com ↑ reliable"), then the portal and next-step
+lines below.
 
 **Without Bruce**, lead with the verdict, then the blockers and majors (paragraph, problem, fix), then a
 one-line count of minors/nits. Link the article
@@ -235,7 +262,9 @@ one-line count of minors/nits. Link the article
 - To fix: go back to the **writer** chat (or edit in the portal) and ask it to "address
   the fact-check findings"; the writer resolves each one it fixes. Then run
   `/fact-check` again here to confirm.
-- A finding they disagree with can be **dismissed with a note**; that teaches the checker.
+- A finding they disagree with can be **dismissed with a note**; that teaches the checker
+  and reverses any source rating it caused.
+- If any source was rated, add the one **Sources rated** line.
 
 ## Script check (BroadNews `news_content`)
 

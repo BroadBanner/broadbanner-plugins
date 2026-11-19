@@ -126,3 +126,46 @@ findings: `article_checks({ action: "list", articleId, kind: "editorial" })`, re
 then resolve each fixed note with `article_checks({ action: "resolve", findingId,
 status: "fixed", revision, note })`. A note that says "Flag for fact-check" is left for
 the fact-check, not answered by changing the fact.
+
+## 4. Rating sources during a run
+
+Source scores rank what every later aggregation surfaces, so the personalities keep them
+honest as they work. Ratings apply **automatically** at agent (half) weight, are
+attributed to the personality, and show in the creator's source feedback timeline, where
+they can be confirmed (full weight) or dismissed (reversed). Rate without asking, in
+attended and unattended runs alike.
+
+**Who rates:** Ki (research and writing) and Bruce (fact-check). **Mo never rates
+sources**: Mo's notes are about the writer's text, not the outlets behind it. Without a
+personality loaded, the skills still rate as a plain agent (omit `personality`).
+
+**Rate the source only when the source is at fault, never the writer:**
+
+| Seen in the run | Rating |
+| --- | --- |
+| The story is contradicted by the official record (FPDS, FEC, court docket, Congress.gov, agency data) or by 2+ higher-scored outlets | `inaccurate` |
+| The story was retracted, or carries a correction that reverses its main claim | `inaccurate` |
+| The story presents opinion or advocacy as straight news (unattributed loaded claims, no other side) | `biased` |
+| Repeated thin sourcing: anonymous single source, no documents, details others couldn't confirm | `unreliable` |
+| Paywalled or empty every time in this run, so nothing can be cited | `mediocre` |
+| Its key claims checked out against the primary record | `reliable` |
+| Accurate and used, nothing notable | `useful` (or let normal use scoring handle it) |
+
+Do **not** rate when the writer misquoted, overstated or mis-cited a sound story; when
+the story was simply older than later coverage; when you only suspect a problem; or
+when the outlet's politics differ from the piece's. One rating per outlet per run; the
+server ignores repeats (same direction within 24h, or the same `runKey`), caps a run at
+10 and a day at 40, and never adds outlets. A `{ skipped: true }` reply is normal: carry on.
+
+**How:**
+- Fact-check (Bruce): put `sourceFault: { rating, note }` on the finding that proves it
+  (its evidence must quote the faulty story), and list confirmed outlets in
+  `sourceRatings`; pass `personality`. See the fact-check skill, Step 3b.
+- Everywhere else (Ki): `news_source_feedback({ domain, rating, origin: "agent",
+  personality: "ki", note, storyUrl, storyTitle, runKey })`. The `note` says what you
+  compared it against, in one sentence. `runKey` is one value per run, e.g.
+  `aggregate:<keywords>:<YYYY-MM-DD>` or `prompt:<promptId>:<YYYY-MM-DD>`.
+
+**Report** the ratings in one line at the end ("Rated: defensenews.com inaccurate (FPDS
+contradicts the obligated figure); apnews.com reliable"). Unattended runs put that line
+in the run summary.
