@@ -29,23 +29,9 @@ All data access goes through these tools — there is no `curl`, no `API_BASE`, 
 - The BroadBanner MCP connector (server `broadbanner`) must be connected and the caller must be authorized to schedule these shows: either a **host of the series** (a creator with the Creator Workspace entitlement → `shows:self-write`) or a **brand-admin/super-admin**. The scheduling tools fail closed otherwise (you'll get an authorization error). No token file, config, or workspace mount is required.
 - D1 must contain shows with `hasLiveScheduled === "title_customized"` — surfaced by `list_schedulable_shows` in Step 0.
 
-## Tool reliability guide
+## Tool reliability and technical notes
 
-Browser extensions can intermittently block certain Chrome MCP tools. The following tools are **always reliable** and should be preferred:
-
-| Tool               | Reliability    | Use for                                                      |
-| ------------------ | -------------- | ------------------------------------------------------------ |
-| `read_page`        | Always works   | Verifying state, reading element refs, capturing credentials |
-| `find`             | Always works   | Locating elements by description                             |
-| `form_input`       | Always works   | Setting text inputs, datetime-local inputs, select dropdowns |
-| `navigate`         | Always works   | Page navigation                                              |
-| `tabs_context_mcp` | Always works   | Getting tab IDs                                              |
-| `scroll_to`        | Always works   | Scrolling elements into view                                 |
-| `screenshot`       | Can be blocked | Visual verification (use `read_page` as fallback)            |
-| `left_click`       | Can be blocked | Clicking buttons (ask user to click as fallback)             |
-| `javascript_tool`  | Can be blocked | DOM manipulation (use `form_input` instead)                  |
-
-**Strategy:** Use `find` + `form_input` for all data entry. Use `read_page` for verification instead of `screenshot`. Only use `screenshot`/`left_click` when the reliable tools cannot accomplish the task. If blocked, ask the user to perform the click.
+Read `references/technical-notes.md` if a browser tool misbehaves (which tool to use for which step) or for the background on the modal, stream keys and write-back.
 
 ## Timezone handling (CRITICAL — read before Step 4)
 
@@ -105,20 +91,15 @@ When you report the show list to the user (Step 0) and the final summary (Step 1
 
 ## Step-by-step workflow
 
-### Step 0 preflight: Entitlement/authority check (advisory)
+### Step 0 preflight: Entitlement/authority check (no call)
 
-This skill is declared `metadata.requiresTool: creator_workspace` (Creator+ live
-scheduling). Before any browser work, call `get_creator_context` and, if it returns a
-capability summary (`caps` / `entitledTools` / `isAdmin` / `tier`), confirm the caller can
-schedule: either the live-scheduling cap is present (`shows:self-write` — a creator with the
-**Creator Workspace** who hosts the series — or admin `shows:write`) **or** `isAdmin`
-(brand/super admin). If those fields are present and none holds, stop **before** any browser
-work with the CTA below. If the context omits the fields (older connector), proceed — the
-scheduling tools (`list_schedulable_shows` etc.) fail closed as the backstop.
-
-> ⚠️ Live scheduling needs the **Creator Workspace** (`creator_workspace`, Creator+) and you
-> must host the series — or a brand/super-admin role. Your account isn't authorized yet — add
-> it from your member portal → https://app.broadbanner.com/pricing/membership. Nothing was scheduled.
+If this connector has `list_schedulable_shows`, carry on: it is registered only for a
+caller who can schedule (a Creator Workspace host of the series, or a brand/super admin).
+If it is missing, or a scheduling tool returns 403, stop before any browser work with:
+"⚠️ Live scheduling needs the **Creator Workspace** (`creator_workspace`, Creator+) and you
+must host the series, or a brand/super-admin role. Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was scheduled." Don't call
+`get_creator_context` just to check: it doesn't return entitlement fields.
 
 ### Step 0: Fetch show data and run the freshness gate
 
@@ -521,12 +502,6 @@ For each invite returned by the API:
 
 Store the full mapping keyed by `handle` (the Substack username without `@`) for use in Step 8.
 
-#### 7d: Close the invite tab
-
-After the API call completes, close the tab opened in 7a via `tabs_close_mcp`. Retain the invite mapping in memory for the write calls in Step 8b.
-
-If the API call fails (network error or non-200 response), log a warning and **skip ALL junction writes in Step 8b** for this show — do not overwrite stored `cohost_invite_url` values in D1 with `null` just because this run couldn't reach the Substack API. The write tool is partial-update by design, so not calling it for a cohost preserves whatever D1 already has. Continue with Step 8a (the show's managed-field write) regardless — the cohost-invite scrape is separable from the show-level write.
-
 ### Step 8: Write results back to D1 (via the connector)
 
 D1 is the system of record for managed fields. This step has TWO parts — one call for the show's managed columns (`set_show_schedule`), then one call per cohost for the invite-link junctions (`set_show_cohost_invite`). Both tools proxy to the Data Worker server-side and stamp the actor for you.
@@ -598,7 +573,7 @@ This prevents stale tabs from accumulating — each show opens a fresh tab (Step
 
 If there are additional shows with `hasLiveScheduled === "title_customized"`:
 
-1. Check if the next show uses a **different `substackLiveUrl`** (different publication). If so, the user may need to switch Substack accounts. Alert the user and wait for confirmation before proceeding.
+1. A next show on a **different `substackLiveUrl`** (another publication) needs no pause: the one connected Chrome profile is used for every publication. If that publication's page shows you're not signed in, skip that show and list it in the report (unattended runs must never wait for confirmation).
 
 2. Create a **new tab** and navigate to the next show's `substackLiveUrl`. Do not reuse tabs — the modal state may not reset cleanly.
 
@@ -641,60 +616,8 @@ browser-automation failures (e.g. modal didn't open) and write failures (e.g. to
 
 ## Error handling
 
-- **Pre-check page fails to load:** If the `/publish/live-videos/scheduled` page doesn't load (network error, login redirect), log a warning and proceed with scheduling anyway — the pre-check is a safety net, not a hard gate.
-- **Pre-check finds ambiguous match:** If the page shows a live with a similar but not exact title, report both titles to the user and ask whether to skip or proceed.
-- **Not logged in:** Stop and tell the user to log in to the correct Substack publication.
-- **Wrong publication:** If the modal shows a different publication than expected, alert the user. They may need to switch accounts.
-- **Modal doesn't appear:** The `?action=setup-live-stream` URL parameter should trigger it automatically. If not, look for a "Go live" or "Live video" option in the Substack publisher dashboard.
-- **Extension blocks tools:** `screenshot`, `left_click`, and `javascript_tool` can be blocked by Chrome extensions. Use `read_page` for verification, `form_input` for data entry, and ask the user to click buttons when `left_click` fails.
-- **Co-host not found:** Skip the person, note the failure, and continue with remaining co-hosts. Do not block the entire scheduling process for one missing co-host.
-- **Co-host checkbox can't be clicked:** The checkbox is a `<button>`, not `<input>`. If `left_click` is blocked, ask the user to check it manually.
-- **Date/time input rejected:** Substack may enforce minimum scheduling windows (e.g., must be at least 1 hour in the future). If the date is rejected, alert the user with the scheduled time and ask for guidance.
-- **Stream credentials not displayed:** Use `read_page` to find the credentials. They are in textbox elements in the second dialog. If truly not present, report the failure — the user can retrieve credentials manually from the Substack dashboard.
-- **Invites API returns non-200 or fails:** Log a warning, **skip ALL invite junction writes for this show** (do NOT overwrite stored values with null on API failure), and continue. The user can retrieve invite links manually from the Substack dashboard at `{substackBaseUrl}/publish/home?action=setup-live-stream&stream_id={streamId}` — the "Co-host status" section in that modal displays each cohost's invite status and a "Copy invite link" button.
-- **Cohost already accepted (`status === "accepted"`):** Call `set_show_cohost_invite` with `cohostInviteUrl: null` for that junction — they're confirmed and no invite link is needed.
-- **Cohost in show but not found in invites API response:** Skip the write for this cohost entirely. Not calling the tool preserves any prior value in D1.
-- **`substackUsername` is null on a cohost:** Fall back to case-insensitive name matching against `invitedUser.name` from the API. If still no match, skip the write for this cohost.
-- **Multiple shows on same publication:** Process sequentially. Create a new tab for each show — the URL triggers a fresh modal each time.
-- **A `set_show_schedule` / `set_show_cohost_invite` call errors transiently (`5xx`/network):** Retry the tool call (up to 3×, brief backoff — 500 ms → 1 s → 2 s). After retries exhaust, report the failure for this show and continue to the next show — don't abort the whole run.
-- **A tool returns an authorization error:** The connector session isn't authorized to schedule this show — you must **host the series** (a creator with the Creator Workspace entitlement) or hold a brand-admin/super-admin role. A `forbidden_not_host` on a cohost-invite write means you don't host that show. Stop the run and tell the user; there is no fallback path.
-- **A tool returns a request-shape error (`invalid_field`, or `not_found` on the show):** Fail loud for this show with the message. Do NOT retry — a 4xx-class error indicates a bad request or a missing show in D1, neither of which retry can fix. Continue to the next show.
-- **`set_show_cohost_invite` reports the junction row missing (`not_found`):** The junction doesn't exist in D1 yet — likely a contributor just added to Wix's `hosts[]`/`guests[]` that the reconcile cron hasn't picked up. Log a warning, skip this cohost's invite write, and continue. The next reconcile cycle creates the junction; a re-run of this skill will then succeed.
-- **The connector or its data plane is unreachable:** Stop the run and tell the user. There is no direct-API bypass — this skill talks only to the connector tools.
+Read `references/error-handling.md` when a step fails (modal not found, cohost search empty, stream key missing, write-back errors, wrong publication).
 
-## Key technical notes
+## Re-titling after a title change
 
-- **Do NOT resize the window to 1200×900.** The user has set a narrower window (~650×900) that keeps the entire modal visible without internal scrolling. Do not override their window size.
-- **The `substackLiveUrl` includes `?action=setup-live-stream`** which should auto-open the scheduling modal on page load.
-- **Date/time input is `type="datetime-local"`** — set it via `form_input` with ISO format `YYYY-MM-DDTHH:MM`. Do NOT use the calendar picker or formatted date strings. The value MUST be in the **browser's timezone** (`BROWSER_TZ`, resolved per the "Timezone handling" recipe) — compute it from `scheduledStart` by passing the zone explicitly to `Intl.DateTimeFormat`, never via the shell's ambient `TZ`/`getHours()` (the sandbox shell is often UTC). Never feed `scheduledStartLocal` directly; it's in the show's stored TZ.
-- **Set the date/time LAST** in the modal to avoid extension interference after the datetime-local input is modified.
-- **The primary host comes from `show.primaryHost`** — resolved from Import2's `primaryHostName` reference via ContributorProfiles → Affiliates name matching. Select them in the "The person going live is..." `<select>` dropdown. They are already excluded from the `hosts` array by the poller.
-- **The `substackUsername` field** is pre-extracted and normalized by the Data Worker reconcile cron (no `@` prefix, no whitespace) when it mirrors Wix into D1, and is served on the read side. Use it directly for co-host search.
-- **Co-hosts must have Substack accounts with the app installed.** If a co-host doesn't appear in search results, they may not have installed the Substack app — note this in the failure report.
-- **Process shows grouped by publication** to minimize account-switching. Sort ready shows by `substackLiveUrl` before processing.
-- **The "Invite co-hosts" toggle changes the main button** from "Generate stream key" / "Schedule stream" to "Continue".
-- **Substack renders TWO dialog elements.** The first contains the main modal, the second contains the co-host / credentials modal. Always scope `read_page` to the correct dialog ref.
-- **Always create a new tab** for each show. Do not reuse tabs — modal state and extension interference can carry over.
-- **Single browser profile.** This is production-support scheduling run from whatever Chrome profile is connected; there is no per-show profile routing. The operator can schedule for themselves and for other primary hosts across publications in that one profile.
-
-## Re-titling a scheduled live after a title change (PLANNED — not yet automated)
-
-> **Status: documented, not implemented.** No code path below is wired yet — this
-> section records the intended flow so it's ready to build. Do not attempt to
-> auto-run it.
-
-When a show's title changes in BroadBanner **after** its Substack live was already
-scheduled, the scheduled live keeps the **old** title. The analogous fix to the Restream
-skill's "Re-titling a scheduled show" flow would be:
-
-1. Detect the drift the same way — the show's current `showTitle` differs from the title
-   captured when the live was scheduled (surface it, or act when the user asks).
-2. Re-open the show's already-scheduled Substack live (the "Go live with stream key"
-   surface / scheduled-event editor for that `substackLiveUrl`).
-3. Update **only** the title (and description) to the current `showTitle` / `showSummary`,
-   without regenerating the stream key or touching the schedule / co-host invites.
-4. Leave D1 state alone — the title lives in BroadBanner; nothing Substack-side needs a
-   writeback for a title-only edit.
-
-Until this is built, a title change after Substack scheduling must be fixed by hand in
-the Substack UI.
+Not automated yet; see `references/retitling-planned.md`.

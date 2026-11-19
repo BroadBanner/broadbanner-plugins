@@ -106,13 +106,11 @@ target the existing JSON in the real host `Social-Distribution/` directory. If
 the mount is unavailable and cannot be requested non-interactively, stop and
 tell the user the tracker cannot be updated.
 
-Also load `broadbanner.config.json` from the project root and capture
-`SUBSTACK_HANDLE` = `user.handle` — the Substack Notes profile to post from (same
-resolution as `substack-note`). This is the user/personal Notes handle that fronts
-the publication, which may differ from the publication subdomain. If `user.handle`
-is absent, ask once for the handle. (There is **no** `chromeProfiles` block to read —
-this skill runs on the single connected Chrome profile; see "Single browser profile"
-in Key technical notes.)
+Get `SUBSTACK_HANDLE` from the connector: `get_creator_context` → `substackHandle` (pass
+`brand` when the clip belongs to a specific brand). That's the Substack Notes profile to
+post from, same as `substack-note`. Don't read `broadbanner.config.json` (retired). If no
+handle comes back, ask once. (There is **no** `chromeProfiles` block: this skill runs on
+the single connected Chrome profile; see "Single browser profile" in Key technical notes.)
 
 ### Step 1: Validate inputs
 
@@ -156,8 +154,9 @@ ProseMirror dialog opened (modal verification snippet in
 
 ### Step 4: Enter the note text
 
-Same as `substack-note` Step 4: click into the editor, then `type` the text.
-Verify `editorText` is populated. Do NOT click Post yet.
+Same as `substack-note` Step 4: insert the text with its **JS `execCommand("insertText")`
+snippet**, not the `type` action (typing into ProseMirror fails about half the time).
+Verify `editorText` is non-empty. Do NOT click Post yet.
 
 ### Step 5: Inject the video from R2
 

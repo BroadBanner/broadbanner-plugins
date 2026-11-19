@@ -68,22 +68,14 @@ if a post is in the list, it is due to go out now.
 Call **`get_creator_context`** → `{ substackHandle, brand, brands, pods, ... }`. You need
 `substackHandle` (e.g. `nickparo`) — that's the Substack account these notes post to.
 
-**Entitlement preflight (advisory).** This skill is declared
-`metadata.requiresTool: banner_blast`. If the context returns a capability summary
-(`entitledTools` / `caps`), and `banner_blast` is **present-and-absent** (the field
-exists but the entitlement isn't there), **do not open a browser** — exit quietly with
-a one-line "skipped: account not entitled for `banner_blast`" report (this is unattended;
-never prompt). If the fields are omitted (older connector), proceed — the server-side cap
-check is the backstop.
+**Entitlement (no extra check).** The list / mark tools are registered only for Core
+(`banner_blast`) accounts. If they're missing, or return 403, exit quietly with a one-line
+"skipped: account not entitled for `banner_blast`" report (unattended; never prompt).
 
-Substack posting is browser automation in a logged-in browser. **That browser can be
-local or remote:** this skill runs the same way on desktop Cowork (your Chrome via Claude
-in Chrome) and in a **remote/cloud Cowork environment** (that environment's own
-browser). It needs no local files, config, or downloads — the connector supplies the data
-and media is fetched in-page — so it never cares which machine it's on. Use the **one**
-browser the environment provides — no profile map, no enumeration, no `select_browser`
-routing. (Tool names below are Claude in Chrome's; use the equivalent tab/navigation
-tools if the environment names them differently.)
+Substack posting is browser automation in the one logged-in Chrome profile, so this skill
+runs **locally** (cloud sessions have no browser). It needs no local files, config or
+downloads: the connector supplies the data and media is fetched in-page. No profile map,
+no enumeration, no `select_browser` routing.
 
 1. If **no** browser is available → **stop and report** (no browser to drive).
 2. Use the single connected browser. Open a **dedicated MCP working tab** with

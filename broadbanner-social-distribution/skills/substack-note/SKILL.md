@@ -49,17 +49,10 @@ handle; posting under the wrong account is a public mistake.
 There is no `USER_ID`, no cap-token, and no Chrome-profile config to load — the connector
 asserts identity, and the skill runs on the single connected Chrome profile (Step 1.5).
 
-**Entitlement preflight (advisory).** This skill is declared
-`metadata.requiresTool: banner_blast`. If `get_creator_context` returns a capability
-summary (`entitledTools` / `caps` / `tier`), confirm `banner_blast` ∈ `entitledTools`
-(or `creators:write` ∈ `caps`). If those fields are **present and the entitlement is
-absent**, stop **before** any browser/queue work with the CTA below and do nothing
-else. If the context response **omits** these fields (older connector), proceed — the
-server-side cap check on `post_text` / `post_image` is the backstop.
-
-> ⚠️ Posting to Substack needs the **Core** plan (`banner_blast`). Your account isn't
-> entitled yet — add it from your member portal →
-> https://app.broadbanner.com/pricing/membership. Nothing was posted.
+**Entitlement (no extra check).** `post_text` / `post_image` are registered only for Core
+(`banner_blast`) accounts. If they're missing, or return 403, stop before any browser work
+with: "⚠️ Posting to Substack needs the **Core** plan (`banner_blast`). Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was posted."
 
 ---
 
@@ -387,22 +380,6 @@ Login prompt visible instead of profile → stop, tell the user to log in manual
 1. Wait 1 second, re-check (up to 3 times).
 2. ProseMirror's button state is async — the content model may not have synced.
 3. If still disabled after 3 checks, cancel modal, check profile, retry fresh.
-
----
-
-## Turn budget
-
-A clean text note run should complete in **25–35 assistant turns**:
-
-| Phase             | Target turns | Notes                                                          |
-| ----------------- | ------------ | -------------------------------------------------------------- |
-| Setup + identity  | 1–2          | `get_creator_context` — one tool call, no files               |
-| Browser posting   | 8–12         | Navigate + baseline, open composer, JS insert, JS post        |
-| Verification      | 2–4          | Reload + JS check on same page                                 |
-| Queue cross-posts | 1–2          | One `post_text` tool call (`substackPosted: true`)            |
-| Cleanup + report  | 2–3          | Close tabs, format report                                      |
-
-If a run exceeds 50 turns, something went wrong. Surface which phase ballooned.
 
 ---
 
