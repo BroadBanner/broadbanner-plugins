@@ -55,15 +55,15 @@ signing. These tools carry this plugin:
 | `get_transcript`      | `({ transcriptId? \| seriesId + episodeSlug, version?, offset?, limit? })` → `{ transcript, version, text, totalChars, nextOffset }` — paged by character offset. |
 | `get_writing_context` | `({ seriesId? \| brandId? \| showId?, promptId?, form?, keywords?, exemplars?, kinds?, exemplarsPerKind?, relatedLimit? })` → `{ scope, articleConfig, voice: { series, brand, effective }, writingStyle, profile, rules, exemplars, relatedArticles, transcripts, instructions, roles }`. `roles` (brand → series) go at instruction-stack slot 1. Call before drafting any article; follow every `instructions` entry in order. |
 | `search_archive`      | `({ seriesId? \| brandId?, query, limit? })` → `[{ kind: "article" \| "transcript", id, slug?, title, date, seriesId, snippet }]` — FTS over published articles and transcripts in scope. |
-| `list_articles` / `get_article` | The creator's own articles; one article (incl. `bodyMd`) by slug. |
+| `list_articles` / `get_article` | The creator's own articles (slim rows, `q` title search, default 20); one article (incl. `bodyMd`) by slug. |
 | `list_article_revisions` | `({ id })` → revision history (revision, source AI/You/Imported/Restored, title, wordCount, status, note, createdAt). |
 | `update_article`      | `({ id, title?, subtitle?, bodyMd?, form?, tags?, revisionNote? })` — revise a draft as the agent (`editSource: "ai"`). **Cannot change status.** |
 | `get_voice` / `set_voice` | `({ scope: "brand" \| "series", id, ...fields })` — read (with `canEdit`) or merge-update a brand/series voice profile. Series overrides brand field by field. |
 | `article_style_rules` | `({ action: "list" \| "confirm" \| "dismiss" \| "reset", ruleId? })` — the creator's personal learned rules. |
 | `article_check_pack`  | `({ articleId, kind?, maxCharsPerSource? })` → `{ pack }` — the fact-check evidence pack (`kind: "fact"`, default) or the editorial pack (`kind: "editorial"`: paragraphs, voice, roles, exemplars, open editorial notes; no source evidence); `target.revision` goes back on save. |
 | `article_check_save`  | `({ articleId, kind?, revision, summary, findings[], resolves?, stats?, model?, mode? })` → `{ ok, check: { id, verdict }, status }` or `{ error: bad_evidence \| stale_revision }` to fix and retry. Editorial findings send `lens` + `severity: must \| should \| could` + `evidence.articleQuote` + `suggestion` (server maps must→blocker, should→major, could→minor). |
-| `article_checks`      | `({ action: list \| queue \| resolve, kind?, articleId?, findingId?, status?, note?, revision? })` — status (`statusByKind: { fact, editorial }`) + findings; drafts awaiting a check of that kind; resolve a finding or note (dismiss/accept need a note). |
-| `get_persona`         | `({ skill, seriesId? \| brandId?, promptId?, articleId?, personality? })` → `{ available: false }` \| `{ available: true, personality: null }` \| `{ available: true, personality, name, version, resolvedFrom, core, layers[], lessons[], memory[], hardRulesNotice }`. Step 0.5 of the writer skills and fact-check; skipped silently without the AI personalities add-on. |
+| `article_checks`      | `({ action: list \| queue \| resolve, kind?, view?: open \| all, articleId?, findingId?, status?, note?, revision? })` — status (`statusByKind: { fact, editorial }`) + findings; drafts awaiting a check of that kind; resolve a finding or note (dismiss/accept need a note). |
+| `get_persona`         | `({ skill, seriesId? \| brandId?, promptId?, articleId?, personality? })` → `{ available: false }` \| `{ available: true, personality: null }` \| `{ available: true, personality, name, version, resolvedFrom, core, layers[], lessons[], memory[], hardRulesNotice }`. Step 0.5 of the writer skills and fact-check; skipped silently without the Writing team add-on. |
 | `personality_memory`  | `({ action: list \| remember \| forget, personality, text?, memoryId? })` — what a personality remembers about this person. |
 
 `create_article` also takes `origin` (`ai` default · `import` for backfill) and `form`
@@ -113,11 +113,11 @@ articles and imported posts are learned from too. Brand/series flavour comes fro
 explicit voice settings (`get_voice` / `set_voice`, or the Voice panel in the portal);
 learned memory stays per person. See `Documentation/engineering/WRITING-STUDIO-DESIGN.md`.
 
-## AI personalities and Roles
+## Writing team (Ki, Bruce, Mo) and Roles
 
 `references/personality.md` is shared by the skills. **Roles** (who is writing, from what
 vantage) come back in `get_writing_context.roles` and sit at slot 1 of the instruction
-stack for every user. With the **AI personalities** add-on, `article-write` and
+stack for every user. With the **Writing team** add-on, `article-write` and
 `episode-review` load **Ki**, `fact-check` loads **Bruce** and `editorial-check` loads
 **Mo** at Step 0.5 via
 `get_persona` (core → layers → lessons first, personal memory in the personal slot). The

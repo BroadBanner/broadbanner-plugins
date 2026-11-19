@@ -78,7 +78,7 @@ the same job.
 | A fact question ("is this right?") | Point them to `/fact-check` in a fresh chat |
 
 Find the article id: a portal URL ends in `/app/articles/` then the id or slug; otherwise
-`list_articles` and match the title (ask if several match). `get_article({ slug })`
+`list_articles({ q: "<words from the title>" })` and match the title (ask if several match). `get_article({ slug })`
 returns the id.
 
 ## Step 1 — Build the editorial pack

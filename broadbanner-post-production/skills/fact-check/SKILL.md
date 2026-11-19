@@ -103,7 +103,7 @@ receives a writer's Role or Ki/Mo layers (ignore any that a writing context retu
 | "What did the check find?" / resolve a finding | `article_checks { action: "list" }` / `"resolve"` |
 
 Find the article id: a portal URL ends in `/app/articles/` then the id or slug; otherwise
-`list_articles` and match the title (ask if several match). `get_article({ slug })`
+`list_articles({ q: "<words from the title>" })` and match the title (ask if several match). `get_article({ slug })`
 returns the id.
 
 ## Step 1 — Build the evidence pack

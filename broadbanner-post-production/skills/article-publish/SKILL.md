@@ -153,7 +153,7 @@ Add the hand-off to both independent checks (`../../references/personality.md` �
 editor notes (Mo), revise, then open **another new chat** and run `/fact-check` on the
 final revision: it verifies quotes against the transcript and every claim against its
 source (Bruce). Order: editorial check → revise → fact-check → fix → publish (Mo and
-Bruce run them if you have AI personalities)." Never run either check in this chat.
+Bruce run them if you have the Writing team add-on)." Never run either check in this chat.
 
 ## Error handling
 

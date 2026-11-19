@@ -38,7 +38,7 @@ get_persona({
   skill, or the user said "without").
 
 Only mention a skip when the user explicitly asked for a personality ("with Bruce") and
-didn't get one: say why in one line (the `reason`, or "AI personalities is an add-on").
+didn't get one: say why in one line (the `reason`, or "Writing team is an add-on").
 
 ### One-run overrides
 
@@ -119,7 +119,7 @@ writer's chat, and not the same chat as each other):
 Explain the order in one line: **editorial check → revise → fact-check on the final
 revision → fix → publish.** Editorial notes rewrite text, which makes an earlier
 fact-check stale; a later fact fix does not need another editorial pass. Add "(Mo and
-Bruce run them if you have AI personalities)".
+Bruce run them if you have the Writing team add-on)".
 
 Back in the writer chat, "address the editorial notes" works like fixing fact-check
 findings: `article_checks({ action: "list", articleId, kind: "editorial" })`, revise,

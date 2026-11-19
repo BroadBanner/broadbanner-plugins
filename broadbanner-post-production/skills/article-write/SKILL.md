@@ -233,7 +233,7 @@ its own **new chat**:
   sources."
 
 Say the order: **editorial check → revise here → fact-check on the final revision → fix →
-publish** (Mo and Bruce run them if you have AI personalities). Do not run either check
+publish** (Mo and Bruce run them if you have the Writing team add-on). Do not run either check
 in this chat: a checker must not share the writer's context.
 
 ## Revise mode
@@ -241,7 +241,8 @@ in this chat: a checker must not share the writer's context.
 When the user asks for changes to a draft (this run's, or an existing one):
 
 1. Identify the article: from this session's `create_article` result, or
-   `list_articles` → match by title, then `get_article({ slug })` for the current body.
+   `list_articles({ q: "<words from the title>" })` → match, then `get_article({ slug })` for
+   the current body. Always pass `q`; never list the whole archive to find one piece.
 2. To show history or compare, call `list_article_revisions({ id })` and summarize
    (revision number, source AI/You/Imported/Restored, time, word count, note). If the
    creator has edited it since your draft, **build on their latest text** — never
@@ -257,8 +258,9 @@ When the user asks for changes to a draft (this run's, or an existing one):
 
 When the user asks to "address the fact-check" (or a draft has an open check):
 
-1. `article_checks({ action: "list", articleId })`: read `status` and the newest check's
-   **open** findings (paragraph, claim, evidence, suggestion).
+1. `article_checks({ action: "list", articleId, kind: "fact", view: "open" })`: the status,
+   the newest check, and only the **open** findings (paragraph, claim, evidence,
+   suggestion). Use `view: "all"` only to show history.
 2. Fix each one in the text, using the finding's evidence; never add a new fact without a
    source. If you disagree with a finding, leave the text and tell the user why; they can
    dismiss it with a note in the portal.
@@ -269,24 +271,30 @@ When the user asks to "address the fact-check" (or a draft has an open check):
    `update_article({ id, socialCopy, revisionNote })`, keeping every platform key and its
    shape (a string, or `{ text }`). Never tell the user to fix social copy in the editor
    when you can do it here.
-4. Save the revision, then mark each finding you fixed:
+4. Fix **every** open finding in **one** revision (one `update_article`), not one revision
+   per finding. Then mark each finding you fixed:
    `article_checks({ action: "resolve", findingId, status: "fixed", revision, note })`.
-5. Tell the user to run `/fact-check` again in the **checker** chat to confirm. Say
+5. **Series parts.** If the article is one part of a series and a fix changes a shared fact,
+   claim, scorecard row or attribution, find the sibling parts
+   (`list_articles({ seriesId })`), apply the same fix to each in this session, and tell
+   the user which parts you changed.
+6. Tell the user to run `/fact-check` again in the **checker** chat to confirm. Say
    which blurbs you changed, if any.
 
 ### Addressing editorial notes
 
 When the user asks to "address the editorial notes" (or "Mo's notes"):
 
-1. `article_checks({ action: "list", articleId, kind: "editorial" })`: read the newest
-   editorial check's **open** notes (paragraph, lens, must/should/could, articleQuote,
-   suggestion). Do the musts first.
+1. `article_checks({ action: "list", articleId, kind: "editorial", view: "open" })`: the
+   newest editorial check's **open** notes (paragraph, lens, must/should/could,
+   articleQuote, suggestion). Do the musts first.
 2. Revise the text (Revise mode). The suggestion is a direction, not a script: keep the
    voice. Never add a new fact to satisfy a note. Leave a "Flag for fact-check" note for
    the fact-check; don't change the fact here. If you disagree with a note, leave it and
    say why (the user can dismiss it in the portal).
 3. Check the social copy as above if a fix changes the framing or headline.
-4. Save the revision, then resolve each fixed note:
+4. Apply the musts, shoulds **and** coulds you accept in **one** revision; a could never gets
+   a revision of its own. Then resolve each fixed note:
    `article_checks({ action: "resolve", findingId, status: "fixed", revision, note })`.
 5. Tell the user the next step is `/fact-check` in a **fresh** chat on this final
    revision (re-running `/editorial-check` is optional; with the brand gate on, only open
