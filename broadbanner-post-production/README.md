@@ -65,6 +65,7 @@ signing. These tools carry this plugin:
 | `article_checks`      | `({ action: list \| queue \| resolve, kind?, view?: open \| all, articleId?, findingId?, status?, note?, revision? })` — status (`statusByKind: { fact, editorial }`) + findings; drafts awaiting a check of that kind; resolve a finding or note (dismiss/accept need a note). |
 | `get_persona`         | `({ skill, seriesId? \| brandId?, promptId?, articleId?, personality? })` → `{ available: false }` \| `{ available: true, personality: null }` \| `{ available: true, personality, name, version, resolvedFrom, core, layers[], lessons[], memory[], hardRulesNotice }`. Step 0.5 of the writer skills and fact-check; skipped silently without the Writing team add-on. |
 | `personality_memory`  | `({ action: list \| remember \| forget, personality, text?, memoryId? })` — what a personality remembers about this person. |
+| `persona_lessons`     | `({ action: inbox \| learn \| list \| update \| forget, … })` — fixed Bruce/Mo findings distilled into lessons Ki loads (one `learn` batch per drain; see `references/personality.md` §5). |
 
 `create_article` also takes `origin` (`ai` default · `import` for backfill) and `form`
 (`episode-review` · `news` · `opinion` · `essay` · `column` · `other`).

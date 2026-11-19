@@ -49,7 +49,8 @@ read `../../references/personality.md` (§2) and call
 Revise mode). Honour one-run overrides ("without Ki", "with Mo"). Skip silently when the
 tool is missing or returns no personality. When one is returned (usually **Ki**), its
 core → layers → lessons go first in the instruction stack and its memory goes in the
-personal slot. The hard rules above always win.
+personal slot. With Ki, drain the lesson inbox next (`personality.md` §5): one call to
+read it, one to learn. The hard rules above always win.
 
 ## Route the request first
 
@@ -278,7 +279,9 @@ When the user asks to "address the fact-check" (or a draft has an open check):
    claim, scorecard row or attribution, find the sibling parts
    (`list_articles({ seriesId })`), apply the same fix to each in this session, and tell
    the user which parts you changed.
-6. Tell the user to run `/fact-check` again in the **checker** chat to confirm. Say
+6. **Learn from the fixes** (Ki loaded): `../../references/personality.md` §5 with this
+   `articleId`. Do it once per round, after the resolves.
+7. Tell the user to run `/fact-check` again in the **checker** chat to confirm. Say
    which blurbs you changed, if any.
 
 ### Addressing editorial notes
@@ -296,6 +299,8 @@ When the user asks to "address the editorial notes" (or "Mo's notes"):
 4. Apply the musts, shoulds **and** coulds you accept in **one** revision; a could never gets
    a revision of its own. Then resolve each fixed note:
    `article_checks({ action: "resolve", findingId, status: "fixed", revision, note })`.
+   Then learn from the fixes (Ki loaded): `../../references/personality.md` §5 with this
+   `articleId`.
 5. Tell the user the next step is `/fact-check` in a **fresh** chat on this final
    revision (re-running `/editorial-check` is optional; with the brand gate on, only open
    musts block publishing).
