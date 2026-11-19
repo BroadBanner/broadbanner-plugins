@@ -118,6 +118,12 @@ writer's chat, and not the same chat as each other):
 - **Bruce (fact-check):** "Open another new chat and run `/fact-check` with the draft link
   on the final revision. It checks every claim, quote and figure against its sources."
 
+**Follow the server's order.** `article_checks({ action: "list", articleId, view: "open" })`
+returns `nextStep` (`editorial_check` · `address_editorial` · `fact_check` · `address_fact`
+· `publish`) with a one-line reason; offer that step, not a guess. A copy edit
+(`update_article` → `change.kind: "surface"`) does **not** need a new fact-check; a
+`structural` change (a figure, quote, link, citation, name, paragraph or heading) does.
+
 Explain the order in one line: **editorial check → revise → fact-check on the final
 revision → fix → publish.** Editorial notes rewrite text, which makes an earlier
 fact-check stale; a later fact fix does not need another editorial pass. Add "(Mo and

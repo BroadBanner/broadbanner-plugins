@@ -347,6 +347,11 @@ Brand/series voice is set separately (Voice tuning).
   and ask; do not draft.
 - **`create_article` / `update_article` authorization error:** stop — the session isn't
   entitled or doesn't own the article.
+- **`validation_failed`:** fix what `errors[]` names and save again. A corrections log in
+  a draft: fix the text and put what changed in `revisionNote` (pass
+  `allowCorrectionNote: true` only if the user asked for one). Over 30 `[n]`: merge
+  citations to the same source. A `warnings: [ai_growth]` reply means the fix added text;
+  trim back toward the target length in the same round.
 - **Archive search empty:** proceed from the user's brief and the writing context; say
   that no archive background was found.
 - **Draft lost mid-session:** the article is in D1 — recover it with `list_articles` /

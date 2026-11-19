@@ -108,7 +108,10 @@ returns the id.
 
 ## Step 1 — Build the evidence pack
 
-Call `article_check_pack({ articleId })`. Read all of it before judging:
+Call `article_check_pack({ articleId })`. If it returns `orderWarning` (Mo's editorial
+musts are still open), tell the user their fixes will rewrite text and make this check
+stale; continue only if they say so (unattended: skip this article). Read all of it before
+judging:
 
 - `target.revision`: you will send this back. If the user edits mid-check, the save
   returns `stale_revision`; rebuild the pack and re-check the changed paragraphs.
