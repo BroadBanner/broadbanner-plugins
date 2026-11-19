@@ -125,6 +125,11 @@ Background from the creator's own archive:
    said, to reference past episodes/pieces, and to quote hosts accurately.
    `relatedArticles` / `transcripts` from Step 3 are good starting points too.
 
+**Rules from official documents** (a field manual, DoD directive, agency handbook): search
+the member's reference library first with `reference_search`, read the section with
+`reference_get`, and cite it by section with the returned `citation` (it names the version),
+never a news story's paraphrase. Not in the library → offer to add it (`reference-library`).
+
 Factual claims about **current events** (dates, figures, who did what this week):
 
 - Call `whoami`. If `available.broadNews` is true, ground those claims with the BroadNews

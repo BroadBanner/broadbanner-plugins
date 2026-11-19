@@ -61,6 +61,10 @@ These hold on every check, with or without Bruce (Step 0.5):
 - **A load-bearing claim from a single outlet is uncorroborated.** If the piece's argument
   depends on it and only one outlet reports it, file a **major** finding (unless the
   piece says it is single-sourced and attributes it).
+- **Quoted rules from official documents** (manuals, directives, handbooks): run
+  `reference_verify_quote` on every one. `none` is a **blocker** (quote not in the
+  document); `near` is a finding naming the difference; `supersededOnly` is a finding (the
+  rule changed). A cited section number that doesn't match the returned section is a finding.
 - Opinion and analysis are never evidence for a factual claim; a press release
   establishes only what an entity claims about itself.
 
