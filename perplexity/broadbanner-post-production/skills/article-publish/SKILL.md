@@ -1,0 +1,172 @@
+---
+name: article-publish
+description: "Push a generated article markdown into the member portal as an editable DRAFT via the BroadBanner MCP connector's create_article tool. Use when the user says 'publish the review', 'push it to the portal', 'create the article draft', or after episode-review completes in the post-production chain. Returns the app.broadbanner.com/app/articles URL of the draft for the member to review, edit, and publish. NO git, NO GitHub Pages — this replaces the old pages-publish flow. Production+ add-on (post_production_distribution)."
+metadata:
+  requiresTool: post_production_distribution
+---
+
+# Review Publish
+
+Push a completed review markdown into the member portal as an **editable DRAFT** by calling
+the BroadBanner MCP connector's `create_article` tool, then return the portal URL so the
+creator can review, edit, and publish it themselves. This is the final step of the
+post-production chain.
+
+**This replaces the legacy `pages-publish` skill.** There is **no git, no branch, no
+commit, no GitHub PR, no Jekyll formatting, no `Pages/` write.** The review lands as a
+draft in `app.broadbanner.com/app/articles/…`, and the member owns the publish action.
+
+## Step 0 — Entitlement preflight (no call)
+
+Follow `../../references/preflight.md`: if this connector has the tools this skill uses,
+carry on; if not, stop with "⚠️ Post-production is part of the **Production+** add-on
+(`post_production_distribution`). Add it from
+https://app.broadbanner.com/pricing/membership. Nothing was published." Don't call
+`get_creator_context` just to check.
+
+## Inputs
+
+| Input          | Required | Example                                             | Notes                                                          |
+| -------------- | -------- | --------------------------------------------------- | ------------------------------------------------------------- |
+| Review markdown| Yes      | (in context) or `reviewPath`                        | The markdown produced by episode-review                       |
+| `transcriptId` | Rec.     | `3f2c…`                                             | The D1 transcript — linked to the article in Step 3b so it's downloadable from the portal |
+| `episodeSlug`  | Rec.     | `e12-surveillance-capitalism-and-you`               | With `seriesId`, identifies the transcript if `transcriptId` is missing |
+| `seriesId`     | Yes      | `babm-palan`                                        | From the orchestrator's Step 0 resolution                     |
+| `showId`       | Rec.     | `show-abc-123`                                      | Ties the review to the specific show instance. Omit if series-level only |
+| `episodeTitle` | Rec.     | `Palantalk | E12 - Surveillance Capitalism and You` | Source of the review `title`                                  |
+| `episodeDate`  | Rec.     | `2026-03-31`                                        | → `episodeDate`                                                |
+| `articleLabel`  | Rec.     | `Palantalk In Review`                               | From `effectiveArticleConfig` → `articleLabel`                  |
+| `authorNames`  | Rec.     | `"Nick Paro, Jane Doe"`                              | From the roster (primary host + hosts), ONE comma-separated string (not an array) |
+
+If the user just ran episode-review, carry these forward.
+
+## Step-by-step workflow
+
+### Step 1: Read and validate the review
+
+Take the article markdown from context (or read it from `reviewPath` if episode-review
+wrote one). Parse out:
+
+- **`title`** — the SEO title / H1 (strip a trailing ` - YYYY/MM/DD` date suffix if the
+  format appended one; the portal shows the date separately via `episodeDate`).
+- **`subtitle`** — the Subtitle / Pages-H2 line, if present. At most **200 characters**
+  (Substack's limit; the tool rejects longer). If the review's line is longer, rewrite it as one
+  shorter sentence and tell the user, rather than truncating.
+- **`bodyMd`** — the review body markdown (block quote + review section + any Books
+  Mentioned / Key Takeaways / Sources sections). This is the article body the portal
+  stores and renders.
+- **`socialCopy`** — the Social Distribution Copy block (Substack blurb / Bluesky post /
+  YouTube description), if present.
+
+**Validate** before publishing:
+
+- `title` is present and non-empty
+- `bodyMd` is present and non-empty (at least the review section)
+
+**If validation fails:** STOP and report exactly what's missing. Do not push a partial
+review. Suggest re-running `episode-review`.
+
+### Step 2: Build the `create_article` call
+
+Assemble the arguments for the connector tool:
+
+```
+create_article({
+  origin:        "ai",                      // always — this is an AI-generated draft
+  form:          "episode-review",          // always — the article kind
+  seriesId:      "<seriesId>",              // required
+  title:         "<title>",                 // required
+  bodyMd:        "<bodyMd>",                // required — the review body markdown
+  showId:        "<showId>",                // optional — ties to the show instance; omit if none
+  slug:          "<episodeSlug>",           // optional — let the server slug from title if omitted
+  subtitle:      "<subtitle>",              // optional
+  articleLabel:   "<articleLabel>",           // optional — the review-kind label
+  authorNames:   "<host 1>, <host 2>",       // optional — from the roster; a single string, not an array
+  episodeDate:   "<episodeDate>",           // optional — YYYY-MM-DD
+  coverImageUrl: "<url>",                   // optional — omit unless you have one
+  socialCopy:    "<socialCopy>",            // optional — the social distribution block
+})
+```
+
+Only pass the fields you actually have — omit optionals rather than sending empty strings.
+Always pass `origin: "ai"` and `form: "episode-review"`: they mark the draft as the
+agent's, so when the member edits and publishes it BroadBanner learns from their edits
+(the revision history keeps this AI original). The review is created as a **DRAFT**;
+`create_article` does not publish it.
+
+### Step 3: Call the tool and capture the result
+
+Call `create_article(...)`. On success it returns:
+
+```json
+{ "ok": true, "id": "review-…", "slug": "<slug>", "url": "https://app.broadbanner.com/app/articles/<slug>" }
+```
+
+- On a transient/`5xx` error, retry up to 3× with brief backoff (500 ms → 1 s → 2 s).
+- On an **authorization error**, stop — the session isn't entitled to
+  `post_production_distribution`. There is no direct-API / Pages fallback.
+- On a **request-shape error** (missing required field, bad `seriesId`/`showId`), fail
+  loud with the message; do NOT retry blindly. Fix the argument and re-call.
+
+### Step 3b: Link the transcript to the article
+
+So the member can download the transcript from the article page, link it:
+
+```
+save_transcript({ seriesId: "<seriesId>", episodeSlug: "<episodeSlug>", articleId: "<id from create_article>" })
+```
+
+Only `articleId` is sent — the stored raw/corrected text is untouched. Skip this step if
+the chain stored no transcript (e.g. publishing a hand-written review). A failure here is
+**not** fatal: the article is already created, so report "transcript not linked" and
+move on.
+
+### Step 4: Report to the user
+
+The draft is the starting point the writing memory learns from. Any edits the creator makes in the portal before publishing (body or social copy) shape the next episode's draft. Tell them so in the report: "Edit freely; your changes teach the next draft."
+
+Present:
+
+- **The portal URL** — `url` from the response (`https://app.broadbanner.com/app/articles/<slug>`)
+- The review `title` and the fact that it is a **DRAFT** (nothing is public yet)
+- The `seriesId` / `showId` it's tied to
+- A note that the social copy (if any) was attached for reuse when distributing
+
+```
+Review published as a DRAFT — nothing is public until you publish it in the portal.
+
+Title:  <title>
+Series: <seriesId>  (show: <showId or series-level>)
+Draft:  <url>
+Transcript: linked — downloadable from the draft page (or: not linked — <reason>)
+
+Open the draft to edit and publish. Social copy is attached for distribution.
+```
+
+Add the hand-off to both independent checks (`../../references/personality.md` §3):
+"Before publishing, open a **new chat** and run `/editorial-check` with the draft link for
+editor notes (Mo), revise, then open **another new chat** and run `/fact-check` on the
+final revision: it verifies quotes against the transcript and every claim against its
+source (Bruce). Order: editorial check → revise → fact-check → fix → publish (Mo and
+Bruce run them if you have the Writing team add-on)." Never run either check in this chat.
+
+## Error handling
+
+- **Review file not found:** ask for the correct path; suggest running `episode-review` first.
+- **Validation fails (missing title/body):** report exactly what's missing; do not publish
+  a partial review.
+- **`create_article` authorization error:** the session isn't entitled — stop and report.
+  No Pages/git fallback exists in this plugin.
+- **`create_article` request-shape error:** fail loud; fix the offending argument (usually a
+  bad `seriesId`/`showId` or an empty required field) and re-call. Don't retry blindly.
+- **`create_article` transient error:** retry up to 3× with backoff, then report the failure
+  — the article markdown is still in context (and the transcript is safe in D1), so the
+  user can re-run this skill.
+
+## Why no git / Pages
+
+The old `pages-publish` skill wrote a Jekyll file into the `Pages/` repo, updated an
+`index.md`, and opened a GitHub PR. This plugin publishes to the D1-backed member portal
+instead: `create_article` stores the review as a draft the creator edits and publishes from
+`app.broadbanner.com`. No local repo, no branch, no PR, no Pages deploy wait — the creator
+sees the draft immediately and owns the publish decision.

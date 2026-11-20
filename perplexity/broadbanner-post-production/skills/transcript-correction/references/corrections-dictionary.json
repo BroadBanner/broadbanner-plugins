@@ -1,0 +1,57 @@
+{
+  "_meta": {
+    "description": "Self-updating dictionary of known transcription errors and their corrections. Organized by category. The fuzzy-match script uses this as its source of truth. When new corrections are discovered during transcript processing, append them here. Keys are the correct spelling; values are known misspellings from auto-transcription. Entries where the misspelling only differs by case are intentional (they normalize capitalization).",
+    "last_updated": "2026-05-01",
+    "version": 5
+  },
+  "people": {
+    "_description": "Names of hosts, guests, and recurring figures.",
+    "Nick Paro": ["Nick Parrow", "Nick Parro", "Nick Para", "Nick Pero", "Nick Perot", "Nick Parow", "nick para", "nick parrow", "nick perro", "Nick Perro"],
+    "Shane Yirak": ["Shane Yerak", "Shane Yurak", "Shane Yarak", "Shane Urich"],
+    "Walter Rhein": ["Walter Rhine", "Walter Rein", "Walter Rain", "walter ryan", "Walter Ryan"],
+    "Andra Watkins": ["Andrew watkins", "Andrew Watkins", "Andrea Watkins", "Andra watkins"],
+    "Frederic Poag": ["Frederic Pogue", "Frederick Poag", "Fred Poag"],
+    "Eric Lullove": ["Eric Lulove", "Eric Lulov"],
+    "Forrest Page": ["Forest Page", "Forrest Paige"],
+    "Qasim Rashid": ["Qassim Rashid", "Kasim Rashid", "Qasim Rasheed"],
+    "Ken Harbaugh": ["Ken Harbaw", "Ken Harbow"],
+    "Matt Gaetz": ["Matt Goetz"],
+    "Mark Wayne Mullen": ["Mark Wayne Welland"],
+    "Heather Heyer": ["heather higher", "Heather Higher"],
+    "Pam Bondi": ["Pan Bondi", "pan bondi", "Pam Bondy", "pam bondy"],
+    "Beth Cruz": ["Beth Cruise", "Beth Crews", "Beth Cruse"],
+    "Soso": ["So So", "so so"],
+    "Kait Justice": ["Kate Justice", "Cait Justice"],
+    "Stephanie Wilson": ["Stephanie Willson", "Steph Wilson"],
+    "Christopher Mathias": ["Christopher Matthias", "Chris Matthias"],
+    "Stefan Pasek": ["Stephan Pasek", "Stefan Pacek", "Stefan Paseck"],
+    "Nieta Greene": ["Naida Greene", "Naida"],
+    "Lev Parnas": ["Lev Parnis", "Levparnas", "lev parnas", "Lev parnas"],
+    "Aaron Parnas": ["Aaron Parnis", "aaron parnas"],
+    "Angie Craig": ["Angie Cregg", "Angy Craig", "angie craig"],
+    "Pete Hegseth": ["Pete Hexeth", "Pete Hexsteth", "Pete Hexth", "pete hegseth"],
+    "Kristi Noem": ["Christy Noem", "Christie Noem", "Kristy Noem", "christy noem", "Kristi Nome", "Christie Nome"],
+    "Kash Patel": ["Cash Patel", "Cosh Patel", "kash patel"],
+    "Ron DeSantis": ["Ron Desantis", "Ron De Santis", "ron desantis"],
+    "Maria Salazar": ["Maria Salazaar", "Maria Salzar", "maria salazar"],
+    "Michelle Tafoya": ["Michelle Tafoia", "Michelle Tafoiya", "Michelle Tafoyah", "michelle tafoya"]
+  },
+  "organizations": {
+    "_description": "Publication names, organizations, and brands.",
+    "Sick of This Shit Publications": ["Sick of the Ship Publications", "Sick of This Ship", "sick of the ship", "sick of this ship"],
+    "Banner and Backbone Media": ["earned backbone", "Banner in Backbone"],
+    "Substack": ["sub stack", "sub-stack"],
+    "Midas Touch": ["Midas's Touch", "MidasTouch", "midas touch"]
+  },
+  "shows": {
+    "_description": "Show names and series titles. Only include misspellings that are genuinely wrong — not just case variants of correct names.",
+    "Palantalk": ["Palan Talk", "palan talk", "Palan talk"],
+    "Anti-Fascist Book Club": ["Antifascist Book Club"],
+    "Time for Life": ["Time for life", "time for life"],
+    "Chronically Illing Out": ["Chronically Elling Out", "Chronically yelling out", "chronically elling out", "chronically yelling out"]
+  },
+  "terms": {
+    "_description": "Recurring terms, acronyms, and concepts that auto-transcription frequently mangles. Be careful with short terms like acronyms — they can cause false positives.",
+    "technofascism": ["techno fascism", "techno-fascism", "tech fascism"]
+  }
+}

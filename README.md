@@ -25,6 +25,11 @@ that marketplace, and manage/update them from the same "Personalize Plugins" pan
 
 To update later in Claude Code: `/plugin marketplace update broadbanner`.
 
+**Perplexity** — Perplexity builds of the connector-only skills live in
+[`perplexity/`](perplexity/README.md) (`broadbanner-post-production`).
+Connect `https://mcp.broadbanner.com/mcp` as a custom remote connector (OAuth),
+then import a plugin folder from GitHub.
+
 ## Plugins
 
 - `broadbanner-episode-pipeline` — End-to-end episode processing for Banner and Backbone Media. Orchestrates section selection, transcript download, transcript correction, episode review generation, and Pages publishing from a single Substack post URL.
