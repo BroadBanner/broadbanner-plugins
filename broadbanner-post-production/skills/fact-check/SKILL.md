@@ -66,6 +66,9 @@ These hold on every check, with or without Bruce (Step 0.5):
   citation, so a later revision of the document alerts the member). `none` is a **blocker** (quote not in the
   document); `near` is a finding naming the difference; `supersededOnly` is a finding (the
   rule changed). A cited section number that doesn't match the returned section is a finding.
+  The pack's `references[]` holds the library documents the article cites with its own `[n]`
+  and their sections' text: check each claim against that text. `ocr: true` = read from a
+  scan: confirm a quote on the page `link` before calling it exact.
 - Opinion and analysis are never evidence for a factual claim; a press release
   establishes only what an entity claims about itself.
 

@@ -49,8 +49,9 @@ added." (`../../references/preflight.md`.)
       20 minutes.
 4. `reference_list()` shows progress: big manuals are read about 30 pages a minute. Tell
    the user it's searchable once its status is ready, and give the section style the
-   server detected. `pages_without_text` above zero means scanned pages that need OCR
-   (not available yet). Say so.
+   server detected. Status `ocr` means scanned pages (no text layer) are being read by OCR,
+   a few pages a minute; `current.pagesOcr` counts them once ready. Tell the user that
+   OCR text can misread a word, so quotes from those pages are checked against the page.
 
 ## Spot-check a new document
 
