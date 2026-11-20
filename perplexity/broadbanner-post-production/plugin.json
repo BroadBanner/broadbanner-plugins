@@ -1,6 +1,6 @@
 {
   "name": "broadbanner-post-production",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "description": "Writing and checks for BroadBanner creators (post_production_distribution add-on). Write or revise articles in a brand or series voice, run independent editorial and fact checks, build your private self-profile, and turn a stored transcript into a review draft, all through the BroadBanner connector. Never publishes.",
   "author": {
     "name": "Banner and Backbone Media",

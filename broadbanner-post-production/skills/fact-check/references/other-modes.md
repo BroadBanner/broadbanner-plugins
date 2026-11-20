@@ -9,7 +9,10 @@ script present a contested claim as settled?). Use `news_content_check_pack({ co
 (paragraph 0 = headline, then the teleprompter paragraphs, outline, key points and each
 blurb) and save with `news_content_check_save({ contentId, version: pack.target.version,
 … })`. Scripts carry no `[n]`, so every stored story is a source for every paragraph.
-Report before the creator approves the script.
+The pack's `references[]` holds the library documents the script cites (sections' text,
+citation, page link): check every rule the script states against that text, and run
+`reference_verify_quote` with `articleId: contentId, articleKind: "news_content"` on every
+quoted rule (same severities as an article). Report before the creator approves the script.
 
 ## Ad-hoc claims (no save target)
 
