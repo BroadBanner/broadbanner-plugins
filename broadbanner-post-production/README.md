@@ -116,7 +116,10 @@ articles and imported posts are learned from too. Brand/series flavour comes fro
 explicit voice settings (`get_voice` / `set_voice`, or the Voice panel in the portal);
 learned memory stays per person. See `Documentation/engineering/WRITING-STUDIO-DESIGN.md`.
 
-## Writing team (Ki, Bruce, Mo) and Roles
+## Writing team (Ki, Bruce, Mo, Bucky) and Roles
+
+**Bucky**, the researcher, runs in BroadNews (scripts, roundups, saved prompts). Asked for here, Bucky gets
+`not_for_skill` from `get_persona` and the skill loads its own default instead.
 
 `references/personality.md` is shared by the skills. **Roles** (who is writing, from what
 vantage) come back in `get_writing_context.roles` and sit at slot 1 of the instruction

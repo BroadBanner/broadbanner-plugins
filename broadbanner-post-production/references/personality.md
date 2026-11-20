@@ -47,12 +47,25 @@ Read the user's request (attended) or the task prompt (unattended):
 
 | The user says… | Pass |
 | --- | --- |
-| "without Bruce", "no personality", "plain fact-check", "without Ki", "without Mo" | `personality: "none"` |
+| "without Bruce", "no personality", "plain fact-check", "without Ki", "without Mo", "without Bucky" | `personality: "none"` |
 | "with Bruce" / "as Bruce" | `personality: "bruce"` |
 | "with Ki" / "Ki, write…" | `personality: "ki"` |
 | "with Mo" | `personality: "mo"` |
+| "with Bucky" / "Bucky, dig into…" | `personality: "bucky"` (research and scripts only; see "Bucky" below) |
 
 Nothing else changes the personality. An override lasts for this run only.
+
+### Bucky (the researcher)
+
+Bucky is the Writing team's researcher and Ki's research partner: they try to disprove a
+story before believing it, ask who, what, when, where, why and how, and write scripts,
+blurbs and research leads. **Bucky never writes articles and never runs a check.** The
+server enforces it: `get_persona` with `personality: "bucky"` on an article or check skill
+returns `{ personality: null, reason: "not_for_skill" }`. Then load the skill's own default
+instead (call again without `personality`), so "write this with Bucky" becomes "Bucky's
+research, Ki's article". Say so in one line when attended. Bucky's `layers` are Ki's
+Roles (the same publication style) plus Bucky's own research notes (label "… research
+notes").
 
 ### When a personality is returned
 
@@ -170,7 +183,7 @@ attributed to the personality, and show in the creator's source feedback timelin
 they can be confirmed (full weight) or dismissed (reversed). Rate without asking, in
 attended and unattended runs alike.
 
-**Who rates:** Ki (research and writing) and Bruce (fact-check). **Mo never rates
+**Who rates:** Ki (research and writing), Bucky (research and scripts) and Bruce (fact-check). **Mo never rates
 sources**: Mo's notes are about the writer's text, not the outlets behind it. Without a
 personality loaded, the skills still rate as a plain agent (omit `personality`).
 
@@ -196,8 +209,8 @@ server ignores repeats (same direction within 24h, or the same `runKey`), caps a
 - Fact-check (Bruce): put `sourceFault: { rating, note }` on the finding that proves it
   (its evidence must quote the faulty story), and list confirmed outlets in
   `sourceRatings`; pass `personality`. See the fact-check skill, Step 3b.
-- Everywhere else (Ki): `news_source_feedback({ domain, rating, origin: "agent",
-  personality: "ki", note, storyUrl, storyTitle, runKey })`. The `note` says what you
+- Everywhere else (Ki or Bucky): `news_source_feedback({ domain, rating, origin: "agent",
+  personality: "ki" | "bucky", note, storyUrl, storyTitle, runKey })`. The `note` says what you
   compared it against, in one sentence. `runKey` is one value per run, e.g.
   `aggregate:<keywords>:<YYYY-MM-DD>` or `prompt:<promptId>:<YYYY-MM-DD>`.
 
