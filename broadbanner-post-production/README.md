@@ -136,5 +136,7 @@ record vs text, `partial` stories, 429s, contract values, single-outlet claims) 
 fact-check on the final revision → fix → publish** (editorial edits make an earlier
 fact-check stale; a later fact fix doesn't need another editorial pass). The nightly
 `article-check-nightly` task runs an editorial pass on requested drafts, then the
-fact-check queue. A brand can require either check before publishing
+fact-check queue, holding a draft whose editorial musts are still open (Ki revises it first).
+On drafts written from a BroadNews research lead, Mo and Bruce each vote on Ki and Bucky's
+disputes after their own check is saved. A brand can require either check before publishing
 (`require_fact_check` / `require_editorial_check`; open **must** notes block). See `Documentation/engineering/BOT-PERSONALITIES-DESIGN.md`.

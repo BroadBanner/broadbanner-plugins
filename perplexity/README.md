@@ -14,7 +14,7 @@ the Claude plugins for now.
 2. **Import a plugin.** On the Plugins page in Perplexity Computer, choose to
    import from GitHub and paste the folder URL below.
 
-### `broadbanner-post-production` (v0.24.0)
+### `broadbanner-post-production` (v0.25.0)
 
 Writing and checks for BroadBanner creators (post_production_distribution add-on). Write or revise articles in a brand or series voice, run independent editorial and fact checks, build your private self-profile, and turn a stored transcript into a review draft, all through the BroadBanner connector. Never publishes.
 
