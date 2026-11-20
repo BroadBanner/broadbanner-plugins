@@ -140,7 +140,7 @@ It returns:
 **Precedence when they conflict:**
 1. The transcript (facts, quotes).
 2. The server config and the **format** reference: structure, length and labels always win.
-3. The **personality** from Step 0.5 (core → layers → lessons), then the **Roles** (skip the Roles when Ki is loaded: her layers are the roles). Without a personality, the Roles alone. They set vantage and standards, never facts or structure.
+3. The **personality** from Step 0.5 (core → layers → lessons), then the **Roles** (skip the Roles when Ki is loaded: his layers are the roles). Without a personality, the Roles alone. They set vantage and standards, never facts or structure.
 4. The **explicit brand/series voice** lines in `instructions[]` (series over brand). They refine the tone and override the `voice-*.md` preset where they disagree.
 5. The `voice-<editorialVoice>.md` preset from Step 2: the base tone.
 6. The creator's learned habits in `instructions[]`, then the personality's `memory`: apply word choices, cuts and sign-offs wherever they don't contradict 1–5.

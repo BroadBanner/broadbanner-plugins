@@ -100,7 +100,7 @@ topic words from the request. It returns the effective `articleConfig`, the bran
 
 - **Roles first (slot 1, every user).** Apply `roles` (brand → series, most specific
   last) as described in `../../references/personality.md` §1, above the voice. If Ki was
-  loaded in Step 0.5, her layers already carry them; don't repeat them.
+  loaded in Step 0.5, his layers already carry them; don't repeat them.
 - **Follow ALL `instructions`, in order.** They are already layered: series voice →
   brand voice → personal explicit style → learned rules → style profile. Where a brand or
   series voice setting conflicts with a learned personal rule, the voice setting wins.
@@ -227,7 +227,7 @@ learns your voice for the next draft. Or tell me what to change and I'll revise 
 ```
 
 If a personality was loaded, add the line it calls for (e.g. "Written with Ki (v3,
-brand:babm)") and, with Ki, her after-draft report (source table, weakest claims, what
+brand:babm)") and, with Ki, his after-draft report (source table, weakest claims, what
 can and can't be defended).
 
 Then offer the two independent checks (`../../references/personality.md` §3), each in

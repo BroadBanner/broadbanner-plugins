@@ -88,7 +88,7 @@ above all of it and always win.**
    evidence, server floors, the fresh-chat independence rule, citation contracts).
 1. **Personality:** `core`, then each of `layers` in order (each reads as "For
    {scope} specifically: …"), then `lessons`. Then the **Roles** (§1), unless the
-   personality is Ki (her layers are the roles) or the skill is `fact-check` (no roles)
+   personality is Ki (his layers are the roles) or the skill is `fact-check` (no roles)
    or `editorial-check` (roles are the standard it reads against, not its identity).
    Without a personality, slot 1 is the Roles alone.
 2. **Voice** (series over brand), from the writing context.
