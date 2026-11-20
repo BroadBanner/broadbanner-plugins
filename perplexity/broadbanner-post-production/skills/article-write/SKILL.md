@@ -133,6 +133,9 @@ Background from the creator's own archive:
 the member's reference library first with `reference_search`, read the section with
 `reference_get`, and cite it by section with the returned `citation` (it names the version),
 never a news story's paraphrase. Not in the library → offer to add it (`reference-library`).
+Check `get_persona`'s `referencePins` first: those are the documents the member wants used.
+After `create_article`, run `reference_verify_quote` with the `articleId` on each quoted rule
+(it records the citation; a section cited without a quote → `reference_citations` `record`).
 
 Factual claims about **current events** (dates, figures, who did what this week):
 

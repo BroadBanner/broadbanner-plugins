@@ -1,6 +1,6 @@
 ---
 name: reference-library
-description: "Add official long-form documents (field manuals, DoD directives, agency handbooks from .mil or .gov) to your reference library so the writing team can cite and verify them by section. Use when the user says 'add the Law of War Manual to my library', 'capture FM 2-22.3', 'save this directive', 'what's in my reference library', or 'remove that document'. Captures through the server, or through the browser when the official site blocks servers (most .mil sites do). Never edits the shared text."
+description: "Add official long-form documents (field manuals, DoD directives, agency handbooks from .mil or .gov) to your reference library so the writing team can cite and verify them by section. Use when the user says 'add the Law of War Manual to my library', 'capture FM 2-22.3', 'what's in my reference library', 'remove that document', 'check my documents for changes', 'pin this for Bruce', or 'set up the monthly document check'. Captures through the server or the browser (most .mil sites block servers). Never edits the shared text."
 metadata:
   requiresTool: post_production_distribution
 ---
@@ -37,10 +37,14 @@ added." (`../../references/preflight.md`.)
 3. **Browser capture** (needs the browser):
    1. `reference_upload_ticket({ officialUrl: url, …same metadata })` → `browserScript`, `steps`.
    2. Open the official site's **own page** (the origin in `steps`, e.g. `https://ogc.osd.mil/`),
-      not the PDF link: a PDF link downloads instead of opening.
-   3. Run `browserScript` in that tab with the javascript tool, unchanged.
+      not the PDF link: a PDF link downloads instead of opening. Some home pages redirect to
+      another host (`media.defense.gov` → `www.war.gov`); then open the PDF's **folder** URL
+      that `steps` names (any page on the PDF's host works, even a 404 page).
+   3. Run `browserScript` in that tab with the javascript tool, unchanged (it starts with
+      `await`, so the tool returns its result).
    4. It returns `{ status, bytes, sha256, result }`. `status: 201` with `result.capture` →
-      stored. `hash_mismatch`, `ticket_used`, `ticket_expired` → get a new ticket and run it
+      stored. `wrong_origin` → open the `open` URL it names and run it again.
+      `hash_mismatch`, `ticket_used`, `ticket_expired` → get a new ticket and run it
       once more. Any other error → report it and stop. The ticket works once and expires in
       20 minutes.
 4. `reference_list()` shows progress: big manuals are read about 30 pages a minute. Tell
@@ -53,6 +57,35 @@ added." (`../../references/preflight.md`.)
 After it's ready, `reference_search` two or three phrases you can see in the PDF and
 `reference_get` the sections they land in. If the numbering looks wrong (`p. N` sections for a
 numbered manual, or merged sections), tell the user. Don't work around it.
+
+## Check for changes (monthly)
+
+Agencies revise documents. Every capture of the official URL is also a check: the same bytes
+just mark it checked; new bytes become a **new version**, which is compared section by section
+with the one it replaced.
+
+1. `reference_list({ action: "recheck" })` → `due[]` (not checked in 30 days). `via: "server"`
+   documents are re-checked by BroadBanner every night; nothing to do. For each
+   `via: "browser"` document, run **Add a document** step 3 again with the same `officialUrl`
+   and the same metadata. Leave `versionLabel` out unless you can see the new version's own
+   label in the PDF; citations then name it by capture date.
+2. `reference_citations({ action: "alerts" })` → citations in the member's articles whose
+   section **changed** or was **removed** in the newer version. For each, `reference_get` the
+   section in the current version, and tell the member which article quotes the old text and
+   what changed. Never edit a published article; a correction is the member's call. When
+   they've dealt with one, `reference_citations({ action: "ack", citationIds })`.
+
+**Set up the monthly task** ("set up the monthly document check"): it needs the browser, so
+it runs on this computer. Find `../../references/templates` from this skill's directory and
+invoke **`bb-scheduled-manager`** with the **`install`** action and `--templates-dir` set to it
+(it scaffolds `reference-recheck-monthly`). Remove it with `uninstall` on that task id.
+
+## Pins
+
+`reference_pins({ action: "get" })`; `reference_pins({ action: "set", personality, documentIds })`
+replaces that persona's whole list (≤10, documents already in the library). `get_persona`
+returns them as `referencePins`, so Ki and Bruce look there first. Pin only when the member
+asks ("Bruce should always check the Law of War Manual").
 
 ## List or remove
 
