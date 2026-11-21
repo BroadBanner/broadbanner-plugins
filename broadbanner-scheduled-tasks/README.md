@@ -30,7 +30,7 @@ is filed under the project the skill is run from.
 
 | Skill | Description |
 |---|---|
-| `bb-scheduled-manager` | Action-driven (`install` \| `update` \| `uninstall`). **install**: read declarative specs from `<PROJECT_ROOT>/.broadbanner/scheduled-tasks/*.md`, resolve per-project vars, and create/update them in the Cowork scheduler (idempotent; a live task's prompt is never overwritten without explicit confirmation). **update**: re-sync/`--refresh` existing tasks. **uninstall**: delete this project's registered tasks (and optionally their specs). Invoke `/bb-scheduled-manager <action>`; run from the target project. |
+| `bb-scheduled-manager` | Action-driven (`install` \| `update` \| `pause` \| `resume` \| `uninstall`). **install**: read declarative specs from `<PROJECT_ROOT>/.broadbanner/scheduled-tasks/*.md`, resolve per-project vars, and create/update them in the Cowork scheduler (idempotent; a live task's prompt is never overwritten without explicit confirmation). **update**: re-sync/`--refresh` existing tasks. **pause / resume** (0.7.0): turn a desk's or persona's runs off and on without deleting them, e.g. while The Room runs the same work (`references/pause-resume.md`). **uninstall**: delete this project's registered tasks (and optionally their specs). Invoke `/bb-scheduled-manager <action>`; run from the target project. |
 
 ## Task specs
 

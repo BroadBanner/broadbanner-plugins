@@ -1,6 +1,6 @@
 ---
 name: bb-scheduled-manager
-description: "Install, update, or uninstall Cowork scheduled tasks for a BroadBanner project: install (register/sync specs), update (re-sync or --refresh), or uninstall. Use for 'install/update/remove the scheduled tasks', 'set up scheduling', or 'install the nightly runs for the writing desk / checking desk / Ki / Bucky / Mo / Bruce', which installs only that desk's or persona's runs and replaces their old-named tasks. Registers each via the Cowork scheduler, filed under the project it's run from."
+description: "Install, update, pause/resume or uninstall Cowork scheduled tasks for a BroadBanner project: install (register/sync specs), update (re-sync or --refresh), pause/resume (on/off only), or uninstall. Use for 'install/update/remove the scheduled tasks', 'set up scheduling', or 'install the nightly runs for the writing desk / checking desk / Ki / Bucky / Mo / Bruce', which installs only that desk's or persona's runs and replaces their old-named tasks. Registers each via the Cowork scheduler, filed under the project it's run from."
 ---
 
 # Manage Scheduled Tasks
@@ -126,6 +126,11 @@ Ki", "…for Mo", "the checking desk", "Bruce & Mo"):
    the selected runs, `skipped[]` lists the specs left out, and `migrations[]` the renamed
    ones (Step 3). Never install a run the user didn't ask for.
 
+Setting up the desk **project** itself (name, instructions, first chat) isn't this skill:
+the connector's `desk_setup` gives the member a printable setup kit, and the WebApp has the
+same kit at The Room → Set up (Articles → Writing team → Set up a desk for non-Room
+members). This skill only installs the runs once the project exists.
+
 These task ids carry **no project name**: each run works on the member's whole account, so
 one copy per member is right. If `list_scheduled_tasks` shows the id already registered
 (from another project), report it as installed there and don't create a second.
@@ -137,8 +142,9 @@ This skill **requires an action**. Resolve it in order:
 1. An explicit action in the invocation/args — `/bb-scheduled-manager install`,
    `/bb-scheduled-manager update`, `/bb-scheduled-manager uninstall`.
 2. Else infer from the user's phrasing: "install / register / sync / set up" →
-   **install**; "update / refresh / re-sync" → **update**; "uninstall / remove /
-   delete / clean up" → **uninstall**.
+   **install**; "update / refresh / re-sync" → **update**; "pause / turn off" →
+   **pause**; "resume / turn back on" → **resume**; "uninstall / remove / delete /
+   clean up" → **uninstall**.
 3. If neither is present or it's ambiguous, **ask once**: "install, update, or
    uninstall the scheduled tasks?"
 
@@ -151,6 +157,8 @@ Then route:
   shipped template content refreshed — run the collector with `--refresh` first
   (Step 2) to overwrite stale specs, then apply. The prompt-regression guard (Step 3)
   still holds: never replace a live task's prompt without explicit confirmation.
+- **pause / resume** → `references/pause-resume.md` (only `enabled` changes; nothing is
+  deleted). The Room's setup kit sends members here to pause the desk runs it replaces.
 - **uninstall** → the **Uninstall / remove tasks** section below (skip Steps 2–5).
 
 All three obey the **Project filing** rule — they act only on the active project's tasks.

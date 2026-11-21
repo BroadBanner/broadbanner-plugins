@@ -53,6 +53,12 @@ Bucky, or Bruce & Mo). Pass that list as `roster` to `team_session`. If the resu
 `reason: "off_roster"`, show its `statusLine` (it names the project to use) and carry on
 without that member. Never role-play a member who wasn't loaded.
 
+**No desk project yet.** If the member wants a project for the team (or asks how to set one
+up), call the connector's `desk_setup` and show its `markdown` printout: what the desk does,
+what it collects, the approvals it needs, then each block to copy. The same kit is in the
+WebApp at The Room → Set up (Articles → Writing team → Set up a desk for non-Room members),
+where the member also gives the approvals. Never agree to them on the member's behalf.
+
 **Long chats.** If a loaded core is no longer in your context (the chat was summarised),
 call `team_session` again with the same members before writing more.
 
