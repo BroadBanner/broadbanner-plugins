@@ -79,7 +79,8 @@ with the one it replaced.
 **Set up the monthly task** ("set up the monthly document check"): it needs the browser, so
 it runs on this computer. Find `../../references/templates` from this skill's directory and
 invoke **`bb-scheduled-manager`** with the **`install`** action and `--templates-dir` set to it
-(it scaffolds `reference-recheck-monthly`). Remove it with `uninstall` on that task id.
+and `--only library` (it scaffolds only `library-monthly-recheck`, replacing an old
+`reference-recheck-monthly-*` task). Remove it with `uninstall` on that task id.
 
 ## Pins
 

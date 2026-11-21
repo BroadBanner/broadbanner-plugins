@@ -1,6 +1,8 @@
 ---
-id: reference-recheck-monthly-{{PROJECT_BASENAME}}
-description: Monthly check of {{PROJECT_BASENAME}}'s reference library against the official .mil/.gov sources — re-captures documents through the browser, and lists articles whose cited section changed (nothing is edited or published).
+id: library-monthly-recheck
+description: Reference library, monthly check (the 1st) — re-captures your browser-captured .mil/.gov documents and lists articles whose cited section changed (nothing is edited or published).
+desk: library
+replaces: reference-recheck-monthly
 cronExpression: 30 7 1 * *
 enabled: true
 runLocation: local

@@ -1,6 +1,6 @@
 ---
 name: bb-scheduled-manager
-description: "Install, update, or uninstall Cowork scheduled tasks for a BroadBanner project. REQUIRES an action — install (register/sync specs), update (re-sync or --refresh existing), or uninstall (remove tasks, optionally their specs). Use when the user says 'install/register/sync the scheduled tasks', 'update/refresh the scheduled tasks', 'uninstall/remove/delete/clean up the scheduled tasks', or 'set up scheduling'. Resolves per-project template vars and registers each via the Cowork scheduler, filed under the project it's run from."
+description: "Install, update, or uninstall Cowork scheduled tasks for a BroadBanner project: install (register/sync specs), update (re-sync or --refresh), or uninstall. Use for 'install/update/remove the scheduled tasks', 'set up scheduling', or 'install the nightly runs for the writing desk / checking desk / Ki / Bucky / Mo / Bruce', which installs only that desk's or persona's runs and replaces their old-named tasks. Registers each via the Cowork scheduler, filed under the project it's run from."
 ---
 
 # Manage Scheduled Tasks
@@ -21,13 +21,13 @@ Studio have no posting/scheduling API. **Cowork cloud sessions don't currently p
 browser.** A cloud run of any of these tasks stops at the first browser step with "no
 browser available" and posts or schedules nothing. This happened on 2026-10-01: the
 cloud-only rollout made the Substack auto-scheduler miss a same-day live. So **every
-shipped template is `runLocation: local`** and must be created as **"Runs on this
+browser template is `runLocation: local`** and must be created as **"Runs on this
 computer"**, driving your Chrome through Claude in Chrome.
 
 | `runLocation` | Meaning | Shipped templates |
 | --- | --- | --- |
 | `local` | Must run **on this computer** (Claude in Chrome). | `release-substack-text`, `release-substack-clips`, `schedule-substack-live`, `schedule-restream-live` (all of them) |
-| `any` (default) | May run on this computer **or** in the cloud. Only for a spec with **no** browser step. | (none shipped today) |
+| `any` (default) | May run on this computer **or** in the cloud. Only for a spec with **no** browser step. | the Writing team's nightly runs (`writing-desk-*`, `checking-desk-*`) |
 
 At fire time, the connected Chrome profile must be logged into the creator's Substack
 (and Restream Studio for `schedule-restream-live`), and the computer must be awake. A run
@@ -90,6 +90,45 @@ this skill**. There is no project parameter on the create tool.
 not the one whose tasks you are installing, stop and tell the user to switch to
 that project's Cowork chat first. Confirm the match in Step 2 before creating
 anything — installing into the wrong project is the exact bug this plugin fixes.
+
+## Writing team runs — install only what the user named
+
+The Writing team's nightly runs are named by the desk and persona that own them, and each
+spec carries `desk:` and `personas:` so a scoped request installs only those runs:
+
+| Task id | Desk · who | When | Ships in (templates dir) | Replaces |
+| --- | --- | --- | --- | --- |
+| `writing-desk-news-run` | writing · Ki + Bucky | 4:00 daily | `broad-news` | `news-prompts-nightly-*` |
+| `checking-desk-mo-bruce-check` | checking · Mo, then Bruce | 6:00 daily | `broadbanner-post-production` | `article-check-nightly-*` |
+| `writing-desk-ki-revise` | writing · Ki | 7:00 daily | `broad-news` | `ki-revise-nightly-*` |
+| `checking-desk-bruce-recheck` | checking · Bruce | 8:00 daily | `broadbanner-post-production` | `fact-check-followup-*` |
+| `library-monthly-recheck` | library | 1st, 7:30 (local, browser) | `broadbanner-post-production` | `reference-recheck-monthly-*` |
+
+When the user scopes the request ("install the nightly runs for the writing desk", "…for
+Ki", "…for Mo", "the checking desk", "Bruce & Mo"):
+
+1. **Selection** = what they named: a desk (`writing`, `checking`, `library`), personas
+   (`ki`, `bucky`, `mo`, `bruce`; Kilo and Mochi work too) or task ids. Ki → both writing
+   runs; Bucky → the news run; Mo → the 6:00 check; Bruce → both checking runs; a desk →
+   all of its runs. The library check is never part of a desk or persona request: install
+   it only when they name it.
+2. **Templates dir** = the plugin the table names: `references/templates/` at that plugin's
+   root (find the installed plugin folder; or hand off to its own setup: `news-prompt-run`
+   Mode C for the writing desk, `/fact-check`'s Nightly task for the checking desk). If the
+   plugin isn't installed, say which one to add and stop.
+3. **Project.** Writing desk runs file in the **Ki & Bucky** project, checking desk runs in
+   the **Bruce & Mo** project (the roster in the project instructions says which one this
+   is). If they ask for the other desk's runs here, tell them to run the install from that
+   project's chat instead and stop. No such projects (one project for everything) → install
+   here.
+4. Run the collector with `--only` and `--templates-dir` (Step 2), e.g.
+   `--templates-dir "$BN_TEMPLATES" --scaffold --only "writing"`. `tasks[]` then holds only
+   the selected runs, `skipped[]` lists the specs left out, and `migrations[]` the renamed
+   ones (Step 3). Never install a run the user didn't ask for.
+
+These task ids carry **no project name**: each run works on the member's whole account, so
+one copy per member is right. If `list_scheduled_tasks` shows the id already registered
+(from another project), report it as installed there and don't create a second.
 
 ## Step 0 — Determine the action (install | update | uninstall)
 
@@ -196,6 +235,10 @@ full table.
   the correct behavior for a multi-brand / personal-hub creator. Pass
   `--brand-slug` only to intentionally restrict a single-brand workspace.
 
+With a scoped request, add `--only "<what they named>"` (see **Writing team runs**). The
+collector then scaffolds and emits only matching specs; anything else in the spec folder is
+listed in `skipped[]` and left alone.
+
 Parse the JSON. **Confirm `projectBasename` is the project you intend to install
 into.** If it is not, stop (see the filing warning above). Surface any
 `warnings[]` to the user.
@@ -240,6 +283,16 @@ decide:
 - **update (schedule/enabled only)** — `id` exists but `cronExpression`/`fireAt`
   or `enabled` differs. Safe to apply — these don't touch the prompt.
 - **unchanged** — `id` exists, schedule matches, enabled matches → skip.
+- **renamed** — each `migrations[]` entry: find live tasks whose `taskId` starts with its
+  `oldIdPrefix` (e.g. `news-prompts-nightly-`), in any project. Plan: **delete** each of
+  them and **create** `newId`. Keeping the old one would run the same work twice. The
+  collector already moved the old spec to `retired/` so it can't be re-registered. If
+  `oldCron` differs from the new spec's cron (a warning says so), the user had changed the
+  time: ask which to keep and put the answer in the new spec's `cronExpression` before
+  creating. The old task's prompt can't be read back, so say that hand edits to the old
+  prompt (if any) don't carry over. Delete with the delete tool as in **U3**; if there is
+  none, list the old ids for the user to remove in the sidebar and create the new ones
+  anyway, warning that both run until they do.
 
 > **⚠️ Never silently overwrite a live task's PROMPT — regression guard.**
 > `list_scheduled_tasks` does **not** expose the stored prompt, so you **cannot see**
@@ -253,15 +306,17 @@ decide:
 > deliberately-brandless clip task back to the template default. Default to
 > preserving the live prompt; make replacing it a deliberate, confirmed act.
 
-Present the plan to the user before mutating anything.
+Present the plan to the user before mutating anything. Renamed runs are part of this one
+plan ("delete `ki-revise-nightly-ki`, create `writing-desk-ki-revise`"): one yes covers the
+swap, so don't ask again in U2.
 
 ## Step 4 — Apply
 
 > **Run location follows each task's `runLocation`** (see "Run location" at the top).
 > It's governed by the Cowork _Home run-mode_ setting, not a per-task argument: tasks
 > created while Home is in **"run in cloud"** mode file as cloud tasks, otherwise as
-> "Runs on this computer". Every shipped template is `runLocation: local`, so confirm
-> Home's cloud mode is **off** before creating anything. A `runLocation: any` spec (no
+> "Runs on this computer". Every browser template is `runLocation: local`, so confirm
+> Home's cloud mode is **off** before creating those. A `runLocation: any` spec (no
 > browser step) is correct either way. (If a future build exposes a run-location argument
 > on `create_scheduled_task`, set it from `runLocation` instead.)
 
@@ -326,8 +381,10 @@ project's** session, so run this from that project's Cowork chat.
 
 ### U1 — Determine which tasks to remove
 
-Call `list_scheduled_tasks`. Select this project's tasks — they're the ones whose
-`taskId` ends with the project's basename suffix (the templates mint ids like
+Call `list_scheduled_tasks`. Writing team runs are matched by id or by desk/persona the
+same way as install (`writing-desk-*`, `checking-desk-*`, `library-monthly-recheck`, and
+their old names in the **Writing team runs** table). Select the other tasks of this project
+— they're the ones whose `taskId` ends with the project's basename suffix (the templates mint ids like
 `release-substack-clips-<PROJECT_BASENAME>`, `schedule-substack-live-<PROJECT_BASENAME>`,
 etc.). Optionally run the collector (`collect-tasks.mjs --list`) to get the exact
 ids the project's current specs would produce — but **match on the live list**, not

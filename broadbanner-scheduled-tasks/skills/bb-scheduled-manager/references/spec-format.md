@@ -14,6 +14,9 @@ cronExpression: 10 3 * * *                # recurring (LOCAL time, 5-field cron)
 # fireAt: 2026-07-01T09:00:00-04:00       # OR one-time (ISO 8601 w/ offset)
 enabled: true                             # optional; default true
 runLocation: local                        # optional; any (default) | local — browser tasks MUST be local
+desk: checking                            # optional; writing | checking | library — picked by --only
+personas: mo, bruce                       # optional; who runs it (ki, bucky, mo, bruce) — picked by --only
+replaces: article-check-nightly           # optional; the old spec name / task id prefix this one renames
 ---
 ```
 
@@ -27,6 +30,12 @@ Rules:
 - `id` is slugified to `[a-z0-9-]`. It is the scheduler storage key — keep it
   stable across runs so updates are idempotent.
 - `enabled: false` registers the task but leaves it paused.
+- `desk` and `personas` let a scoped request ("install the nightly runs for Mo") pick
+  this spec: the collector's `--only` matches a desk, a persona, the id or the file name.
+  A spec without them is picked only by id or file name.
+- `replaces` renames a task: scaffolding this spec moves `<old>.md` to `retired/`, and
+  the collector reports a migration so the skill deletes live tasks named `<old>-*` and
+  creates this one. An old spec whose replacement is in the folder is never registered.
 - `runLocation` says where the task may run: `local` (must run on the operator's
   computer) or `any` (default: this computer **or** the cloud). Cowork cloud sessions
   have **no browser**, so any spec that drives Substack/Restream must declare `local`

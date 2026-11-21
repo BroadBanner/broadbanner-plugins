@@ -49,17 +49,27 @@ The fresh-chat rule is satisfied by construction: the scheduled task is its own 
 
 ## Nightly task
 
-Installs `article-check-nightly-` + project, which runs an editorial pass on drafts with a
-requested editorial check (`editorial-check` Queue mode) and then this skill's Queue mode every day at 6:00
-local time (after the 4:00 news prompt run), with no browser, so it can run in the cloud.
+The **checking desk's** runs, named for who runs them, install from the Bruce & Mo project:
+
+- `checking-desk-mo-bruce-check` (6:00): Mo's editorial pass on drafts with a requested
+  editorial check (`editorial-check` Queue mode), then this skill's Queue mode.
+- `checking-desk-bruce-recheck` (8:00): Bruce's one re-check of drafts Ki revised that
+  morning (BroadNews research leads; exits quietly otherwise).
+
+No browser, so both can run in the cloud. Install only what the user named: "the checking
+desk", "Bruce" or "Bruce & Mo" → both; "Mo" → the 6:00 check; "nightly fact-checks" → both.
+The monthly library check is separate (`reference-library`). Writing desk runs (Ki,
+Bucky) install from the Ki & Bucky project with `news-prompt-run`.
 
 1. Resolve this plugin's templates directory: `references/templates/` at the plugin root
    (`../../references/templates` relative to this skill). Capture its absolute path as
    `PP_TEMPLATES`.
 2. Invoke **`bb-scheduled-manager`** (plugin `broadbanner-scheduled-tasks`) with the
    **`install`** action, scaffolding from `PP_TEMPLATES`:
-   `node` + the engine's `scripts/collect-tasks.mjs --project PROJECT --templates-dir "$PP_TEMPLATES" --scaffold`.
+   `node` + the engine's `scripts/collect-tasks.mjs --project PROJECT --templates-dir "$PP_TEMPLATES" --scaffold --only "<what they named, default checking>"`.
    To change the time, edit the scaffolded spec's `cronExpression` before it registers.
+   Old-named tasks (`article-check-nightly-*`, `fact-check-followup-*`) come back in
+   `migrations[]`; the engine deletes them and creates the new ones in one confirmed step.
 3. If `broadbanner-scheduled-tasks` isn't installed, tell the user to add it first.
 
-To remove it, invoke `bb-scheduled-manager` **uninstall** for that task only.
+To remove them, invoke `bb-scheduled-manager` **uninstall** for those task ids only.

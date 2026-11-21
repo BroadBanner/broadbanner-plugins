@@ -33,6 +33,20 @@
  *                     upgrade). Replaces local edits to those specs — reported in
  *                     `refreshed`.
  *   --list            Human-readable table instead of JSON.
+ *   --only <list>     Install only the runs the user named: a comma list of desks
+ *                     (writing | checking | library), personas (ki | bucky | mo |
+ *                     bruce) or task ids/file names. "writing desk", "Ki & Bucky",
+ *                     "the checking desk" all work. A spec matches when any name in
+ *                     the list is its `desk`, one of its `personas`, its id, its file
+ *                     name or the old name it `replaces`. Applies to scaffolding AND
+ *                     to the emitted tasks; specs left out are listed in `skipped`.
+ *
+ *   Renamed tasks: a template's `replaces: <old-name>` frontmatter names the spec
+ *   (and task id prefix `<old-name>-`) it supersedes. Scaffolding the new template
+ *   moves the old spec to `.broadbanner/scheduled-tasks/retired/` so it can't
+ *   register a duplicate, and every renamed task is reported in `migrations[]`
+ *   ({ newId, oldName, oldIdPrefix, oldSpec?, oldCron?, retiredTo? }) so the skill
+ *   deletes the old live task and creates the new one.
  *
  *   Connector/no-CLI mode — broadbanner.config.json is OPTIONAL. When it is
  *   absent (a creator who never ran `banner-admin init`), the brand-scoped
@@ -91,6 +105,7 @@ const STRING_FLAGS = {
   "--cadence": "cadence",
   "--text-cron": "textCron",
   "--clip-cron": "clipCron",
+  "--only": "only",
 };
 
 function parseArgs(argv) {
@@ -108,6 +123,7 @@ function parseArgs(argv) {
     cadence: null,
     textCron: null,
     clipCron: null,
+    only: null,
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
@@ -313,24 +329,88 @@ function coerceBool(v, dflt) {
   return /^(true|yes|1|on)$/i.test(String(v).trim());
 }
 
+// ── selection (--only) ───────────────────────────────────────────────────────
+// Persona and desk names as people say them. Kilo and Mochi are Ki's and Mo's
+// full names.
+const NAME_ALIASES = { kilo: "ki", mochi: "mo", reference: "library", references: "library" };
+const FILLER = new Set(["the", "desk", "desks", "runs", "run", "nightly", "tasks", "task", "and", "for", "scheduled"]);
+
+function listOf(v) {
+  if (!v) return [];
+  return String(v)
+    .split(",")
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+// "the writing desk, Ki & Bucky" → [{ raw: "the writing desk", words: ["writing"] }, …]
+function parseSelection(only) {
+  if (!only) return null;
+  return listOf(only).map((raw) => {
+    const words = raw
+      .split(/[\s+&/]+/)
+      .map((w) => w.replace(/[^a-z0-9-]/g, ""))
+      .filter((w) => w && !FILLER.has(w))
+      .map((w) => NAME_ALIASES[w] || w.replace(/-desk$/, ""));
+    return { raw, slug: slugify(raw), words };
+  });
+}
+
+// What a spec answers to: its desk, personas, id, file stem and the old name it replaces.
+function specNames(fm, id, file) {
+  return {
+    tags: new Set([...listOf(fm.desk), ...listOf(fm.personas)]),
+    ids: new Set([id, file.replace(/\.md$/, ""), ...listOf(fm.replaces)].filter(Boolean)),
+  };
+}
+
+function selectionMatches(sel, names) {
+  if (!sel) return true;
+  return sel.some(
+    (s) => names.ids.has(s.slug) || (s.words.length > 0 && s.words.some((w) => names.tags.has(w))),
+  );
+}
+
+function readFrontmatter(file) {
+  try {
+    return parseSpec(fs.readFileSync(file, "utf8")).frontmatter;
+  } catch {
+    return {};
+  }
+}
+
 // ── scaffold ─────────────────────────────────────────────────────────────────
 // Default: copy only MISSING templates (never clobber a project's own specs).
 // With `refresh`, OVERWRITE existing specs from the shipped templates too — the
 // escape hatch for when a plugin update ships new template content but the
 // project's already-scaffolded specs are stale. Refreshed files are reported
 // separately so the skill can tell the user what was overwritten.
-function scaffold(specDir, templatesDir, warnings, refresh = false) {
+function scaffold(specDir, templatesDir, warnings, refresh = false, sel = null) {
   const copied = [];
   const refreshed = [];
+  const retired = [];
   if (!fs.existsSync(templatesDir)) {
     warnings.push(`no templates dir at ${templatesDir}`);
-    return { copied, refreshed };
+    return { copied, refreshed, retired };
   }
   fs.mkdirSync(specDir, { recursive: true });
-  for (const f of fs.readdirSync(templatesDir)) {
+  for (const f of fs.readdirSync(templatesDir).sort()) {
     if (!f.endsWith(".md")) continue;
+    const fm = readFrontmatter(path.join(templatesDir, f));
+    const id = slugify(fm.id || f.replace(/\.md$/, ""));
+    if (!selectionMatches(sel, specNames(fm, id, f))) continue; // --only: not asked for
     const dest = path.join(specDir, f);
     const exists = fs.existsSync(dest);
+    // A renamed task: move the old spec aside so it can't register a duplicate.
+    for (const old of listOf(fm.replaces)) {
+      const oldSpec = path.join(specDir, `${old}.md`);
+      if (!fs.existsSync(oldSpec)) continue;
+      const retiredDir = path.join(specDir, "retired");
+      fs.mkdirSync(retiredDir, { recursive: true });
+      const to = path.join(retiredDir, `${old}.md`);
+      fs.renameSync(oldSpec, to);
+      retired.push({ from: `${old}.md`, to: path.relative(specDir, to), replacedBy: f });
+    }
     if (exists && !refresh) continue; // default: never clobber project specs
     fs.copyFileSync(path.join(templatesDir, f), dest);
     (exists ? refreshed : copied).push(f);
@@ -340,7 +420,7 @@ function scaffold(specDir, templatesDir, warnings, refresh = false) {
       `--refresh overwrote ${refreshed.length} existing spec(s) from the shipped templates: ${refreshed.join(", ")}. Any local edits to those specs were replaced.`,
     );
   }
-  return { copied, refreshed };
+  return { copied, refreshed, retired };
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -349,6 +429,7 @@ function main() {
   if (opts.help) {
     process.stdout.write(
       "Usage: node collect-tasks.mjs [--project <path>] [--templates-dir <path>] [--scaffold] [--refresh] [--list]\n" +
+        "                              [--only writing|checking|library|ki|bucky|mo|bruce|<task id>,...]\n" +
         "                              [--cadence high|medium|low] [--text-cron <expr>] [--clip-cron <expr>]\n",
     );
     return;
@@ -390,11 +471,41 @@ function main() {
     ? path.resolve(opts.templatesDir.replace(/^~(?=$|\/)/, os.homedir()))
     : DEFAULT_TEMPLATES_DIR;
 
+  const sel = parseSelection(opts.only);
+  if (opts.only && (!sel.length || sel.every((s) => !s.words.length && !s.slug))) {
+    warnings.push(`--only "${opts.only}" names nothing; installing nothing`);
+  }
+
   let scaffolded = [];
   let refreshed = [];
+  let retired = [];
   if (opts.scaffold || opts.refresh) {
-    ({ copied: scaffolded, refreshed } = scaffold(specDir, templatesDir, warnings, opts.refresh));
+    ({ copied: scaffolded, refreshed, retired } = scaffold(
+      specDir,
+      templatesDir,
+      warnings,
+      opts.refresh,
+      sel,
+    ));
   }
+
+  // Old name → the template/spec that replaces it, from the shipped templates and
+  // from specs already in the project (both carry `replaces:`).
+  const replacedBy = new Map();
+  for (const dir of [templatesDir, specDir]) {
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.endsWith(".md")) continue;
+      const fm = readFrontmatter(path.join(dir, f));
+      const id = slugify(substitute(fm.id || f.replace(/\.md$/, ""), vars, [], f));
+      for (const old of listOf(fm.replaces)) {
+        if (!replacedBy.has(old)) replacedBy.set(old, { id, file: f, fm });
+      }
+    }
+  }
+  const skipped = [];
+  const migrations = [];
+  const matchedSel = new Set();
 
   const tasks = [];
   const seenIds = new Set();
@@ -407,6 +518,21 @@ function main() {
       const full = path.join(specDir, f);
       const raw = fs.readFileSync(full, "utf8");
       const { frontmatter, body } = parseSpec(raw);
+      const stem = f.replace(/\.md$/, "");
+
+      // An old spec whose renamed replacement is already in the project: never
+      // register it (that would duplicate the run). Without the replacement yet,
+      // keep it and say how to migrate.
+      if (replacedBy.has(stem)) {
+        const r = replacedBy.get(stem);
+        if (fs.existsSync(path.join(specDir, r.file))) {
+          warnings.push(`${f}: renamed to ${r.file}; not registered (the old task is in migrations[])`);
+          continue;
+        }
+        warnings.push(
+          `${f}: this run was renamed to ${r.id}. Re-run with --scaffold to migrate it (the old spec moves to retired/).`,
+        );
+      }
 
       const rawId = frontmatter.id
         ? substitute(frontmatter.id, vars, warnings, f)
@@ -415,6 +541,16 @@ function main() {
       if (!id) {
         warnings.push(`${f}: could not derive a task id; skipped`);
         continue;
+      }
+      const names = specNames(frontmatter, id, f);
+      if (!selectionMatches(sel, names)) {
+        skipped.push({ id, sourceFile: path.relative(root, full) });
+        continue;
+      }
+      if (sel) {
+        for (const s of sel) {
+          if (names.ids.has(s.slug) || s.words.some((w) => names.tags.has(w))) matchedSel.add(s.raw);
+        }
       }
       if (seenIds.has(id)) {
         warnings.push(`${f}: duplicate task id "${id}"; skipped`);
@@ -454,6 +590,8 @@ function main() {
       const task = {
         id,
         description,
+        desk: listOf(frontmatter.desk)[0] || null,
+        personas: listOf(frontmatter.personas),
         enabled: coerceBool(frontmatter.enabled, true),
         runLocation,
         prompt,
@@ -465,6 +603,43 @@ function main() {
 
       tasks.push(task);
       seenIds.add(id);
+
+      for (const old of listOf(frontmatter.replaces)) {
+        const m = { newId: id, oldName: old, oldIdPrefix: `${old}-` };
+        const oldSpec = path.join(specDir, `${old}.md`);
+        const ret = retired.find((r) => r.from === `${old}.md`);
+        const oldFile = fs.existsSync(oldSpec)
+          ? oldSpec
+          : ret
+            ? path.join(specDir, ret.to)
+            : fs.existsSync(path.join(specDir, "retired", `${old}.md`))
+              ? path.join(specDir, "retired", `${old}.md`)
+              : null;
+        if (oldFile) {
+          m.oldSpec = path.relative(root, oldFile);
+          const oldFm = readFrontmatter(oldFile);
+          if (oldFm.cronExpression) {
+            const oldCron = substitute(oldFm.cronExpression, vars, [], old).trim();
+            m.oldCron = oldCron;
+            if (task.cronExpression && oldCron !== task.cronExpression) {
+              warnings.push(
+                `${old}: the old task ran on "${oldCron}"; ${id} ships with "${task.cronExpression}". Ask which to keep.`,
+              );
+            }
+          }
+        }
+        if (ret) m.retiredTo = path.relative(root, path.join(specDir, ret.to));
+        migrations.push(m);
+      }
+    }
+    if (sel) {
+      for (const s of sel) {
+        if (!matchedSel.has(s.raw)) {
+          warnings.push(
+            `--only: "${s.raw}" matched no spec here (desks: writing, checking, library; personas: ki, bucky, mo, bruce). Is it shipped by another plugin's templates?`,
+          );
+        }
+      }
     }
   } else if (!opts.scaffold && !opts.refresh) {
     warnings.push(
@@ -484,6 +659,10 @@ function main() {
     if (refreshed.length) {
       process.stdout.write(`Refreshed (overwritten from templates): ${refreshed.join(", ")}\n`);
     }
+    if (opts.only) process.stdout.write(`Only: ${opts.only}\n`);
+    for (const r of retired) {
+      process.stdout.write(`Retired old spec: ${r.from} → ${r.to} (replaced by ${r.replacedBy})\n`);
+    }
     process.stdout.write(`\nResolved tasks (${tasks.length}):\n`);
     for (const t of tasks) {
       const when = t.cronExpression
@@ -494,6 +673,17 @@ function main() {
       process.stdout.write(
         `  • ${t.id}\n      ${when}   enabled=${t.enabled}   runLocation=${t.runLocation}\n      ${t.description}\n      ← ${t.sourceFile}\n`,
       );
+    }
+    if (migrations.length) {
+      process.stdout.write(`\nRenamed (delete the old live task, create the new one):\n`);
+      for (const m of migrations) {
+        process.stdout.write(
+          `  • ${m.oldIdPrefix}* → ${m.newId}${m.oldCron ? `   (old cron "${m.oldCron}")` : ""}\n`,
+        );
+      }
+    }
+    if (skipped.length) {
+      process.stdout.write(`\nNot selected by --only: ${skipped.map((x) => x.id).join(", ")}\n`);
     }
     if (warnings.length) {
       process.stdout.write(`\nWarnings:\n`);
@@ -507,10 +697,14 @@ function main() {
     projectRoot: root,
     projectBasename: vars.PROJECT_BASENAME,
     specDir: path.relative(root, specDir),
+    only: opts.only || null,
     scaffolded,
     refreshed,
+    retired,
     vars,
     tasks,
+    migrations,
+    skipped,
     warnings,
   };
   process.stdout.write(JSON.stringify(out, null, 2) + "\n");

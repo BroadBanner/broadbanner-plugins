@@ -1,6 +1,9 @@
 ---
-id: article-check-nightly-{{PROJECT_BASENAME}}
-description: Check {{PROJECT_BASENAME}}'s article drafts nightly — an editorial pass on drafts with a requested editorial check, then an independent fact-check (held while editorial musts are open), with notes, findings and votes on research-lead disputes in the portal (nothing is edited or published).
+id: checking-desk-mo-bruce-check
+description: Checking desk (Mo, then Bruce), 6:00 nightly checks — Mo's editorial pass on drafts with a requested editorial check, then Bruce's independent fact-check (held while Mo's musts are open), with notes, findings and votes on research-lead disputes in the portal (nothing is edited or published).
+desk: checking
+personas: mo, bruce
+replaces: article-check-nightly
 cronExpression: 0 6 * * *
 enabled: true
 runLocation: any
@@ -29,7 +32,7 @@ Editorial notes rewrite text, so they run before the fact-check (order: editoria
 ### Pass 2 — Fact-check
 
 1. Call `article_checks { action: "queue", limit: 5 }`. **If the queue is empty, exit quietly** with one line ("No drafts awaiting a fact-check.") — the common case, not an error.
-2. **Hold Bruce while Mo's musts are open.** For each article, first `article_checks { action: "list", articleId, view: "open" }`. If `nextStep.step` is `address_editorial`, skip it with one line ("held for Ki: N open musts"): the draft is about to change, so a fact-check now would be wasted. Ki revises at 7:00 and Bruce checks the revision at 8:00 (when those BroadNews tasks are installed).
+2. **Hold Bruce while Mo's musts are open.** For each article, first `article_checks { action: "list", articleId, view: "open" }`. If `nextStep.step` is `address_editorial`, skip it with one line ("held for Ki: N open musts"): the draft is about to change, so a fact-check now would be wasted. Ki revises at 7:00 (`writing-desk-ki-revise`) and Bruce checks the revision at 8:00 (`checking-desk-bruce-recheck`) when those tasks are installed.
 3. For each remaining article, one at a time, follow the `fact-check` skill: build the pack (`article_check_pack`), run all six passes, and save (`article_check_save`) with `mode: "requested"` when it has `checkRequestedAt`, else `"scheduled"`. Follow every evidence rule in the skill; on `bad_evidence`, fix the quotes and retry once; on `stale_revision`, rebuild and re-check once. One article's failure never stops the others.
 4. **Bruce votes** (below) once the fact-check is saved.
 

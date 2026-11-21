@@ -13,5 +13,5 @@ Loaded on demand from `SKILL.md`. Moved verbatim from the skill body (efficiency
 4. Finish with one line per article: title, open musts, total notes.
 
 The fresh-chat rule is satisfied by construction: the scheduled task is its own session.
-The nightly `article-check-nightly` task (set up with `/fact-check`'s **Nightly task**)
+The checking desk's nightly `checking-desk-mo-bruce-check` task (set up with `/fact-check`'s **Nightly task**)
 runs this editorial pass first, then the fact-check queue.

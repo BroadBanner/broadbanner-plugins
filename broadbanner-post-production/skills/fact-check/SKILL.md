@@ -1,6 +1,6 @@
 ---
 name: fact-check
-description: "Run an independent second-agent fact-check of an article draft, BroadNews script or pasted claims, in a FRESH chat. Use when the user says '/fact-check', 'fact-check this article', 'check this draft', 'check these claims', 'opposition check', or pastes a portal article link to verify. Builds the server evidence pack, checks every claim, quote and figure against its sources and the official record, reads it as its strongest critic, and saves findings to the portal. Never edits the piece. Also sets up the nightly check task. Production+ add-on (post_production_distribution)."
+description: "Run an independent second-agent fact-check of an article draft, BroadNews script or pasted claims, in a FRESH chat. Use when the user says '/fact-check', 'fact-check this article', 'check this draft', 'check these claims', 'opposition check', or pastes a portal article link to verify. Builds the server evidence pack, checks every claim, quote and figure against its sources and the official record, reads it as its strongest critic, saves findings to the portal. Never edits the piece. Also installs the nightly runs for the checking desk, Mo or Bruce. Production+ add-on."
 metadata:
   requiresTool: post_production_distribution
 ---
