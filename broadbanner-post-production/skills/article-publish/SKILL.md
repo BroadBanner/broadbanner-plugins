@@ -1,6 +1,6 @@
 ---
 name: article-publish
-description: "Push a generated article markdown into the member portal as an editable DRAFT via the BroadBanner MCP connector's create_article tool. Use when the user says 'publish the review', 'push it to the portal', 'create the article draft', or after episode-review completes in the post-production chain. Returns the app.broadbanner.com/app/articles URL of the draft for the member to review, edit, and publish. NO git, NO GitHub Pages — this replaces the old pages-publish flow. Production+ add-on (post_production_distribution)."
+description: "Push a generated article markdown into the member portal as an editable DRAFT via the BroadBanner MCP connector's create_article tool. Use when the user says 'publish the review', 'push it to the portal', 'create the article draft', or after episode-review completes in the post-production chain. Returns The Room's URL of the draft for the member to review, edit, and publish. NO git, NO GitHub Pages — this replaces the old pages-publish flow. Production+ add-on (post_production_distribution)."
 metadata:
   requiresTool: post_production_distribution
 ---
@@ -14,7 +14,7 @@ post-production chain.
 
 **This replaces the legacy `pages-publish` skill.** There is **no git, no branch, no
 commit, no GitHub PR, no Jekyll formatting, no `Pages/` write.** The review lands as a
-draft in `app.broadbanner.com/app/articles/…`, and the member owns the publish action.
+draft in `app.broadbanner.com/app/room/articles/…`, and the member owns the publish action.
 
 ## Step 0 — Entitlement preflight (no call)
 
@@ -99,7 +99,7 @@ agent's, so when the member edits and publishes it BroadBanner learns from their
 Call `create_article(...)`. On success it returns:
 
 ```json
-{ "ok": true, "id": "review-…", "slug": "<slug>", "url": "https://app.broadbanner.com/app/articles/<slug>" }
+{ "ok": true, "id": "review-…", "slug": "<slug>", "url": "https://app.broadbanner.com/app/room/articles/<slug>" }
 ```
 
 - On a transient/`5xx` error, retry up to 3× with brief backoff (500 ms → 1 s → 2 s).
@@ -127,7 +127,7 @@ The draft is the starting point the writing memory learns from. Any edits the cr
 
 Present:
 
-- **The portal URL** — `url` from the response (`https://app.broadbanner.com/app/articles/<slug>`)
+- **The portal URL** — `url` from the response (`https://app.broadbanner.com/app/room/articles/<slug>`)
 - The review `title` and the fact that it is a **DRAFT** (nothing is public yet)
 - The `seriesId` / `showId` it's tied to
 - A note that the social copy (if any) was attached for reuse when distributing

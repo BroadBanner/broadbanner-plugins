@@ -128,8 +128,7 @@ Ki", "…for Mo", "the checking desk", "Bruce & Mo"):
 
 Setting up the desk **project** itself (name, instructions, first chat) isn't this skill:
 the connector's `desk_setup` gives the member a printable setup kit, and the WebApp has the
-same kit at The Room → Set up (Articles → Writing team → Set up a desk for non-Room
-members). This skill only installs the runs once the project exists.
+same kit at The Room → Set up. This skill only installs the runs once the project exists.
 
 These task ids carry **no project name**: each run works on the member's whole account, so
 one copy per member is right. If `list_scheduled_tasks` shows the id already registered

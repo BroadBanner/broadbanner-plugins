@@ -92,7 +92,7 @@ create_article({
 ```
 
 `create_article` returns `{ ok, id, slug }` → the portal URL is
-`https://app.broadbanner.com/app/articles/<slug>`.
+`https://app.broadbanner.com/app/room/articles/<slug>`.
 
 Notes:
 - Always pass **`origin: "import"`** — imported posts become voice exemplars once
@@ -114,8 +114,8 @@ Summarize what was imported:
 
 ```
 Backfilled <N> article(s) into <seriesName or brand>:
-  ✅ <title>  → app.broadbanner.com/app/articles/<slug>   (2026-08-01)
-  ✅ <title>  → app.broadbanner.com/app/articles/<slug>   (2026-07-18)
+  ✅ <title>  → app.broadbanner.com/app/room/articles/<slug>   (2026-08-01)
+  ✅ <title>  → app.broadbanner.com/app/room/articles/<slug>   (2026-07-18)
   ⚠️  <url>   — skipped (couldn't read the post)
 ```
 

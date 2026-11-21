@@ -75,7 +75,7 @@ the same job.
 | "Set up / remove the nightly checks" | `fact-check`'s **Nightly task** (`fact-check/references/other-modes.md`; one task runs both passes) |
 | A fact question ("is this right?") | Point them to `/fact-check` in a fresh chat |
 
-Find the article id: a portal URL ends in `/app/articles/` then the id or slug; otherwise
+Find the article id: a portal URL ends in `/articles/` (The Room's `/app/room/articles/` or the older `/app/articles/`) then the slug or id; otherwise
 `list_articles({ q: "<words from the title>" })` and match the title (ask if several match). `get_article({ slug })`
 returns the id.
 
@@ -182,7 +182,7 @@ still applies.
 4. **What works**, in one line.
 5. **Fact-check flags**, if any, listed for the fact-check.
 
-Link the article (`https://app.broadbanner.com/app/articles/` + id) and tell the user:
+Link the article (`https://app.broadbanner.com/app/room/articles/` + the article's slug) and tell the user:
 
 - The notes are in the portal's **Editorial** tab of the check panel, anchored to
   paragraphs.

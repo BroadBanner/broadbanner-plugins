@@ -13,7 +13,7 @@ the creator's brands or series, in that scope's voice, and save it as an editabl
 settings, and manage what the system has learned about the creator's writing.
 
 The system learns from what the creator **accepts**: drafts they edit and publish in
-`app.broadbanner.com/app/articles`, articles they write by hand, and imported posts. This
+`app.broadbanner.com/app/room`, articles they write by hand, and imported posts. This
 skill's job is to produce a strong first draft and get it in front of the creator — the
 creator's edit-and-publish is the signal that improves the next draft.
 
@@ -218,7 +218,7 @@ Draft saved — nothing is public until you publish it.
 
 Title:  ...
 Form:   opinion · Series: ...  (or Brand: ...)
-Draft:  https://app.broadbanner.com/app/articles/...
+Draft:  https://app.broadbanner.com/app/room/articles/...
 
 Claims to verify: (list, or "none")
 

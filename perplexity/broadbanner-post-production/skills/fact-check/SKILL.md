@@ -105,7 +105,7 @@ receives a writer's Role or Ki/Mo layers (ignore any that a writing context retu
 | Editor notes on whether the piece works (structure, fairness, voice) | `/editorial-check` in a fresh chat; run it **before** the fact-check |
 | "What did the check find?" / resolve a finding | `article_checks { action: "list" }` / `"resolve"` |
 
-Find the article id: a portal URL ends in `/app/articles/` then the id or slug; otherwise
+Find the article id: a portal URL ends in `/articles/` (The Room's `/app/room/articles/` or the older `/app/articles/`) then the slug or id; otherwise
 `list_articles({ q: "<words from the title>" })` and match the title (ask if several match). `get_article({ slug })`
 returns the id.
 
@@ -281,7 +281,7 @@ lines below.
 
 **Without Bruce**, lead with the verdict, then the blockers and majors (paragraph, problem, fix), then a
 one-line count of minors/nits. Link the article
-(`https://app.broadbanner.com/app/articles/` + id). Tell the user:
+(`https://app.broadbanner.com/app/room/articles/` + the article's slug). Tell the user:
 
 - The findings are in the portal's **Fact-check** panel, anchored to paragraphs.
 - To fix: go back to the **writer** chat (or edit in the portal) and ask it to "address

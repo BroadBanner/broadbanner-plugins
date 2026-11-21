@@ -33,7 +33,7 @@ get_persona({
 ```
 
 **Show the status line, never skip silently.** Every persona result carries a
-`statusLine` ("Ki v3 loaded", "Bruce: switched off in Articles → Writing team", "No
+`statusLine` ("Ki v3 loaded", "Bruce: switched off in The Room → Writing team", "No
 persona: the Writing team add-on isn't on this account"; an older connector without
 `statusLine`: say who loaded, or why not, in your own words). In an attended run, show it to
 the member once, in one line, near the start. Then carry on exactly as the skill says when:
@@ -56,7 +56,7 @@ without that member. Never role-play a member who wasn't loaded.
 **No desk project yet.** If the member wants a project for the team (or asks how to set one
 up), call the connector's `desk_setup` and show its `markdown` printout: what the desk does,
 what it collects, the approvals it needs, then each block to copy. The same kit is in the
-WebApp at The Room → Set up (Articles → Writing team → Set up a desk for non-Room members),
+WebApp at The Room → Set up,
 where the member also gives the approvals. Never agree to them on the member's behalf.
 
 **Long chats.** If a loaded core is no longer in your context (the chat was summarised),
@@ -95,7 +95,7 @@ md, label, source }], lessons: [{ id, text, source }], memory: [{ id, text }], h
 
 **Each member's persona is theirs alone.** `core` is this member's own copy (pinned to
 `version`). If `coreUpdate` is set, say once, in the report, "{name}'s template has an
-update; apply it in Articles → Writing team if you want it". Never apply it yourself.
+update; apply it in The Room → Writing team if you want it". Never apply it yourself.
 `layers` are the **publication's** style (`label` Brand style / Series style / Network
 style, or the member's own Prompt role), never something the persona learned. `lessons`
 are this member's (`source: "own"`) plus reviewed community lessons only if they opted in
@@ -168,7 +168,7 @@ Writer skills end by offering **both** checks, each in its **own fresh chat** (n
 writer's chat, and not the same chat as each other):
 
 Give each hand-off as one copy-paste line with the **portal link** (it carries the article
-id), e.g. `/editorial-check https://app.broadbanner.com/app/articles/SLUG`. The checker
+id), e.g. `/editorial-check https://app.broadbanner.com/app/room/articles/SLUG`. The checker
 passes that article's id straight to `writing_session` / `article_check_pack`, so no step
 searches `list_articles` to find the piece again (efficiency plan D3). The server tracks the
 revision: never ask the user for it.

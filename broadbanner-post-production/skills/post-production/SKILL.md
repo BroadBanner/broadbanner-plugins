@@ -8,7 +8,7 @@ metadata:
 # Post-Production (orchestrator)
 
 Run the complete post-production chain from a finished Substack **live draft** to an
-**editable article DRAFT** in the member portal (`app.broadbanner.com/app/articles/<slug>`).
+**editable article DRAFT** in the member portal (`app.broadbanner.com/app/room/articles/<slug>`).
 This skill orchestrates five standalone skills in sequence, carrying context forward.
 
 This is the successor to the retired `episode-pipeline` orchestrator. The critical
@@ -166,7 +166,7 @@ via the `create_article` connector tool, and return the portal URL. **No git, no
 `episodeSlug`, `transcriptId` (linked to the new article so it's downloadable there).
 
 **Carries forward:** `{ ok, id, slug, url }` from `create_article` — the
-`https://app.broadbanner.com/app/articles/<slug>` URL for the member to review/edit/publish.
+`https://app.broadbanner.com/app/room/articles/<slug>` URL for the member to review/edit/publish.
 
 ## After the chain completes
 
