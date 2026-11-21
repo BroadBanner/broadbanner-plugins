@@ -111,7 +111,7 @@ This skill is connector-only — there is no project to discover, no credential 
 { generatedAt, shows: [...], _fetch: { cfCacheStatus, age, cfRay } }
 ```
 
-Each call is served fresh — the Data-Worker KV cache and CF edge cache are bypassed server-side, so a successful call is authoritative. The per-show schema is unchanged (`hasLiveScheduled`, `restreamKey`, `substackLivestreamUrl`, nested `hosts[]`/`guests[]`/`primaryHost`). `hasLiveScheduled` is the wire name for the D1 `schedule_state` column (verbose vocabulary since migration 0016).
+Each call is served fresh — the Data-Worker KV cache and CF edge cache are bypassed server-side, so a successful call is authoritative. The per-show schema is unchanged (`hasLiveScheduled`, `substackLivestreamUrl`, nested `hosts[]`/`guests[]`/`primaryHost`), except that stream keys are never returned: use `hasRestreamKey` / `restreamKeyTail`; `restreamKey` is masked (`••••a1b2`). `hasLiveScheduled` is the wire name for the D1 `schedule_state` column (verbose vocabulary since migration 0016).
 
 **Verify the snapshot is actually fresh — retry, then abort.** Check the top-level `generatedAt` on the returned envelope. Because the origin stamps `generatedAt` at build time (`new Date()` in `build.ts`), a fresh rebuild is **always** ~0s old — so an age older than ~10 minutes means the read didn't reach a live origin: either the Data-Worker KV cache or the CF edge cache served a stale blob. An old `generatedAt` is **never** "D1 reconcile lag" — a live rebuild reads current D1 and re-stamps `generatedAt`, so reconcile state cannot manifest as an old age.
 
@@ -422,7 +422,7 @@ The dialog will contain:
 
 Identify each value by its label (`generic` elements with text "Link to stream", "Server URL", "Stream key") and the adjacent `textbox` element's value.
 
-Store the **Link to stream** as `substackLivestreamUrl` and the **Stream key** as `restreamKey` for the D1 write.
+Store the **Link to stream** as `substackLivestreamUrl` and the **Stream key** as `restreamKey` for the D1 write. The stream key is a secret: pass it only to `set_show_schedule`, never print it, write it to a file or put it in another tool call. Show it as `••••` + its last 4 characters (see `../../references/redaction.md`).
 
 ### Step 7: Capture cohost invite links
 
@@ -591,10 +591,10 @@ Substack live streams scheduled (D1 write confirmed via connector) — times sho
      Show-stored: {scheduledStartLocal} ({localTimeZone})
    }
    Stream link: {substackLivestreamUrl}
-   Stream key: {restreamKey}
+   Stream key: ••••{last 4 of the captured key} (saved)
    schedule_state: substack_scheduled
    Co-host invites written:
-     - {name}: {cohostInviteLink | "already accepted (null)" | "skipped — not in API response"}
+     - {name}: {"invite link saved" | "already accepted (null)" | "skipped — not in API response"}
      - ...
 
 All shows updated in D1 via the set_show_schedule connector tool.

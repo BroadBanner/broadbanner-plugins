@@ -27,8 +27,9 @@ carried by the creator's connector session, not a file in the workspace.
 Replaces the old `curl .../shows?fresh=1&_cb=...` snapshot read plus its
 temp-file/header-dump machinery. Each call is authoritative (no local file to go
 stale). The per-show schema is unchanged: `hasLiveScheduled` (wire name for the
-D1 `schedule_state` column), `restreamKey`, `substackLivestreamUrl`, nested
-`hosts[]`/`guests[]`/`primaryHost`. Use `_fetch.cfCacheStatus` / `_fetch.age` /
+D1 `schedule_state` column), `substackLivestreamUrl`, nested
+`hosts[]`/`guests[]`/`primaryHost`. Stream keys are never returned: each show has
+`hasRestreamKey` and `restreamKeyTail`, and `restreamKey` is masked (`••••a1b2`). Use `_fetch.cfCacheStatus` / `_fetch.age` /
 `_fetch.cfRay` for the freshness-gate abort diagnostic (see SKILL.md Step 0).
 
 ### `set_show_schedule`

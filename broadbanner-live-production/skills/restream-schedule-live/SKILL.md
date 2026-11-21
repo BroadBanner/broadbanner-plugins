@@ -33,7 +33,7 @@ All data access goes through these tools — there is no `curl`, no `API_BASE`, 
 
 - The user must be logged in to Restream Studio at `app.restream.io` in Chrome before running.
 - The BroadBanner MCP connector (server `broadbanner`) must be connected and the caller must be authorized to schedule these shows: either a **host of the series** (a creator with the Creator Workspace entitlement → `shows:self-write`) or a **brand-admin/super-admin**. The scheduling tools fail closed otherwise (you'll get an authorization error). No token file, config, or workspace mount is required.
-- D1 must contain shows whose `hasLiveScheduled` is either `"substack_scheduled"` (Substack creds present, Restream channel not yet paired) OR `"restream_paired"` (channel_id present in `restream_events`, but no event_status='scheduled' write yet), AND with a non-null `restreamKey`. Both states are reachable from the substack-schedule-live skill plus Restream-Worker's channel-sync; this skill takes them the rest of the way to `restream_scheduled` by creating the Restream event and writing `restream_events.event_status='scheduled'`. The derive pass then promotes the show to `restream_scheduled` on the next reconcile tick. Shows already at `restream_scheduled` are not scheduled again. They are fetched too, but only so already-Scheduled events can be **checked and repaired** when the show changed after scheduling (see "Repairing scheduled events" below).
+- D1 must contain shows whose `hasLiveScheduled` is either `"substack_scheduled"` (Substack creds present, Restream channel not yet paired) OR `"restream_paired"` (channel_id present in `restream_events`, but no event_status='scheduled' write yet), AND with `hasRestreamKey: true`. Both states are reachable from the substack-schedule-live skill plus Restream-Worker's channel-sync; this skill takes them the rest of the way to `restream_scheduled` by creating the Restream event and writing `restream_events.event_status='scheduled'`. The derive pass then promotes the show to `restream_scheduled` on the next reconcile tick. Shows already at `restream_scheduled` are not scheduled again. They are fetched too, but only so already-Scheduled events can be **checked and repaired** when the show changed after scheduling (see "Repairing scheduled events" below).
 - The matching Substack channel is provisioned by the **Restream-Worker** channel sync (`broadbanner-restream`). The sync runs **immediately** whenever a show's stream key, title or start changes (the Data Worker fires an event trigger on the PATCH), plus a **5-minute** cron as a safety net. Channel names follow `"{showTitle} - {showDate}"`, and the Worker writes `channel_id` back to D1's `restream_events` row. It also **re-keys** a channel when a show is re-scheduled on Substack (new key) and removes the superseded channel when a show is renamed or moved to another date. If a channel is still missing when you reach the pairing step, **don't schedule without it**: follow Step 5a (defer, re-check later in this run, then schedule a one-shot retry). The legacy `banner-blast restream-poller` and `banner-admin schedule-live` channel paths are retired.
 
 ## Tool reliability guide
@@ -204,7 +204,7 @@ A single stale read must **not** abort the run. The cache bypass is honored inte
 
 Because the tool has no local file to leave behind, a failed or malformed read simply throws and is retried — the "stale leftover file" and false "reconcile-lag" abort classes from the old curl+temp-file design are impossible here. Only **persistent** staleness across all 5 attempts aborts the run.
 
-Split the `shows` array (all need a non-null `restreamKey`) into:
+Split the `shows` array (all need `hasRestreamKey: true`) into:
 
 - **To schedule:** `hasLiveScheduled` is `"substack_scheduled"` OR `"restream_paired"`. This is the main flow below.
 - **Repair candidates:** `hasLiveScheduled` is `"restream_scheduled"` and `scheduledStart` is still in the future, inside the horizon. These events are already Scheduled; they are only **checked**, and repaired if the show changed after scheduling. Build this list per `references/repair-scheduled-events.md` Step R0. That step reads `list_restream_events` per workspace for the `channel_created_at > scheduled_at` repair signal. This is the one sanctioned use of D1 rows, and it never decides whether a Draft gets scheduled.
@@ -214,13 +214,13 @@ Split the `shows` array (all need a non-null `restreamKey`) into:
 The **to-schedule** list is therefore exactly the set of shows where:
 
 - `hasLiveScheduled` is `"substack_scheduled"` OR `"restream_paired"` AND
-- `restreamKey` is non-null
+- `hasRestreamKey` is `true` (the connector never returns the key itself; `restreamKey` is masked as `••••` + last 4). If a show has no `hasRestreamKey` field (an older connector), treat a non-empty `restreamKey` as `true`, and print only its last 4 characters
 
 …with **no further D1-based exclusion**. Do not call `list_restream_events({ event_status: "scheduled" })` as a gate. If you want a courtesy log of what D1 currently believes about each show (purely informational — not a filter), call `list_restream_events({ workspace })` (no `event_status`) per workspace and print the rows alongside the eligible list. The decision to schedule or skip still lives in Step 2.
 
 #### Scheduling-horizon filter (default 7 days, overrideable)
 
-After the `hasLiveScheduled`/`restreamKey` filter, apply a **scheduling-horizon filter** to avoid cluttering Restream Studio with events scheduled far in advance. By default this skill only schedules shows whose `scheduledStart` (UTC ISO) is within the next **7 days from now**:
+After the `hasLiveScheduled`/`hasRestreamKey` filter, apply a **scheduling-horizon filter** to avoid cluttering Restream Studio with events scheduled far in advance. By default this skill only schedules shows whose `scheduledStart` (UTC ISO) is within the next **7 days from now**:
 
 ```bash
 # Default horizon — overridable via SCHEDULE_HORIZON_DAYS env var or user instruction
@@ -269,7 +269,7 @@ Filtered by 7-day horizon — deferred {M} show(s) scheduled >7d out:
   - {showTitle} ({scheduledStart in machine TZ}) — will be picked up on a later run
 ```
 
-If no eligible shows remain after the `hasLiveScheduled`/`restreamKey` filter (or after the horizon filter), report "No shows ready for Restream scheduling" and stop.
+If no eligible shows remain after the `hasLiveScheduled`/`hasRestreamKey` filter (or after the horizon filter), report "No shows ready for Restream scheduling" and stop.
 
 #### Resolve each show's workspace and group the run
 
@@ -297,7 +297,7 @@ Workspace "{ws.displayName}" ({ws.workspaceName}):
        Show-stored: {scheduledStartLocal} ({localTimeZone})
      }
      Default title: {defaultShowTitle}
-     Restream key: {restreamKey (first 8 chars)}…
+     Restream key: ••••{restreamKeyTail, else the last 4 of restreamKey} (set)
 
 Account top level (no workspace):
   2. …
@@ -670,7 +670,7 @@ channels.
 - **Target workspace missing from the sidebar / switch can't be verified:** Skip that workspace group (Step 1.5d), report its shows, and continue with the other groups. Never schedule into an unverified workspace.
 - **Event not found:** "Not found" means **no draft row contains the `defaultShowTitle`** — full stop. A draft whose title shows a *previous* episode's topic (e.g. a "Voice From Ukraine" draft still reading last week's headline) is **found** and is the recurring container to reuse — do NOT report it as "not found" or "a different/aired show." Only when there is genuinely no draft containing the series name does the user need to create one in Restream Studio (+ New Stream). This skill schedules existing draft events; it does not create new ones.
 - **Event already scheduled / Live / Finished:** Step 2's `read_page` badge check is the only place this decision is made. Skip the show, note it in the final report, and optionally best-effort call `upsert_restream_event` to align D1 (`event_status: "scheduled"` or `"finished"`). Never consult D1's `event_status` as a pre-flight filter — the API behind it has been observed misreporting Draft events as `upcoming`/`finished`.
-- **Channel not found:** Never schedule without it. Follow Step 5a: defer, re-check at the end of the run, then schedule a one-shot retry. The Worker creates channels on every stream-key write and every 5 minutes. A channel that stays missing usually means the show has no `restreamKey` in BroadBanner yet, or the workspace's Restream connection is broken.
+- **Channel not found:** Never schedule without it. Follow Step 5a: defer, re-check at the end of the run, then schedule a one-shot retry. The Worker creates channels on every stream-key write and every 5 minutes. A channel that stays missing usually means the show has no stream key in BroadBanner yet (`hasRestreamKey: false`), or the workspace's Restream connection is broken.
 - **Channel toggle doesn't respond:** Try clicking the toggle label/row instead of the switch element itself. If `left_click` is blocked, ask the user to toggle it.
 - **Schedule button fails:** The Schedule button may be disabled if required fields are missing (date, time, at least one channel). Verify all fields are set before clicking.
 - **Multiple draft events match:** When the same `defaultShowTitle` matches more than one draft event (e.g., two "Intelligent Masculinity" episodes from different weeks), prefer the one whose title is most similar to the show's `showTitle`, or the one with the most recent "Last edited" date. If ambiguous, present both to the user and ask them to choose.

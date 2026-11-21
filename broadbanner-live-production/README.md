@@ -30,6 +30,12 @@ series you host, and publish clips to TikTok/YouTube/Facebook.
   scheduling role. Creator-scoped scheduling (any host of a series) is a planned backend
   change — see `Documentation/engineering/PLUGIN-TIERING-AND-ENTITLEMENT-GATING.md`.
 
+## Secrets
+
+Stream keys and co-host invite links are never printed: reports show `••••` + the last 4, and the
+connector's `list_schedulable_shows` returns `hasRestreamKey` / `restreamKeyTail` instead of the key.
+See `references/redaction.md`.
+
 ## Requirements
 
 - The **BroadBanner MCP connector** (`mcp.broadbanner.com`) connected — the scheduling
