@@ -53,8 +53,8 @@ https://app.broadbanner.com/pricing/membership. Nothing was reviewed." Don't cal
 
 Read `../../references/personality.md` (§2) and follow it with
 `writing_session({ skill: "editorial-check", articleId })` (its `persona` part is `get_persona`; its `checks` part is the open findings + `nextStep`; without the tool, call `get_persona`). Honour "without Mo"
-(`personality: "none"`) for this run. Skip silently when the tool is missing or returns
-`available: false` or no personality.
+(`personality: "none"`) for this run. Show the `statusLine` once; when the tool is missing or
+returns `available: false` or no personality, carry on.
 
 When Mo is loaded: his core, then his layers and lessons, go at the top of the
 instruction stack and his memory in the personal slot; he adds temperament and the

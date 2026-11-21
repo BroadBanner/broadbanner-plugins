@@ -31,7 +31,7 @@ https://app.broadbanner.com/pricing/membership. Nothing was written." Don't call
 Once the series is resolved (the orchestrator's Step 0, or Step 1 below), read
 `../../references/personality.md` (§2) and call
 `get_persona({ skill: "episode-review", seriesId })`. Honour one-run overrides ("without
-Ki"). Skip silently when the tool is missing or returns no personality. A returned
+Ki"). Show the `statusLine` once; when the tool is missing or returns no personality, carry on. A returned
 personality (usually **Ki**) goes in the precedence list in Step 3b; its memory goes with
 the creator's personal settings. When invoked by `post-production`, the orchestrator
 passes any override through; run this step once.

@@ -43,7 +43,7 @@ Start every run with ONE call: `writing_session({ skill: "article-write" })` (ad
 titles and brands), `writing` (as Step 3's writing context), `checks` and `lessons`, each
 fail-soft. Without the tool, fall back to the separate calls. Read
 `../../references/personality.md` (§2) and honour one-run overrides ("without Ki", "with
-Mo"). Skip silently when no personality comes back. When one is returned (usually **Ki**), its
+Mo"). Show the `statusLine` once; when no personality comes back, carry on. When one is returned (usually **Ki**), its
 core → layers → lessons go first in the instruction stack and its memory goes in the
 personal slot. With Ki, drain the lesson inbox next (`personality.md` §5): one call to
 read it, one to learn. The hard rules above always win.

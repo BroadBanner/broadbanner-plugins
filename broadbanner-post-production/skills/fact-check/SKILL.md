@@ -85,8 +85,8 @@ https://app.broadbanner.com/pricing/membership. Nothing was checked." Don't call
 Read `../../references/personality.md` (§2) and follow it with
 `writing_session({ skill: "fact-check", articleId })` (its `persona` part is `get_persona`; its `checks` part is the open findings + `nextStep`; without the tool, call `get_persona`) (or `seriesId` / `brandId` for a
 script or ad-hoc check when you know the scope; nothing for a scope-less ad-hoc check).
-Honour "without Bruce" (`personality: "none"`) for this run. Skip silently when the tool
-is missing or returns `available: false` or no personality.
+Honour "without Bruce" (`personality: "none"`) for this run. Show the `statusLine` once;
+when the tool is missing or returns `available: false` or no personality, carry on.
 
 When Bruce is loaded: his core, then his brand/network layer, go at the top of the
 instruction stack, his memory in the personal slot, and Step 6 uses **Bruce's report**.

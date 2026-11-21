@@ -32,14 +32,29 @@ get_persona({
 })
 ```
 
-**Skip silently** (no message, no retry, carry on exactly as the skill says) when:
-- the connector has no `get_persona` tool, or the call errors;
+**Show the status line, never skip silently.** Every persona result carries a
+`statusLine` ("Ki v3 loaded", "Bruce: switched off in Articles → Writing team", "No
+persona: the Writing team add-on isn't on this account"; an older connector without
+`statusLine`: say who loaded, or why not, in your own words). In an attended run, show it to
+the member once, in one line, near the start. Then carry on exactly as the skill says when:
+- the connector has no `get_persona` tool, or the call errors (say "Persona couldn't be
+  loaded right now");
 - it returns `{ available: false }` (no add-on);
 - it returns `{ available: true, personality: null }` (switched off, no default for this
-  skill, or the user said "without").
+  skill, the user said "without", or `off_roster`).
 
-Only mention a skip when the user explicitly asked for a personality ("with Bruce") and
-didn't get one: say why in one line (the `reason`, or "Writing team is an add-on").
+**Already loaded in this chat.** If the chat already loaded this member (`team_session`
+earlier, or a `writingTeam` block on a writing tool's result), don't load it again; use
+what you have. If a writing tool's result carries a `writingTeam` block and you hadn't
+loaded anyone, that IS this run's persona: use it as slot 1 below.
+
+**Projects with a team roster.** A project's instructions may declare its team (Ki &
+Bucky, or Bruce & Mo). Pass that list as `roster` to `team_session`. If the result is
+`reason: "off_roster"`, show its `statusLine` (it names the project to use) and carry on
+without that member. Never role-play a member who wasn't loaded.
+
+**Long chats.** If a loaded core is no longer in your context (the chat was summarised),
+call `team_session` again with the same members before writing more.
 
 ### One-run overrides
 
@@ -133,13 +148,13 @@ credentials or anything the user didn't ask you to remember.
 
 When a personality was loaded, name it once in the final report, e.g.
 "Written with Ki (v3, brand:babm)", "Checked by Bruce (v2, default)" or
-"Edited by Mo (v1, default)". Say nothing about
-personalities when none was loaded.
+"Edited by Mo (v1, default)". When none was loaded,
+give the `statusLine` instead (one line).
 
 ### Unattended runs
 
 Ask no questions. Overrides come only from the task prompt. A failed `get_persona` call
-is a silent skip, never a reason to stop.
+is never a reason to stop: put its `statusLine` (or "persona not loaded") in the report.
 
 ## 3. Handing off to the independent checks
 
