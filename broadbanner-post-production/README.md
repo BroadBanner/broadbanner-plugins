@@ -121,6 +121,8 @@ learned memory stays per person. See `Documentation/engineering/WRITING-STUDIO-D
 **Bucky**, the researcher, runs in BroadNews (scripts, roundups, saved prompts). Asked for here, Bucky gets
 `not_for_skill` from `get_persona` and the skill loads its own default instead.
 
+**Linked content** (`references/linked-content.md`, 2026-11-22): after any article revision the connector returns `refreshLinked` when the article's scripts or its own blurbs are now behind it. The writer skills (article-write revise, news-article revise, check fixes) and the 7:00 writing desk run do the refresh pass unasked: rewrite only what changed as drafts for the member to approve, or mark it reviewed. Nothing is approved or posted.
+
 `references/personality.md` is shared by the skills. **Roles** (who is writing, from what
 vantage) come back in `get_writing_context.roles` and sit at slot 1 of the instruction
 stack for every user. With the **Writing team** add-on, `article-write` and
