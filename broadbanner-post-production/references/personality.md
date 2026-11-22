@@ -48,6 +48,13 @@ earlier, or a `writingTeam` block on a writing tool's result), don't load it aga
 what you have. If a writing tool's result carries a `writingTeam` block and you hadn't
 loaded anyone, that IS this run's persona: use it as slot 1 below.
 
+**Only the member who was asked for.** Load exactly the member(s) the member asked for,
+never the project's lead or a partner on top (the lead only when no one is named, the whole
+roster only for "the team"). If a member is already loaded in this chat and may do this
+skill's work, pass that member as `personality` to `writing_session` / `get_persona`, so the
+skill doesn't load its own default as a second persona. Bucky never does article or check
+skills; there, the skill's own member loads, and say so in one line.
+
 **Projects with a team roster.** A project's instructions may declare its team (Ki &
 Bucky, or Bruce & Mo). Pass that list as `roster` to `team_session`. If the result is
 `reason: "off_roster"`, show its `statusLine` (it names the project to use) and carry on
