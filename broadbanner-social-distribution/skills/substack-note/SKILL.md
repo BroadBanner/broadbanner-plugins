@@ -47,7 +47,7 @@ If `substackHandle` is null, ask once: "What's your Substack username?" — but 
 handle; posting under the wrong account is a public mistake.
 
 There is no `USER_ID`, no cap-token, and no Chrome-profile config to load — the connector
-asserts identity, and the skill runs on the single connected Chrome profile (Step 1.5).
+asserts identity, and the browser follows the Substack account (Step 1.5).
 
 **Entitlement (no extra check).** `post_text` / `post_image` are registered only for Core
 (`banner_blast`) accounts. If they're missing, or return 403, stop before any browser work
@@ -156,27 +156,28 @@ Once confirmed, post without asking again.
 
 **Pre-approved notes:** if the dispatch prompt says the note is pre-approved, skip this step. Go straight to Step 1.5.
 
-### Step 1.5: Use the single connected browser
+### Step 1.5: Pick the browser and check who is signed in
 
-This skill runs on the operator's **single connected Chrome profile** — there is no
-profile map, no enumeration, and no `select_browser` routing. Use whatever browser is
-currently connected. If **no** browser is connected, **stop and tell the user** to
-connect (pair) the browser Cowork drives.
+Read `../../references/browser-routing.md` and follow it. `@bannerandbackbone` (Banner and
+Backbone Media) posts from the **Claude built-in browser**; every other handle posts from
+**Chrome**. Its driver table maps every Chrome step below to the built-in browser. If the
+browser this handle needs isn't available, stop and say which one it needs.
 
-Login is verified for real in Step 2 (the profile page must show `@{SUBSTACK_HANDLE}`).
-If the connected browser is logged into a **different** account, **stop and tell the
-user** to log into `@{SUBSTACK_HANDLE}`'s Substack in that browser — posting under the
-wrong account is a public mistake. Never switch to "another" browser to find the handle.
+Before Step 2's profile page, open the working tab on `https://substack.com/home` and run
+the **signed-in check** (routing §3). It must report `@{SUBSTACK_HANDLE}`. Anything else
+(not signed in, another handle) → close your tab and stop with the routing §3 line —
+posting under the wrong account is a public mistake. Never switch to "another" browser.
+The profile page is not proof of who is signed in.
 
 ### Step 2: Open the browser, navigate, and capture baseline
 
-Do all of this in **one `browser_batch` call**:
+Do all of this in **one `browser_batch` call** (built-in browser: one `browser_repl` script, see the driver table; reuse the Step 1.5 tab):
 
 1. `tabs_create_mcp` → record `tabId`
 2. `resize_window` to **1200×900** (wider viewports cause coordinate mismatches that dismiss the modal)
 3. `navigate` to `https://substack.com/@{SUBSTACK_HANDLE}`
 
-Wait 3 seconds. Verify the profile is visible and the user is logged in. If a login prompt appears, stop and ask the user to log in manually.
+Wait 3 seconds. Verify the profile is visible. If a login prompt appears, stop and ask the user to log in manually (built-in browser: `browser.show()`, then they sign in in the Claude desktop app).
 
 **Capture baseline** via a single `javascript_tool` call:
 

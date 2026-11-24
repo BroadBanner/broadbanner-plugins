@@ -2,8 +2,10 @@
 
 Social **posting** toolkit for **Banner and Backbone Media** — Core tier, the
 `banner_blast` entitlement. Post text/image/video notes to Substack/Bluesky/Threads and
-release queued Substack notes and clips. Browser automation runs on the operator's
-**single connected Chrome profile** (no profile routing).
+release queued Substack notes and clips. Browser automation runs in the browser that
+holds the Substack account: `@bannerandbackbone` (Banner and Backbone Media) in the Claude
+built-in browser, every other handle in Chrome. Every skill checks who is signed in before
+posting and refuses on a mismatch (`references/browser-routing.md`).
 
 > **Live-stream scheduling moved.** `substack-schedule-live` (and Restream scheduling)
 > now live in the **`broadbanner-live-production`** plugin (Creator+ / `creator_workspace`),
@@ -31,10 +33,9 @@ release queued Substack notes and clips. Browser automation runs on the operator
 ## Requirements
 
 - An authenticated Substack session in your browser (none of the skills automate login).
-- A browser Cowork can drive — **either** Claude in Chrome on desktop Cowork (a **single**
-  connected BroadBanner Chrome profile) **or** the browser of a remote/cloud Cowork
-  environment. The skills do not enumerate or route among profiles; they verify the
-  browser is logged into the expected account and stop if it isn't. The connector-based
+- The browser for the account — Claude in Chrome for most handles, the Claude built-in
+  browser (Claude desktop app) for `@bannerandbackbone`. The skills read the signed-in user
+  in-page and stop if it isn't the expected account; they never switch browsers. The connector-based
   release skills (`release-substack-text`, `release-substack-clips`) need nothing local,
   so their scheduled tasks can run in the cloud (see `broadbanner-scheduled-tasks`).
 - The **BroadBanner MCP connector** (`mcp.broadbanner.com`) connected — the connector-based

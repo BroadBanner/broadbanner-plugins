@@ -1,544 +1,206 @@
 ---
 name: restream-publish-clip
 description: >
-  Publish a Restream clip named by a restream-clip tracker to TikTok and
-  YouTube (plus Facebook for B&B) via the Restream clips UI in Chrome. Use
-  when the user says "publish the next clip on Restream", "post the clip to
-  TikTok and YouTube", "publish the restream clip", or a restream-clip
-  tracker has pending Restream platforms. Also triggers after banner-blast
-  push processes a clip tracker that still needs publishing. With multiple
-  pending clips, the first publishes immediately and the rest are scheduled
-  as staggered one-shot tasks.
+  Publish your next Restream clip to TikTok and YouTube (plus Facebook for B&B)
+  from Restream's clips UI, in the browser that holds the clip's Restream
+  account. Use when the user says "publish the next clip on Restream", "post the
+  clip to TikTok and YouTube", "publish the restream clip", or the hourly
+  clip-publishing task runs. Reads the clips waiting from the BroadBanner
+  connector (only clips made after the start date; never a series with
+  auto-posting off), publishes ONE per run, and records the result.
+metadata:
+  requiresTool: banner_blast
 ---
 
 # Restream Publish Clip
 
-Publish pending clips from `restream-clip` tracker files to TikTok and YouTube
-(and Facebook for B&B) using Restream's clips publishing UI. Handles batches:
-first clip publishes immediately, subsequent clips get one-shot scheduled tasks
-with randomised 10–40 minute delays between them.
+Publish one pending Restream clip per run to TikTok and YouTube (and Facebook
+for B&B) using Restream's clips publishing UI. The list of clips comes from the
+**BroadBanner connector**, and the result goes back to it. There are no local
+tracker files any more.
 
-## Failure modes this skill defends against
+## What keeps this safe
 
-This spec is strict because two earlier failure modes caused real damage:
+- **No backfill.** BannerBlast gives a clip a Restream publishing slot only when
+  Restream made the clip after the feature's start date. Older clips never show
+  up in `list_pending_restream_clips`.
+- **Held series are skipped.** A series whose auto-posting is set to Manual holds
+  every platform of its clips, this one included, so they never show up.
+- **One copy per clip.** Only the Restream account owner's copy carries the slot,
+  so a co-host's run never publishes the same clip again.
+- **One clip per run, spaced out.** Each run publishes at most **one** clip, the
+  oldest. The scheduled task runs once an hour between 10:00 and 22:00 ET, so
+  clips go out at least an hour apart and a backlog drains over the day.
+- **The right clip, marked once.** Step 5 matches the clip by title, never by
+  position. Step 9 records the result right after publishing, and a clip can be
+  recorded only once (a second mark answers `not_pending`).
 
-1. **Tracker/clip misalignment.** A project page in Restream contains every
-   clip for an episode. The earlier version of Step 5 said "click the first
-   unpublished clip" — which decoupled the clip being published from the
-   tracker being mutated. Wrong clip got the credit; the tracker we
-   actually wanted to retire stayed `pending`.
-2. **Silent write failure on Step 10.** The earlier Step 10 only sketched
-   the JSON to merge; it didn't say "use the Edit tool against `<file>`."
-   Trackers stayed `pending` after a successful publish, so every later
-   skill invocation reclassified them as `due` and republished the clip.
-   Same clip went out to TikTok / YouTube multiple times.
+Two earlier bugs shaped this: publishing "the first unpublished clip" in a
+project gave the wrong clip the credit, and a result that never got written made
+every later run publish the same clip again. **Do not weaken Step 5 or Step 9.**
 
-The current spec aligns Step 5 with the tracker's specific clip and treats
-Step 10 as a verified write. **Do not weaken either.**
+## Step 0: Preflight (no tool call)
 
-## Prerequisites
+The connector registers `list_pending_restream_clips` and
+`mark_restream_published` only for accounts with BannerBlast (`creators:write`).
+If they are missing: attended, say the connector needs to be connected with a
+plan that includes BannerBlast and stop; unattended, report
+`restream-publish-clip: skipped (connector tools unavailable)` and stop. Do not
+open a browser.
 
-- User must be logged in to Restream at `app.restream.io` in Chrome.
-- `Social-Distribution/` must contain at least one `*_restream-clip_*.json`
-  file with no `platforms.restream_publish` entry, or one with
-  `status: "pending"` and a `release_at` that is now due.
+## Step 1: List what is waiting
 
-## Tool reliability guide
+Call `list_pending_restream_clips` with `limit: 3` (and `brand` only when the
+user or the task named one). It returns
+`{ clips: [{ id, clipId, projectId, title, caption, hashtags, eventTitle, podId, clipCreatedAt, created_at }], more }`,
+oldest first.
 
-| Tool               | Reliability    | Use for                                          |
-| ------------------ | -------------- | ------------------------------------------------ |
-| `read_page`        | Always works   | Verifying page state, reading element refs       |
-| `find`             | Always works   | Locating elements by description                 |
-| `form_input`       | Always works   | Text inputs, description fields                  |
-| `navigate`         | Always works   | Page navigation                                  |
-| `tabs_context_mcp` | Always works   | Tab IDs                                          |
-| `left_click`       | Can be blocked | Clicking buttons (ask user to click as fallback) |
-| `screenshot`       | Can be blocked | Visual verification (use `read_page` fallback)   |
-| `javascript_tool`  | Can be blocked | DOM manipulation (use `form_input` instead)      |
+- **Empty** → report `restream-publish-clip: nothing to publish` and exit. This
+  is the common case. Open no browser.
+- **Unattended and outside 10:00–22:59 ET** → report
+  `restream-publish-clip: N waiting, outside the publishing window` and exit.
+- Otherwise take the **first** clip. Hold on to `id` (the tracker id for Step 9),
+  `projectId`, `title`, `podId` and `clipId`. Do not publish any other clip this
+  run; say how many are still waiting in the report.
 
-If `left_click` is blocked for a critical step, tell the user exactly what to
-click and wait for confirmation before continuing.
+## Step 2: Platform accounts and the YouTube title
 
----
+Choose accounts by `podId`:
 
-## Platform account lookup
+| podId prefix | TikTok            | YouTube           | Facebook                |
+| ------------ | ----------------- | ----------------- | ----------------------- |
+| `sotsp-*`    | Nick Paro         | Sick of this Show | _(not toggled)_         |
+| `babm-*`     | Banner & Backbone | Banner & Backbone | Banner & Backbone Media |
+| `lr-*`       | _(all available)_ | _(all available)_ | _(all available)_       |
 
-Choose platform accounts based on `clip.pod_id`:
+For `lr-*` (Lev Remembers: `lr-vfu`, `lr-lr`) toggle on **every** account
+listed under every platform. Any other prefix: attended, ask which accounts to
+use; unattended, record `skipped` with reason `unknown series prefix` (Step 9)
+and stop.
 
-| pod_id prefix | TikTok            | YouTube           | Facebook                |
-| ------------- | ----------------- | ----------------- | ----------------------- |
-| `sotsp-*`     | Nick Paro         | Sick of this Show | _(not toggled)_         |
-| `babm-*`      | Banner & Backbone | Banner & Backbone | Banner & Backbone Media |
-| `lr-*`        | _(all available)_ | _(all available)_ | _(all available)_       |
-
-For `lr-*` (Lev Remembers brand: `lr-vfu` Voice from Ukraine, `lr-lr` Lev
-Remembers), the policy is **post to every available account on every
-platform** — TikTok, YouTube, and Facebook alike. If multiple accounts are
-listed under any platform in the publish modal, toggle ALL of them on. Do
-not pick a subset. The policy is identical for both shows.
-
-If an unrecognised prefix appears (anything other than `sotsp-*`, `babm-*`,
-or `lr-*`), pause and ask the user which accounts to toggle before
-proceeding.
-
----
-
-## Step-by-step workflow
-
-### Step 0: Ensure BroadBanner mount
-
-Verify `~/BroadBanner` is mounted at `/sessions/*/mnt/BroadBanner`. If not,
-call `mcp__cowork__request_cowork_directory` with `path: "~/BroadBanner"`.
-
-This skill runs on the single connected Chrome profile — there is no
-`chromeProfiles` routing. One Restream login manages every workspace on the
-account; Step 3.5 selects the clip's workspace in-app.
-
----
-
-### Step 1: Classify all pending clips
-
-Scan `Social-Distribution/` for files matching `*_restream-clip_*.json`.
-Parse each and sort by filename ascending (oldest first). Classify every file:
-
-| Class           | Condition                                                                                             |
-| --------------- | ----------------------------------------------------------------------------------------------------- |
-| **unscheduled** | `platforms.restream_publish` is absent entirely                                                       |
-| **due**         | `platforms.restream_publish.status === "pending"` AND `release_at <= now` (or `release_at` is absent) |
-| **waiting**     | `platforms.restream_publish.status === "pending"` AND `release_at > now`                              |
-| **done**        | `status` is `"posted"`, `"skipped"`, or `"failed"`                                                    |
-
-Build two lists:
-
-- `unscheduled_clips` — need scheduling right now
-- `due_clips` — already scheduled and their time has come
-
-**Fast-exit cases:**
-
-- Both lists empty → report `restream-publish-clip: nothing to do` and exit.
-- `unscheduled_clips` is empty but `due_clips` is also empty (only `waiting`) →
-  report `restream-publish-clip: N clips waiting, next due at <earliest release_at>` and exit.
-
----
-
-### Step 2: Assign release times and schedule future clips
-
-Only run this step if `unscheduled_clips` is non-empty.
-
-**Compute staggered release times within the 10am–11pm ET window:**
+YouTube titles max out at 100 characters:
 
 ```
-now_et       = current time in US/Eastern
-window_open  = today 10:00 ET
-window_close = today 23:00 ET
-cumulative_offset = 0
-
-for i, clip in enumerate(unscheduled_clips):
-    if i == 0:
-        candidate = now_et
-    else:
-        delay = random integer in [30, 90] (minutes)
-        cumulative_offset += delay
-        candidate = now_et + cumulative_offset minutes
-
-    # Clamp to window: push early times to window open, late times to next day
-    if candidate < window_open:
-        candidate = window_open
-    elif candidate >= window_close:
-        candidate = window_open + 24 hours   # next day 10:00 ET
-
-    release_at[clip] = candidate (converted to UTC ISO 8601)
+youtube_title = title; youtube_description = ""
+if len(title) > 100:
+    split at the first . ? or ! followed by a space (or at the end)
+    found     → youtube_title = text up to and including it; description = the rest
+    not found → youtube_title = title[:97].rstrip() + "..."
 ```
 
-**Write release_at to each unscheduled tracker:**
+## Step 3: Pick the browser and check who is signed in
 
-```json
-{
-  "platforms": {
-    "restream_publish": {
-      "status": "pending",
-      "release_at": "<ISO 8601 UTC>"
-    }
-  }
-}
-```
+Read `../../references/browser-routing.md` first.
 
-Merge into the existing `platforms` block — do not overwrite other entries.
+1. Call `get_restream_workspaces` and find the workspace whose `podIds` contains
+   `podId`: its parent `accounts[i].id` picks the browser (`babm` → the Claude
+   built-in browser, any other account → Chrome) and its `displayName` is the
+   sidebar label. If the tool is missing or unauthorized, route by prefix
+   (`babm-*` other than `babm-pv` → built-in browser, else Chrome) and switch
+   workspaces by trial in Step 4.
+2. If that browser is not available: attended, say which browser the account
+   needs and stop; unattended, report the routing §1 skip line and stop. Never
+   use the other browser.
+3. Open `https://app.restream.io/home` in your own new tab, wait for the
+   sidebar's "Workspaces" heading and run the routing §2 snippet. A login page or
+   the wrong account → close your tab, publish nothing, record nothing, and
+   report the routing §2 refusal line.
+4. Click the sidebar item matching `displayName` (case-insensitive, truncation
+   allowed; expand the account header first if needed). Verify with `read_page`
+   that it is the active workspace.
 
-**Create one-shot scheduled tasks for clips 2 and beyond:**
+In the built-in browser, use routing §3's driver table for every Chrome step
+below, and end each script right before the Publish click.
 
-For each clip at index ≥ 1 in `unscheduled_clips`, call
-`mcp__scheduled-tasks__create_scheduled_task` with:
+## Step 4: Open the clip project
 
-```
-taskId:      "restream-clip-<first 8 chars of clip.clip_id>"
-description: "Publish Restream clip: <clip.title> (<clip.event_title>)"
-fireAt:      "<release_at[clip]> as ISO 8601 with local timezone offset>"
-prompt:      """
-Run the restream-publish-clip skill.
+Navigate to `https://app.restream.io/clips/<projectId>` and confirm with
+`read_page` that the project's clip list loaded. If it errors or bounces to the
+clips index, a different workspace is probably active: try each other workspace
+on this account in the same tab. If it fails in every one, record `failed` with
+`project not found` (Step 9) and stop.
 
-Find the next pending restream-clip tracker in Social-Distribution/ whose
-platforms.restream_publish.release_at is now due (release_at <= current time),
-and publish that clip to Restream's TikTok and YouTube platforms via
-app.restream.io/clips. Process exactly one clip then exit.
+## Step 5: Find THIS clip in the project
 
-Target clip context (for disambiguation if multiple are due simultaneously):
-  clip_id:     <clip.clip_id>
-  clip_title:  <clip.title>
-  project_id:  <clip.project_id>
-  pod_id:      <clip.pod_id>
-"""
-notifyOnCompletion: false
-```
+List every clip in the project view with its title and published state. Match
+`title` by the first rule that gives exactly one clip:
 
-After creating tasks, move the first unscheduled clip into `due_clips` (its
-release_at is now, so it is immediately due). The remaining clips are now
-`waiting` and will be handled by their scheduled tasks.
+1. Exact title.
+2. Case-insensitive title.
+3. Substring either way, **only if exactly one clip matches**.
 
-Report the schedule to the user:
+| Result                                  | Action                                                                                 |
+| --------------------------------------- | -------------------------------------------------------------------------------------- |
+| Found, already shows "Published"        | Record `skipped`, reason `already published in Restream` (Step 9). Do not publish.     |
+| Found, not published                    | Click **that clip's** Publish button. Continue.                                        |
+| Not found                               | Record `failed`, error `clip title not found in project` (Step 9).                     |
+| Several substring matches               | Attended: ask which. Unattended: record `skipped`, reason `ambiguous clip title`.      |
 
-```
-restream-publish-clip: found N clips — publishing now + scheduling N-1 tasks
-  Clip 1 (now):       "<clip_title>"
-  Clip 2 (10:45 ET):  "<clip_title>"
-  Clip 3 (12:15 ET):  "<clip_title>"
-  ...
-```
+Confirm the publish modal shows this clip's title. If it opened on another clip,
+close it (Escape, then **Leave**) and stop without recording anything.
 
-Include the ET wall-clock time for each scheduled clip so the user can see exactly when they'll drop.
+## Step 6: Toggle the accounts
 
----
+Enable only the Step 2 accounts and turn off any others that are on. Read the
+toggle state first and change only what needs changing.
 
-### Step 3: Pick the clip to process now
+## Step 7: YouTube title and description
 
-From `due_clips`, pick the oldest by `release_at` (or `created_at` as
-fallback). This is the clip to publish in this invocation.
+If the title was over 100 characters, set the YouTube title to `youtube_title`
+and, when non-empty, the description to `youtube_description` (`form_input`).
 
-Extract — and **hold on to all of these for Step 5 and Step 10**, you
-will need them:
+## Step 8: Publish
 
-| Variable       | JSON path                | Example                                                                        |
-| -------------- | ------------------------ | ------------------------------------------------------------------------------ |
-| `tracker_path` | (the absolute file path) | `/Users/.../Social-Distribution/20260407-131341_restream-clip_c127ace8-….json` |
-| `project_id`   | `clip.project_id`        | `"510dac4d-b1ae-4204-ae8b-4661541144b0"`                                       |
-| `clip_title`   | `clip.title`             | `"Activate apathetic voters not extremists"`                                   |
-| `pod_id`       | `clip.pod_id`            | `"sotsp-notw"`                                                                 |
-| `clip_id`      | `clip.clip_id`           | `"c127ace8-..."`                                                               |
+Read the modal once more: the right clip, the right accounts, the YouTube
+title. Then click **Publish Clips** in its own step (in the built-in browser,
+its own script). Wait for the success toast, badge or modal close. If the UI
+shows an error, capture its text and do not record `posted`.
 
-`tracker_path` is the single most important variable in this skill.
-Every Step 10 write targets that exact path. If you lose it, you cannot
-reliably write back, and the skill will repost on its next run.
+## Step 9: Record the result (required)
 
-Derive platform accounts from the lookup table above.
+Call `mark_restream_published` with the Step 1 `id`:
 
-**Compute YouTube title and description:**
+| What happened             | Call                                                                      |
+| ------------------------- | ------------------------------------------------------------------------- |
+| Published                 | `{ trackerId: id, status: "posted" }`                                     |
+| Already published / skip  | `{ trackerId: id, status: "skipped", error: "<reason>" }`                 |
+| Not found / publish error | `{ trackerId: id, status: "failed", error: "<first 200 chars>" }`         |
 
-```
-original_title    = clip_title
-youtube_title     = clip_title
-youtube_description = ""
+- `{ ok: true }` → recorded.
+- `{ ok: false, error: "not_pending" }` → another run already recorded this
+  clip. Report it; do not publish again.
+- The call **throws** after a publish → the clip is live but not recorded. Do
+  not close the tab. Report the CRITICAL line below and stop: the next run would
+  otherwise list it again. Retry the same mark once before reporting.
 
-if len(original_title) > 100:
-    # Scan for first sentence-ending punctuation followed by a space
-    split_pos = first index where original_title[i] in {'.', '?', '!'}
-                AND (original_title[i+1] == ' ' OR i == last index)
-    if split_pos found:
-        youtube_title       = original_title[:split_pos + 1].strip()
-        youtube_description = original_title[split_pos + 2:].strip()
-    else:
-        youtube_title       = original_title[:97].rstrip() + "..."
-        youtube_description = ""
-```
+## Step 10: Clean up and report
 
----
-
-### Step 3.5: Select the clip's Restream workspace (in-app)
-
-Clip projects, like events, belong to a Restream **workspace**, and a single
-Restream login lists every workspace on the account in the left sidebar. Use
-the connected browser as-is — never switch Chrome profiles or log in again —
-and select the workspace in-app:
-
-1. **Resolve the target.** If the BroadBanner MCP connector is connected, call
-   `get_restream_workspaces` and find the workspace whose `podIds` contains
-   `pod_id`; its `displayName` is the sidebar label. If `pod_id` is in no
-   workspace, the project lives at the account top level. If the connector
-   isn't available (or the call is unauthorized), skip to Step 4 and use the
-   fallback there.
-2. **Switch.** Open `https://app.restream.io/home`, `read_page` the left
-   sidebar, and click the item matching `displayName` (case-insensitive,
-   truncation allowed; expand the account header first if the workspaces are
-   collapsed). For the top-level case, click the account name.
-3. **Verify** via `read_page` that the target workspace is now the active one
-   before navigating to the project.
-
-This skill processes one clip per invocation, so the switch happens once per
-run (between picking the clip in Step 3 and navigating in Step 4).
-
----
-
-### Step 4: Navigate directly to the clip project
-
-Navigate directly to the project URL using `project_id` from the tracker:
+Close only the tabs this run opened (never sign out, never close the user's
+tabs). Then report one of:
 
 ```
-https://app.restream.io/clips/<project_id>
+restream-publish-clip: posted "<title>" → TikTok (<account>), YouTube (<account>)[, Facebook (<account>)]; N still waiting
+restream-publish-clip: skipped "<title>" (<reason>); N still waiting
+restream-publish-clip: FAILED "<title>" (<error>); N still waiting
+restream-publish-clip: CRITICAL "<title>" was published in Restream but the result was not recorded. Do not run this skill again until it is recorded.
 ```
 
-Confirm the project view has loaded via `read_page` — it should show a list
-of clips for this episode. If the page shows an error or redirects to the
-clips index, the most likely cause is that **a different workspace is
-active**: switch to each other workspace listed in the sidebar in turn (same
-session, same tab) and retry the project URL. Only if it fails in every
-workspace is the `project_id` stale — then ask the user to verify before
-continuing.
-
----
-
-### Step 5: Locate THIS tracker's clip in the project
-
-> **Critical.** This step replaces the old "find the first unpublished clip"
-> behaviour. Do not pick clips by position in the list. Always match the
-> tracker's `clip_title` (extracted in Step 3). Decoupling clip selection
-> from the tracker is what caused the silent multi-post bug — see
-> _Failure modes this skill defends against_ at the top of this file.
-
-Use `read_page` to list every clip in the project view with its title and
-published state.
-
-Match the tracker's `clip_title` against the clip list using these rules,
-in order. Use the first rule that produces a unique match:
-
-1. Exact `clip_title` match.
-2. Case-insensitive `clip_title` match.
-3. Substring match (UI text contains `clip_title`, or vice versa) — **only
-   if exactly one clip matches**. If multiple substring matches, do NOT
-   guess — stop and ask the user which clip is correct.
-
-Branches:
-
-| Result                                           | Action                                                                                                                                |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Found, already shows "Published" / "✓ Published" | Skip Steps 7–9. Go directly to Step 10 with the **skipped** payload (`skipped_reason: "already-published-in-ui"`).                    |
-| Found, not yet published                         | Click **THAT clip's** `Publish` button — not any other clip's. Continue to Step 7.                                                    |
-| Not found at all                                 | Skip Steps 7–9. Go to Step 10 with the **failed** payload (`error: "clip title \"<clip_title>\" not found in project <project_id>"`). |
-| Multiple ambiguous substring matches             | Stop, ask the user, do NOT proceed.                                                                                                   |
-
-Confirm the publish modal that opens corresponds to the matched clip
-(use `read_page` to verify the modal title or context shows
-`clip_title`). If the modal opened on the wrong clip, close it and stop —
-do not publish.
-
----
-
-### Step 7: Configure platform toggles
-
-The publish modal lists connected platform accounts with toggles.
-
-Enable ONLY the accounts from the lookup table; disable any others that may
-be pre-enabled by default. Use `read_page` to check current toggle state
-before clicking — only change toggles that need to change.
-
-**sotsp-\*:** TikTok → Nick Paro, YouTube → Sick of this Show  
-**babm-\*:** TikTok → Banner & Backbone, YouTube → Banner & Backbone, Facebook → Banner & Backbone Media  
-**lr-\*:** Toggle ON every available account across TikTok, YouTube, and Facebook — if multiple accounts are listed under a platform, enable all of them. No subset selection.
-
----
-
-### Step 8: Set YouTube title and description
-
-Locate the YouTube title input (via `find` or `read_page`). Set it to
-`youtube_title` using `form_input`.
-
-If `youtube_description` is non-empty, locate the YouTube description field
-and set it to `youtube_description`.
-
-Skip this step entirely if `clip_title` was ≤ 100 chars.
-
----
-
-### Step 9: Publish
-
-Click **Publish Clips**. Wait for a success confirmation (toast, status badge,
-or modal close) using `read_page`.
-
-If the UI returns an error, capture the message. Do not mark the tracker as
-`"posted"` on failure.
-
----
-
-### Step 10: Update the tracker (verified write)
-
-> **Critical.** Read this whole section before acting. This is the step
-> that makes the skill idempotent. If the write doesn't land, the next
-> invocation will reclassify the clip as `due` and republish it. A
-> tracker stuck at `pending` past its `release_at` is the smoking-gun
-> signal that this step failed silently.
-
-#### File path
-
-The destination is `tracker_path` from Step 3. Track it explicitly. Do
-not reconstruct it from the tracker `id` or from the clip filename
-template — use the path you discovered when classifying in Step 1.
-
-#### Tool
-
-Use the `Edit` tool against `tracker_path` (or the `Write` tool if you
-are rewriting the entire file). **Including the JSON snippet in the
-chat / report is NOT a write.** The skill must produce a file mutation.
-
-#### Merge semantics
-
-Preserve every existing key under `platforms` (substack, bluesky,
-threads, anything else). Only the `restream_publish` key may be
-mutated. Do not mutate `clip`, `id`, `created_at`, `source`, or any
-other top-level field.
-
-#### Payloads (pick exactly one, based on what happened)
-
-**A. Step 9 publish succeeded — `posted`:**
-
-```json
-{
-  "platforms": {
-    "restream_publish": {
-      "status": "posted",
-      "posted_at": "<ISO 8601 UTC, current time>",
-      "accounts": ["tiktok:<account>", "youtube:<account>"]
-    }
-  }
-}
-```
-
-Add `"facebook:<account>"` to `accounts` for `babm-*`. For `lr-*`, list every
-account toggled on in the publish modal under `accounts` (every TikTok,
-YouTube, and Facebook entry that was available — there is no fixed set).
-
-**B. Step 5 found the clip already showing "Published" — `skipped`:**
-
-```json
-{
-  "platforms": {
-    "restream_publish": {
-      "status": "skipped",
-      "skipped_reason": "already-published-in-ui"
-    }
-  }
-}
-```
-
-**C. Step 5 could not locate the tracker's clip in the project — `failed`:**
-
-```json
-{
-  "platforms": {
-    "restream_publish": {
-      "status": "failed",
-      "error": "clip title \"<clip_title>\" not found in project <project_id>"
-    }
-  }
-}
-```
-
-**D. Step 9 returned an error from the publish modal — `failed`:**
-
-```json
-{
-  "platforms": {
-    "restream_publish": {
-      "status": "failed",
-      "error": "<UI error message — first 200 chars>"
-    }
-  }
-}
-```
-
-#### Verify the write — required, not optional
-
-Immediately after the Edit/Write call, **Read `tracker_path` again** and
-assert all of:
-
-1. `platforms.restream_publish.status` equals the value you just wrote
-   (`posted` / `skipped` / `failed`).
-2. The other entries (`substack`, `bluesky`, `threads`, etc.) are still
-   present and unchanged from before the write.
-3. The top-level fields (`id`, `source`, `created_at`, `clip`) are
-   still present and unchanged.
-
-If any assertion fails, the write did NOT persist correctly. Capture
-the actual read-back value and surface it in Step 12 as a CRITICAL
-FAILURE — do not report success, do not close tabs, stop and tell the
-user. A silent write failure is the bug we are explicitly defending
-against; we will not ship it twice.
-
----
-
-### Step 11: Clean up browser
-
-Close all tabs opened during this run. Call `tabs_context_mcp` to get the full tab list, then `tabs_close_mcp` for each tab ID opened by this skill. If `tabs_close_mcp` fails for any tab, log a warning but do not block the report.
-
-### Step 12: Report
-
-The report MUST include the `verified=…` line on the second row,
-echoing the status you just read back from disk in Step 10's
-verification. This is what tells the human (and any reviewing agent)
-that the tracker actually changed state. Never report success without
-the verified line.
-
-**Success (Step 10 payload A — `posted`):**
-
-```
-restream-publish-clip: posted "<clip_title>" → TikTok (<account>), YouTube (<account>) [<tracker filename>]
-  verified: status=posted in <tracker filename>
-```
-
-**Skipped (Step 10 payload B — `already-published-in-ui`):**
-
-```
-restream-publish-clip: skipped "<clip_title>" — already published in UI [<tracker filename>]
-  verified: status=skipped in <tracker filename>
-```
-
-**Failure — clip not found (Step 10 payload C):**
-
-```
-restream-publish-clip: FAILED "<clip_title>" — clip not found in project <project_id> [<tracker filename>]
-  verified: status=failed in <tracker filename>
-```
-
-**Failure — publish error (Step 10 payload D):**
-
-```
-restream-publish-clip: FAILED "<clip_title>" — <error> [<tracker filename>]
-  verified: status=failed in <tracker filename>
-```
-
-**CRITICAL — write did not persist:**
-
-If the Step 10 read-back verification did NOT match what you wrote,
-report this and stop. Do NOT close tabs (Step 11 is skipped). The
-human needs to see exactly what's on disk so they can recover.
-
-```
-restream-publish-clip: CRITICAL — clip published in Restream UI but
-tracker write did not persist.
-  expected: status=<intended status> in <tracker filename>
-  actual:   status=<status currently on disk>
-  next:     do NOT re-run this skill against this tracker until the
-            write is investigated. Each rerun will republish the clip.
-```
-
----
+`N` = the other clips from Step 1 (write `3+` when `more` was true).
 
 ## Error handling
 
-| Situation                     | Action                                                                |
-| ----------------------------- | --------------------------------------------------------------------- |
-| No pending or due clips       | One-line report, exit clean                                           |
-| Only waiting clips            | Report next due time, exit clean                                      |
-| Project URL 404s or redirects | `project_id` may be stale — ask user to verify before continuing      |
-| All clips already published   | Mark tracker `skipped`, exit                                          |
-| Unrecognised pod_id prefix    | Ask user which accounts to toggle                                     |
-| Toggle click blocked          | Ask user to enable manually, then confirm                             |
-| Publish returns error         | Mark tracker `failed`, report                                         |
-| Scheduled task creation fails | Warn user — the clip will need manual re-invocation at the right time |
+| Situation                         | Action                                                        |
+| --------------------------------- | ------------------------------------------------------------- |
+| Nothing waiting                   | One line, exit, no browser                                    |
+| Account's browser not available   | Attended: say which browser; unattended: skip line            |
+| Signed in as the wrong account    | Close own tab, record nothing, refusal line                   |
+| Project not found in any workspace| Record `failed`                                               |
+| Toggle or click blocked           | Attended: ask the user to click, then confirm; unattended: close the modal, record nothing, report |
+| Publish returns an error          | Record `failed`                                               |
+| Mark throws after publishing      | Retry once, then CRITICAL report, keep the tab                |
+
+## Scheduled task
+
+`references/templates/restream-publish-clips.md` in this plugin runs this skill
+hourly from 10:00 to 22:00 ET on this computer. Install it with
+`bb-scheduled-manager` using `--templates-dir` pointed at that folder.

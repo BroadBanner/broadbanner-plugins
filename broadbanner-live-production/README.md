@@ -15,11 +15,15 @@ series you host, and publish clips to TikTok/YouTube/Facebook.
 |---|---|
 | `substack-schedule-live` | Schedule upcoming show live streams in the Substack publisher dashboard — automates the "Go live with stream key" modal, invites co-hosts, captures stream credentials, and writes them back to D1. Connector-only (BroadBanner MCP admin tools). |
 | `restream-schedule-live` | Schedule upcoming show live streams as Restream events, pairing the correct Substack channel and setting the event description. Connector-only (BroadBanner MCP admin tools). |
-| `restream-publish-clip` | Publish pending clips to TikTok and YouTube (and Facebook for B&B) via the Restream clips UI. Handles batches with staggered 10–40 minute scheduling. |
+| `restream-publish-clip` | Publish the next Restream clip to TikTok and YouTube (and Facebook for B&B) via the Restream clips UI. The clip list comes from the connector (`list_pending_restream_clips`): only clips made after the start date, never a Manual series, one per run; the result is recorded with `mark_restream_published`. |
 
-> **Note (follow-up):** `restream-publish-clip` maps to the Production+ add-on
-> `post_production_distribution`, not `creator_workspace`. It rides here for now; a future
-> split into a `broadbanner-clip-distribution` bundle will keep this plugin Creator+-pure.
+> **Note:** `restream-publish-clip` needs BannerBlast (`metadata.requiresTool: banner_blast`,
+> connector cap `creators:write`), not `creator_workspace`. It rides here for now.
+
+**Scheduled clip publishing.** `references/templates/restream-publish-clips.md` runs
+`restream-publish-clip` hourly on this computer (it publishes only 10:00–22:59 ET, one clip
+per run, so clips go out at least an hour apart). Install it with `bb-scheduled-manager`
+and `--templates-dir` pointed at this plugin's `references/templates/`.
 
 ## Entitlement / authority
 
@@ -41,14 +45,15 @@ See `references/redaction.md`.
 - The **BroadBanner MCP connector** (`mcp.broadbanner.com`) connected — the scheduling
   skills read show data and write scheduled-event state through it; no local
   `broadbanner.config.json` or `.creds/gateway.token` is required.
-- Claude in Chrome on a **single** connected BroadBanner Chrome profile, logged into
-  Substack / Restream Studio. This applies to scheduled runs too (pre-production
+- The right browser for each account: Claude in Chrome for SOTSP (Substack / Restream
+  Studio), the Claude built-in browser for Banner and Backbone Media's Restream account
+  (`references/browser-routing.md`). This applies to scheduled runs too (pre-production
   auto-scheduling): those tasks run on this computer, because Cowork cloud sessions don't
-  currently provide a browser. The skills do not route among profiles, and convert show
-  times against the browser's own timezone.
-- **One Restream session, many workspaces.** A single Restream login lists every
-  workspace on the account in the left sidebar. `restream-schedule-live` groups shows by
+  currently provide a browser. Each Restream skill checks who is signed in before it
+  changes anything, and converts show times against the browser's own timezone.
+- **One Restream session per account, many workspaces.** A Restream login lists every
+  workspace on that account in the left sidebar. `restream-schedule-live` groups shows by
   workspace (from the D1 catalog's `displayName`) and switches in-app once per group;
   `restream-publish-clip` selects the clip's workspace the same way. No per-workspace
-  login, tab, or Chrome profile.
-- `Social-Distribution/` directory with restream-clip tracker files (for `restream-publish-clip`).
+  login or tab.
+- For `restream-publish-clip`: BannerBlast's start date (`RESTREAM_PUBLISH_SINCE`) set, so new clips get a Restream publishing slot. No local tracker files.

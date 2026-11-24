@@ -72,24 +72,26 @@ Call **`get_creator_context`** → `{ substackHandle, brand, brands, pods, ... }
 (`banner_blast`) accounts. If they're missing, or return 403, exit quietly with a one-line
 "skipped: account not entitled for `banner_blast`" report (unattended; never prompt).
 
-Substack posting is browser automation in the one logged-in Chrome profile, so this skill
-runs **locally** (cloud sessions have no browser). It needs no local files, config or
-downloads: the connector supplies the data and media is fetched in-page. No profile map,
-no enumeration, no `select_browser` routing.
+Substack posting is browser automation, so this skill runs **locally** (cloud sessions
+have no browser). It needs no local files, config or downloads: the connector supplies the
+data and media is fetched in-page. **Which browser** depends on the account: read
+`../../references/browser-routing.md` now and follow it (Banner and Backbone Media's
+`@bannerandbackbone` posts from the Claude built-in browser, every other handle from
+Chrome). Its driver table maps every Chrome step below to the built-in browser.
 
-1. If **no** browser is available → **stop and report** (no browser to drive).
-2. Use the single connected browser. Open a **dedicated MCP working tab** with
-   `tabs_create_mcp` and **record its tabId in a running `OPENED_TABS` list** — do not
-   hijack the user's current tab, and track every tab you open so Step 4 can close exactly
-   the skill's own tabs. In that tab, `navigate` to `https://substack.com/@{substackHandle}`
-   and `resize_window` to **1200×900** (if the environment can't resize, confirm the
-   viewport is at least 1200px wide).
-3. **Verify you are logged in as `{substackHandle}`** (the profile page shows that account).
-   - Wrong account, or a login screen → **clean up (Step 4) and stop**, telling the user to
-     log into `{substackHandle}`'s Substack in the browser Cowork drives — for a remote
-     run, that's the remote environment's browser, whose login is separate from their
-     local Chrome. Posting under the wrong identity is a public mistake — never switch to
+1. Pick the browser for `{substackHandle}` (routing §1). If it isn't available → routing §2
+   (unattended: skip with one line, mark nothing).
+2. Open a **dedicated working tab** in that browser and **record its id in a running
+   `OPENED_TABS` list** — do not hijack the user's current tab, and track every tab you
+   open so Step 4 closes exactly the skill's own tabs. Go to
+   `https://substack.com/home` and set the window to **1200×900** (if the environment can't
+   resize, confirm the viewport is at least 1200px wide).
+3. **Run the signed-in check** (routing §3): the page must say it is signed in as
+   `{substackHandle}`. The profile page is NOT proof (anyone can view it).
+   - Not signed in, or a different handle → **clean up (Step 4) and stop** with the routing
+     §3 refusal line. Posting under the wrong identity is a public mistake — never switch to
      "another" browser.
+   - Then go to `https://substack.com/@{substackHandle}` for the posting steps below.
 
 Reuse this one working tab for every post in the run — the verification in Step 3a reloads
 it in place rather than opening new tabs, so the run stays at a single tab.

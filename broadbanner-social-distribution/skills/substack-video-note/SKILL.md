@@ -91,7 +91,7 @@ When invoked interactively with a tracker path, fields read from the tracker:
 - `clip.hashtags` — appended to the note text, space-separated, prefixed
   with `#` if not already.
 - `clip.pod_id` — the clip's series id (used for the tracker/media key, not for
-  browser routing — this skill runs on the single connected profile).
+  browser routing — the browser follows the Substack account, see `../../references/browser-routing.md`).
 - `platforms.substack.status` — must be `"pending"` (or `"queued"` if a caller
   set a soft lock before delegating). Anything else (`posted`/`skipped`/`failed`)
   → refuse and report.
@@ -109,8 +109,8 @@ tell the user the tracker cannot be updated.
 Get `SUBSTACK_HANDLE` from the connector: `get_creator_context` → `substackHandle` (pass
 `brand` when the clip belongs to a specific brand). That's the Substack Notes profile to
 post from, same as `substack-note`. Don't read `broadbanner.config.json` (retired). If no
-handle comes back, ask once. (There is **no** `chromeProfiles` block: this skill runs on
-the single connected Chrome profile; see "Single browser profile" in Key technical notes.)
+handle comes back, ask once. The handle picks the browser: read `../../references/browser-routing.md`
+(`@bannerandbackbone` → Claude built-in browser, any other handle → Chrome).
 
 ### Step 1: Validate inputs
 
@@ -139,10 +139,12 @@ navigate: https://substack.com/@{SUBSTACK_HANDLE}
 wait 3s
 ```
 
-Use the **single connected** Chrome browser (no profile selection). Confirm the
-profile page shows `@{SUBSTACK_HANDLE}` and the user is logged in — if it shows a
-different account or a login screen, **stop and report** (posting under the wrong
-account is a public mistake; never switch to "another" browser). Capture the
+Use the browser the routing reference picks for `@{SUBSTACK_HANDLE}` (its driver
+table maps these Chrome steps to the built-in browser). Before the profile page, run the
+**signed-in check** (routing §3) on `https://substack.com/home`: it must report
+`@{SUBSTACK_HANDLE}`. A different account, a login screen or an error → **stop and report**
+with the routing §3 line (posting under the wrong account is a public mistake; never switch
+to "another" browser). The profile page is not proof of who is signed in. Capture the
 baseline top-note text (via `references/js-verification.md` or `get_page_text`) for
 comparison in Step 7.
 
@@ -280,8 +282,7 @@ false "failure" reads is wide — be especially conservative.
   on this for idempotency.
 - **Single source of truth for success is the second-tab profile read**,
   not modal state.
-- **Single browser profile.** This skill runs on the one connected Chrome profile —
-  the operator's sole BroadBanner profile. There is no `chromeProfiles` config, no
-  profile enumeration, and no `select_browser` routing. Verify the connected browser
-  is logged into `@{SUBSTACK_HANDLE}` (Step 2); if it isn't, stop — never select a
+- **Browser per account.** `@bannerandbackbone` posts from the Claude built-in browser,
+  every other handle from Chrome (`../../references/browser-routing.md`). The signed-in
+  check (Step 2) must match `@{SUBSTACK_HANDLE}`; if it doesn't, stop — never select a
   different browser.
