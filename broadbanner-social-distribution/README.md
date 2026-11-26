@@ -80,6 +80,12 @@ The `substack-note` skill includes an eval suite in `skills/substack-note/evals/
 This plugin ships with all reference files it needs — no external source directories or CLI repos required (the legacy `BroadBanner/Skills/` and `BroadBanner/CLI-Assistant/` sources are retired):
 
 - **Skill instructions** — each skill under `skills/` includes its own SKILL.md, error-handling references, and JS verification snippets
+- **`references/browser-routing.md`** — which browser posts for which account, and the signed-in check
+- **`references/substack-composer.md`** — the shared composer rules every Substack skill follows (0.46.0, from the
+  BABM browser tests of Nov 24–25, 2026): type, then `End` and a real space so a trailing URL isn't corrupted; post only
+  when the editor text equals the approved text; never click Post twice and verify exactly one copy on the profile;
+  Escape → Discard on an abandoned composer; article notes as **Restack with a note** (never `Undo restack`); Substack's
+  own scheduler for a requested time up to ~5 days ahead; built-in browser notes
 
 Runtime working directories (`Social-Distribution/`) remain in the host BroadBanner tree. Live show data is fetched at runtime from the BroadBanner Gateway (`https://gateway.broadbanner.com/v1/shows`, D1-backed via Service Binding to the Data Worker); the deprecated local `wix-latest.json` written by `banner-admin wix-poller` is no longer the source of truth, and skills no longer hit `data.broadbanner.com` directly.
 

@@ -1,7 +1,8 @@
 # Browser routing and the signed-in check (Substack)
 
-Every Substack posting skill in this plugin reads this file before it opens a tab. It
-answers two questions: **which browser** posts for this account, and **is that browser
+Every Substack posting skill in this plugin reads this file before it opens a tab, and
+`substack-composer.md` (typing, verify, restack with a note, scheduling) before it types.
+This file answers two questions: **which browser** posts for this account, and **is that browser
 really signed in as that account**. Posting under the wrong account is a public mistake,
 so a failed check always refuses. It never "tries the other browser".
 
@@ -80,13 +81,15 @@ click) are the same in both browsers.
 | Click "What's on your mind?" | click | `await t.page.getByText("What's on your mind?").first().click()` |
 | `find` a "New post" button | `find` | `await t.page.getByRole('button', { name: /new post/i }).first().click()` |
 | Wait N seconds | wait | wait for the thing instead (`locator.waitFor()`, `page.waitForFunction(...)`); else `waitForTimeout(1000)` and look again |
-| Type the note text | the skill's insert snippet | click `[role="dialog"] .ProseMirror`, `await t.page.keyboard.insertText(TEXT)`, then press a real key (`Backspace`, then type the last character again with `press`) — inserted text alone leaves Post disabled. Verify the editor text and that Post is enabled before the Post script |
+| Type the note text | the skill's insert snippet, then the collapse-to-end + space call (`substack-composer.md` §1) | click `[role="dialog"] .ProseMirror`, `await t.page.keyboard.insertText(TEXT)`, wait 1 s, `press('End')`, then `press(' ')` (`substack-composer.md` §1). Never Backspace-and-retype: it corrupts a trailing URL. Verify the exact text and that Post is enabled (§2) before the Post script |
+| Abandon a composer | Escape, then click `Discard` | `press('Escape')`, then `getByRole('button', { name: 'Discard' }).click()` |
+| Schedule a note | `substack-composer.md` §7 snippets | testid `composer-schedule-button`, `locator('input[type="time"]').fill('HH:MM')`, `Save`, then the button whose text is exactly `Schedule` |
 | Close a tab | `tabs_close_mcp` | `await browser.tabs.close(id)` |
 
-Built-in browser rules:
+Built-in browser rules (more in `substack-composer.md` §8):
 - The baseline snippet can return 0 notes on the profile page (the selectors miss
-  Substack's current markup). Verify the post by finding the exact note text on the
-  reloaded profile (`getByText(TEXT)`) instead.
+  Substack's current markup). Verify the post with the copy count in
+  `substack-composer.md` §4 (exactly one copy) instead.
 - **End the script right before the Post click.** Read the verify result first, then send
   the Post-click snippet as its own script. One Post click per note, ever.
 - If a call throws `needs_request_access`, ask with `request_access` for `https://substack.com`

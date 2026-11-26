@@ -158,7 +158,10 @@ ProseMirror dialog opened (modal verification snippet in
 
 Same as `substack-note` Step 4: insert the text with its **JS `execCommand("insertText")`
 snippet**, not the `type` action (typing into ProseMirror fails about half the time).
-Verify `editorText` is non-empty. Do NOT click Post yet.
+Then move the cursor to the end, type one space and run the exact-text check
+(`../../references/substack-composer.md` §1–§2; built-in browser: `insertText`, `End`, a real
+space). The editor text must equal the note text; never Backspace-and-retype (it corrupts a
+trailing URL). Do NOT click Post yet.
 
 ### Step 5: Inject the video from R2
 
@@ -213,14 +216,16 @@ unrendered upload.
 ### Step 6: Post
 
 Click Post via JS exactly as in `substack-note` Step 5 (single click,
-immediate disable). Wait up to 20 seconds for the modal to dismiss — video
+immediate disable; if the dialog stays open, never click again). Wait up to 20 seconds for the modal to dismiss — video
 posts take longer than text.
 
 ### Step 7: Verify in a second tab
 
 Open a new tab to `https://substack.com/@{SUBSTACK_HANDLE}`, wait 5
 seconds, capture the top note text, and confirm it is present AND differs
-from the Step 2 baseline. If either check fails, wait 10 seconds and reload
+from the Step 2 baseline, and that the note's copy count
+(`../../references/substack-composer.md` §4) rose by exactly one over a count
+taken at the Step 2 baseline. If either check fails, wait 10 seconds and reload
 once. If still absent, report failure. **Never re-post on the composer
 tab** — see the anti-duplicate guard.
 

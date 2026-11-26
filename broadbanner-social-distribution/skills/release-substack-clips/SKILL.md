@@ -131,13 +131,15 @@ identity/context/data come from the MCP tools above (not a tracker file or confi
 
 ### 3a. Open the composer and enter the note text
 
-1. On `https://substack.com/@{substackHandle}` (window 1200×900), capture the baseline
+1. On `https://substack.com/@{substackHandle}` (window 1200×900), capture the baseline (and the caption's copy count, `substack-composer.md` §4)
    top-note text.
 2. Click "What's on your mind?" in the notes body. Verify the `[role="dialog"]` modal +
    `.ProseMirror` editor opened.
 3. Enter the note text with **JavaScript** (never the `type` action):
-   `document.execCommand("insertText", false, \`<text>\`)`. Confirm `editorText` is
-   non-empty. Do **not** click Post yet — the video must attach first.
+   `document.execCommand("insertText", false, \`<text>\`)`. Then the end-of-editor space
+   and the exact-text check from `../../references/substack-composer.md` §1–§2 (built-in
+   browser: `insertText`, `End`, a real space). The editor text must equal the caption;
+   never Backspace-and-retype. Do **not** click Post yet — the video must attach first.
 
 ### 3b. Inject the video from R2 (the load-bearing trick)
 
@@ -187,7 +189,9 @@ Never click Post against an unrendered upload.
    modal to dismiss (video posts are slow).
 2. Open a second tab to `https://substack.com/@{substackHandle}` (record its tabId in
    `OPENED_TABS`), wait 5s, confirm the new note is present AND differs from the Step 3a
-   baseline. **ANTI-DUPLICATE GUARD:** before any retry, re-check the profile — the post may
+   baseline, and that the caption's copy count (`substack-composer.md` §4) rose by exactly
+   one over the count taken on the profile before posting (clip captions can repeat, so
+   count before and after). **ANTI-DUPLICATE GUARD:** before any retry, re-check the profile — the post may
    have succeeded even if the modal misbehaved. Video uploads are slow, so the
    false-"failure" window is wide — be conservative. Never re-click Post on an ambiguous
    result.

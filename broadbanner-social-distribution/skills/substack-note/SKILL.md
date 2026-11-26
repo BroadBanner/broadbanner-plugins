@@ -62,8 +62,18 @@ https://app.broadbanner.com/pricing/membership. Nothing was posted."
 | ------------------------------------------------------------------- | ------------------------ |
 | "image note", "post this image", file path or URL alongside caption | Text+Image Note (Steps A1–A3) |
 | "post this note", text only, no image reference                     | Text Note (Steps 1–7)    |
+| a Substack article to share with the note ("restack this with a note", or an article URL given apart from the text) | Text Note as an **article note** (Step 3 opens the composer from the article) |
 
 When ambiguous: ask once — "Is this text-only, or do you want to include an image?"
+
+**Two options on the text path** (`../../references/substack-composer.md`):
+
+- **Article note.** A note about a Substack article posts as **Restack with a note** from the
+  article page (§6): the article card attaches itself, so the note text carries no URL. Use it
+  when the user names an article to share with the note. Never choose `Undo restack`.
+- **Scheduled note.** Only when the user gives a release time. Substack schedules it from the
+  composer (§7), up to about 5 days ahead; a later time → say so and offer to post now. Never
+  schedule a note the user didn't ask to schedule.
 
 ---
 
@@ -196,6 +206,11 @@ If the selector returns empty, fall back to `get_page_text` for the baseline. St
 
 Click the "What's on your mind?" prompt in the notes section body — NOT the nav bar (that opens a search overlay).
 
+**Article note:** instead, open the article's URL in the working tab and follow
+`substack-composer.md` §6 (the restack button, then the menu item named exactly
+`Restack with a note`; no such item → Escape and stop). The composer opens with the article
+card; verify the modal the same way.
+
 Verify the modal opened via **one JS call**:
 
 ```javascript
@@ -238,9 +253,9 @@ JSON.stringify({
 
 Replace `<NOTE TEXT HERE>` with the actual note text. Use a backtick-escaped template literal to preserve line breaks and special characters (em dashes, ellipses, curly quotes).
 
-Entry succeeds when `editorText` is non-empty AND `postEnabled` is `true`.
+In the built-in browser, type with the composer reference's §1 recipe instead (`insertText`, wait 1 s, `End`, then a real space).
 
-If `postEnabled` is `false` after text appears, wait 1 second and re-check — ProseMirror's button-state update is asynchronous.
+Then run the **exact-text check** from `../../references/substack-composer.md` §2. Entry succeeds only when `exact` AND `postEnabled` are both `true` (article note: `card` too). If `postEnabled` is `false`, wait 1 second and re-check (up to 3 times) — ProseMirror's button-state update is asynchronous. If `exact` is `false`, follow §2 (abandon, check the profile, retype once, else stop). Never post text that differs from the confirmed text.
 
 If `editorText` is empty after the JS call, cancel the modal (Escape), reopen the composer (Step 3), and retry once. If still empty, stop and report.
 
@@ -248,11 +263,7 @@ If `editorText` is empty after the JS call, cancel the modal (Escape), reopen th
 
 Skip if no trailing URL in the note text.
 
-After text entry, append a single space via JS to trigger link detection:
-
-```javascript
-document.execCommand("insertText", false, " ");
-```
+After text entry, move the cursor to the end of the editor and append a single space to trigger link detection (`substack-composer.md` §1, Chrome snippet: collapse the selection to the end, then `execCommand("insertText", false, " ")`). Never Backspace-and-retype: Substack's link autodetect moves the cursor and that corrupts the URL. Re-run the §2 exact-text check after the space.
 
 Poll every 3 seconds (up to 15 seconds) for a preview card: `[class*="link-preview"], [class*="linkPreview"], [class*="embed"]`. Proceed after the card appears or after 15 seconds. A missing preview is not a failure.
 
@@ -273,7 +284,9 @@ postBtn.style.pointerEvents = "none";
 ("clicked-and-disabled");
 ```
 
-**Never click Post more than once.** Both `.disabled` and `.style.pointerEvents = 'none'` are required — the CSS `:disabled` pseudo-class alone is insufficient to block a fast second click.
+**Never click Post more than once.** Both `.disabled` and `.style.pointerEvents = 'none'` are required — the CSS `:disabled` pseudo-class alone is insufficient to block a fast second click. If the dialog stays open after the click, do not click again: the note may have posted. Go to Step 5b.
+
+**Scheduled note:** instead of clicking Post, follow `substack-composer.md` §7 (schedule icon → day + time → Save → click the button reading exactly `Schedule` once). Verify it in Drafts ("Scheduled for …"), close the composer, and skip Step 5b.
 
 ### Step 5b: Verify the post (same tab)
 
@@ -291,7 +304,7 @@ const hasNote = document.body.textContent.includes(
 JSON.stringify({ topNoteText, hasNote });
 ```
 
-Compare against the Step 2 baseline. If the top note changed or `hasNote` is true, the post succeeded.
+Compare against the Step 2 baseline. If the top note changed or `hasNote` is true, the post succeeded. Then confirm **exactly one copy** with the count in `substack-composer.md` §4 (on `https://substack.com/@{SUBSTACK_HANDLE}/notes`); two or more → report the duplicate, never delete anything.
 
 If ambiguous: wait 5 seconds, reload once more, re-check. If still absent after 2 checks, **do NOT click Post again**. Report failure.
 
@@ -312,6 +325,10 @@ post_text({ text: "<NOTE_TEXT>", substackPosted: true })
   post it a second time. Omitting it would double-post Substack.
 - If a brand was explicitly passed to this run, `get_creator_context` in Step 0.5 already
   resolved the matching handle; no brand argument is needed on `post_text`.
+- **Article note:** Bluesky and Threads have no article card, so send the note text plus a
+  blank line and the article URL as `text`.
+- **Scheduled note:** skip this step. The connector can't hold Bluesky/Threads until the
+  Substack time yet, so tell the user they weren't queued.
 
 Response: `{ trackerId }`. The connector schedules Bluesky/Threads downstream.
 
@@ -340,6 +357,8 @@ Tracker ID: {trackerId}
   Bluesky:  queued
   Threads:  queued
 ```
+
+A scheduled note reports `Substack: scheduled for {day, time} ({time zone})` and `Bluesky/Threads: not queued`.
 
 Worker KV is the system of record. No local tracker files are written.
 
@@ -370,7 +389,7 @@ Login prompt visible instead of profile → stop, tell the user to log in manual
 
 ### Text entry fails
 
-1. Cancel modal (Escape).
+1. Cancel modal (Escape → `Discard` on the "Save to drafts?" prompt; never leave a draft).
 2. **Check profile for the note** (anti-duplicate guard).
 3. Reopen composer from Step 3.
 4. Retry JS insertion once.

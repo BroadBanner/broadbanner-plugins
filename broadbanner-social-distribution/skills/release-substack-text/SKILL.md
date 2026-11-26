@@ -113,14 +113,21 @@ Reuse substack-note's TEXT NOTE path — see `../substack-note/SKILL.md` Steps 2
    `[role="dialog"]` modal + `.ProseMirror` editor opened.
 3. Enter the text with **JavaScript** (never the `type` action):
    `document.execCommand("insertText", false, \`<text>\`)` — backtick template so line
-   breaks / em dashes / curly quotes survive. Confirm `editorText` is non-empty.
+   breaks / em dashes / curly quotes survive. Then move the cursor to the end and type one
+   space, and run the exact-text check: `../../references/substack-composer.md` §1–§2 (the
+   built-in browser types with `insertText`, `End`, then a real space). Post only when the
+   editor text equals the queued text and Post is enabled. Never Backspace-and-retype: it
+   corrupts a trailing URL. A mismatch → Escape → `Discard`, check the profile, retype once,
+   else mark nothing and report `text changed in the editor`.
 4. **If the post has an `imageUrl`, attach the image now (Step 3a-image below) — before
    clicking Post.** Text-only posts skip straight to step 5.
 5. Confirm the Post button is enabled. **Click Post exactly once**, then immediately
    `postBtn.disabled = true` AND `postBtn.style.pointerEvents = "none"`. Never click Post
    twice.
 6. Wait 6s (longer for image posts — they upload), reload the tab, verify the note appears
-   (baseline changed OR the first 60 chars are present).
+   (baseline changed OR the first 60 chars are present) and that there is **exactly one
+   copy** (`substack-composer.md` §4). If the dialog stayed open after the click, never
+   click again: verify on the profile.
 
 **ANTI-DUPLICATE GUARD:** before any retry, re-check the profile — a post may have
 succeeded even if the modal misbehaved. Never re-click Post on an ambiguous result.
