@@ -291,6 +291,13 @@ one-line count of minors/nits. Link the article
   and reverses any source rating it caused.
 - If any source was rated, add the one **Sources rated** line.
 
+## Step 7 — Learn (Bruce)
+
+Only after Step 5 and the report, and only with Bruce loaded: drain **his** lesson inbox
+(`personas.bruce`: his own fact findings that were later dismissed) per
+`../../references/personality.md` §5. Never read it before or during the check. Add the
+one "Bruce learned …" line to the report or run summary.
+
 ## Other modes
 
 Read `references/other-modes.md` for a BroadNews script check (`news_content`), ad-hoc claims with no save target, queue mode ("check everything waiting") and installing or removing the nightly check task.

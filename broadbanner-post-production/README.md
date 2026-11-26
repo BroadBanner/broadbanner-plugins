@@ -67,7 +67,7 @@ signing. These tools carry this plugin:
 | `article_checks`      | `({ action: list \| queue \| resolve, kind?, view?: open \| all, articleId?, findingId?, status?, note?, revision? })` — status (`statusByKind: { fact, editorial }`) + findings; drafts awaiting a check of that kind; resolve a finding or note (dismiss/accept need a note). |
 | `get_persona`         | `({ skill, seriesId? \| brandId?, promptId?, articleId?, personality? })` → `{ available: false }` \| `{ available: true, personality: null }` \| `{ available: true, personality, name, version, resolvedFrom, core, layers[], lessons[], memory[], hardRulesNotice }`. Step 0.5 of the writer skills and the checks. Every result carries a `statusLine` the skill shows once (0.26.0). In a chat or project, `team_session({ personalities, roster? })` loads members directly; a member off the project's roster comes back `off_roster` with the project to use (Documentation #205). |
 | `personality_memory`  | `({ action: list \| remember \| forget, personality, text?, memoryId? })` — what a personality remembers about this person. |
-| `persona_lessons`     | `({ action: inbox \| learn \| list \| update \| forget, … })` — fixed Bruce/Mo findings distilled into lessons Ki loads (one `learn` batch per drain; see `references/personality.md` §5). |
+| `persona_lessons`     | `({ action: inbox \| learn \| list \| update \| forget, … })` — every persona's lessons from its own work: Ki from fixed findings on articles, Bucky on scripts, Mo and Bruce from their own dismissed findings (one `learn` batch per drain; see `references/personality.md` §5). |
 
 `create_article` also takes `origin` (`ai` default · `import` for backfill) and `form`
 (`episode-review` · `news` · `opinion` · `essay` · `column` · `other`).

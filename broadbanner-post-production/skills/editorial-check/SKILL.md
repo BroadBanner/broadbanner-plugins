@@ -195,6 +195,12 @@ Link the article (`https://app.broadbanner.com/app/room/articles/` + the article
 
 If a personality was loaded, name it once ("Edited by Mo (v1, default)").
 
+## Step 7 — Learn (Mo)
+
+Only after Step 5 and the report, and only with Mo loaded: drain **his** lesson inbox
+(`personas.mo`: his own notes that were later dismissed) per `../../references/personality.md`
+§5. Never read it before or during the review. Add the one "Mo learned …" line.
+
 ## Queue mode
 
 Read `references/queue-mode.md` for "review everything waiting" and the nightly editorial pass.
